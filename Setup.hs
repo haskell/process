@@ -16,7 +16,13 @@ main = do args <- getArgs
                   postConf = add_configure_options confArgs
                            $ postConf defaultUserHooks,
                   buildHook = add_ghc_options ghcArgs
-                            $ buildHook defaultUserHooks }
+                            $ filter_modules_hook
+                            $ buildHook defaultUserHooks,
+                  makefileHook = add_ghc_options ghcArgs
+                               $ filter_modules_hook
+                               $ makefileHook defaultUserHooks,
+                  instHook = filter_modules_hook
+                           $ instHook defaultUserHooks }
           withArgs args'' $ defaultMainWithHooks hooks
 
 extractGhcArgs :: [String] -> ([String], [String])
@@ -64,4 +70,21 @@ add_ghc_options args f pd lbi uhs x
                      Nothing -> error "Expected a library"
           pd' = pd { library = Just lib' }
       f pd' lbi uhs x
+
+filter_modules_hook :: Hook a -> Hook a
+filter_modules_hook f pd lbi uhs x
+ = let build_filter = case compilerFlavor $ compiler lbi of
+                          GHC -> const True
+                          _ -> isPortableBuild
+       lib' = case library pd of
+                  Just lib ->
+                      let ems = filter build_filter (exposedModules lib)
+                      in lib { exposedModules = ems }
+                  Nothing -> error "Expected a library"
+       pd' = pd { library = Just lib' }
+   in f pd' lbi uhs x
+
+isPortableBuild :: String -> Bool
+isPortableBuild "System.Process" = False
+isPortableBuild _ = True
 
