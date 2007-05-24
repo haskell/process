@@ -4,24 +4,11 @@
    Support for System.Process
    ------------------------------------------------------------------------- */
 
+/* XXX This is a nasty hack; should put everything necessary in this package */
 #include "HsBase.h"
 
-#if defined(_MSC_VER) || defined(__MINGW32__) || defined(_WIN32)
-#include <windows.h>
-#include <stdlib.h>
-#endif
-
-#ifdef HAVE_VFORK_H
-#include <vfork.h>
-#endif
-
-#ifdef HAVE_VFORK
-#define fork vfork
-#endif
-
-#ifdef HAVE_SIGNAL_H
-#include <signal.h>
-#endif
+#include "runProcess.h"
+#include "execvpe.h"
 
 #if !(defined(_MSC_VER) || defined(__MINGW32__) || defined(_WIN32))
 /* ----------------------------------------------------------------------------

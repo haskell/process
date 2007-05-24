@@ -1,4 +1,4 @@
-This library (libraries/base) is derived from code from several
+This library (libraries/process) is derived from code from two
 sources: 
 
   * Code from the GHC project which is largely (c) The University of
@@ -8,11 +8,7 @@ sources:
     and freely redistributable (but see the full license for
     restrictions).
 
-  * Code from the Haskell Foreign Function Interface specification,
-    which is (c) Manuel M. T. Chakravarty and freely redistributable
-    (but see the full license for restrictions).
-
-The full text of these licenses is reproduced below.  All of the
+The full text of these licenses is reproduced below.  Both of the
 licenses are BSD-style or compatible.
 
 -----------------------------------------------------------------------------
@@ -63,21 +59,5 @@ Haskell 98", is distributed under the following license:
   copied and distributed for any purpose, provided that the modified
   version is clearly presented as such, and that it does not claim to
   be a definition of the Haskell 98 Language.
-
------------------------------------------------------------------------------
-
-Code derived from the document "The Haskell 98 Foreign Function
-Interface, An Addendum to the Haskell 98 Report" is distributed under
-the following license:
-
-  Copyright (c) 2002 Manuel M. T. Chakravarty
-
-  The authors intend this Report to belong to the entire Haskell
-  community, and so we grant permission to copy and distribute it for
-  any purpose, provided that it is reproduced in its entirety,
-  including this Notice.  Modified versions of this Report may also be
-  copied and distributed for any purpose, provided that the modified
-  version is clearly presented as such, and that it does not claim to
-  be a definition of the Haskell 98 Foreign Function Interface.
 
 -----------------------------------------------------------------------------

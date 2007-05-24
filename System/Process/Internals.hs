@@ -377,9 +377,14 @@ findCommandInterpreter = do
     when (not (isDoesNotExistError e)) $ ioError e
 
     -- try to find CMD.EXE or COMMAND.COM
-    osver <- c_get_osver
+    {-
+    XXX We used to look at _osver (using cbits) and pick which shell to
+    use with
     let filename | osver .&. 0x8000 /= 0 = "command.com"
-		 | otherwise             = "cmd.exe"
+                 | otherwise             = "cmd.exe"
+    We ought to use GetVersionEx instead, but for now we just look for
+    either filename
+    -}
     path <- getEnv "PATH"
     let
 	-- use our own version of System.Directory.findExecutable, because
@@ -387,10 +392,13 @@ findCommandInterpreter = do
 	search :: [FilePath] -> IO (Maybe FilePath)
 	search [] = return Nothing
 	search (d:ds) = do
-		let path = d `joinFileName` filename
-		b <- doesFileExist path
-		if b then return (Just path)
-		     else search ds
+		let path1 = d `joinFileName` "cmd.exe"
+		    path2 = d `joinFileName` "command.com"
+		b1 <- doesFileExist path1
+		b2 <- doesFileExist path2
+		if b1 then return (Just path1)
+		      else if b2 then return (Just path2)
+		                 else search ds
     --
     mb_path <- search (parseSearchPath path)
 
@@ -398,10 +406,6 @@ findCommandInterpreter = do
       Nothing -> ioError (mkIOError doesNotExistErrorType 
 				"findCommandInterpreter" Nothing Nothing)
       Just cmd -> return cmd
-
-
-foreign import ccall unsafe "__hscore_get_osver"
-  c_get_osver :: IO CUInt
 #endif
 
 #endif /* __HUGS__ */

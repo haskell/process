@@ -3,7 +3,7 @@
 
    Our low-level exec() variant.
    -------------------------------------------------------------------------- */
-#include "HsBase.h"
+#include "execvpe.h"
 
 #if !(defined(_MSC_VER) || defined(__MINGW32__) || defined(_WIN32)) /* to the end */
 

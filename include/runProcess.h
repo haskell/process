@@ -4,6 +4,28 @@
    Interface for code in runProcess.c (providing support for System.Process)
    ------------------------------------------------------------------------- */
 
+#include "HsProcessConfig.h"
+
+#if defined(_MSC_VER) || defined(__MINGW32__) || defined(_WIN32)
+#include <windows.h>
+#include <stdlib.h>
+#endif
+
+#include <unistd.h>
+#include <sys/types.h>
+
+#ifdef HAVE_VFORK_H
+#include <vfork.h>
+#endif
+
+#ifdef HAVE_VFORK
+#define fork vfork
+#endif
+
+#ifdef HAVE_SIGNAL_H
+#include <signal.h>
+#endif
+
 #if !(defined(_MSC_VER) || defined(__MINGW32__) || defined(_WIN32))
 typedef pid_t ProcHandle;
 #else
