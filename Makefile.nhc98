@@ -3,6 +3,9 @@ SEARCH	= -package base
 EXTRA_H_FLAGS   =
 EXTRA_HBC_FLAGS =
 
+DIRS	= \
+	System System/Process
+
 SRCS	= \
 	System/Cmd.hs
 
