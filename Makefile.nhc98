@@ -1,0 +1,20 @@
+THISPKG	= process
+SEARCH	= -package base
+EXTRA_H_FLAGS   =
+EXTRA_HBC_FLAGS =
+
+SRCS	= \
+	System/Cmd.hs
+
+#	System/Process.hs
+#	System/Process/Internal.hs
+
+# Here are the main rules.
+include ../Makefile.common
+
+# some extra rules
+
+# Here are any extra dependencies.
+
+# C-files dependencies.
+
