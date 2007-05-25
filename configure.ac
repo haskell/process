@@ -18,4 +18,6 @@ AC_CHECK_HEADERS([signal.h sys/wait.h])
 
 AC_CHECK_FUNCS([setitimer])
 
+FP_CHECK_CONSTS([SIG_DFL SIG_IGN])
+
 AC_OUTPUT

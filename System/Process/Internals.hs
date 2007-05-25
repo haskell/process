@@ -75,7 +75,7 @@ import System.Directory.Internals ( parseSearchPath, joinFileName )
 {-# CFILES cbits/execvpe.c  #-}
 #endif
 
-#include "HsBaseConfig.h"
+#include "HsProcessConfig.h"
 
 #ifndef __HUGS__
 -- ----------------------------------------------------------------------------
