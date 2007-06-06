@@ -20,6 +20,7 @@ includes:
 install-includes:
     execvpe.h
     runProcess.h
+    HsProcessConfig.h
 extensions:	CPP
 build-depends: base, directory
 
