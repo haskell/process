@@ -5,6 +5,12 @@
    ------------------------------------------------------------------------- */
 
 #include "HsProcessConfig.h"
+// Otherwise these clash with similar definitions from other packages:
+#undef PACKAGE_BUGREPORT
+#undef PACKAGE_NAME
+#undef PACKAGE_STRING
+#undef PACKAGE_TARNAME
+#undef PACKAGE_VERSION
 
 #if defined(_MSC_VER) || defined(__MINGW32__) || defined(_WIN32)
 #include <windows.h>
