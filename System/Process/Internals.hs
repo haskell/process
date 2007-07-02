@@ -68,7 +68,7 @@ import Control.Exception 	( catchJust, ioErrors )
 import System.IO.Error		( isDoesNotExistError, doesNotExistErrorType,
 				  mkIOError )
 import System.Environment	( getEnv )
-import System.Directory.Internals ( parseSearchPath, joinFileName )
+import System.FilePath
 #endif
 
 #ifdef __HUGS__
@@ -392,15 +392,15 @@ findCommandInterpreter = do
 	search :: [FilePath] -> IO (Maybe FilePath)
 	search [] = return Nothing
 	search (d:ds) = do
-		let path1 = d `joinFileName` "cmd.exe"
-		    path2 = d `joinFileName` "command.com"
+		let path1 = d </> "cmd.exe"
+		    path2 = d </> "command.com"
 		b1 <- doesFileExist path1
 		b2 <- doesFileExist path2
 		if b1 then return (Just path1)
 		      else if b2 then return (Just path2)
 		                 else search ds
     --
-    mb_path <- search (parseSearchPath path)
+    mb_path <- search (splitSearchPath path)
 
     case mb_path of
       Nothing -> ioError (mkIOError doesNotExistErrorType 
