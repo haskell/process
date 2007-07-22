@@ -56,7 +56,7 @@ import System.Exit	( ExitCode(..) )
 
 import System.Posix.Internals
 import GHC.IOBase	( FD )
-import GHC.Handle 	( openFd )
+import GHC.Handle 	( fdToHandle' )
 
 -- ----------------------------------------------------------------------------
 -- runCommand
@@ -221,7 +221,7 @@ foreign import ccall unsafe "runInteractiveProcess"
 fdToHandle :: Ptr FD -> IOMode -> IO Handle
 fdToHandle pfd mode = do
   fd <- peek pfd
-  openFd fd (Just Stream) 
+  fdToHandle' fd (Just Stream)
      False{-not a socket-}
      ("fd:" ++ show fd) mode True{-binary-}
 
