@@ -262,7 +262,7 @@ foreign import ccall unsafe "runProcess"
 {-
 On Windows this is tricky.  We use CreateProcess, passing a single
 command-line string (lpCommandLine) as its argument.  (CreateProcess
-is well documented on http://msdn.microsoft/com.)
+is well documented on http://msdn.microsoft.com.)
 
       - It parses the beginning of the string to find the command. If the
 	file name has embedded spaces, it must be quoted, using double
