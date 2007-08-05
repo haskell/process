@@ -6,21 +6,24 @@ maintainer:   libraries@haskell.org
 synopsis:     Process libraries
 description:
     This package contains libraries for dealing with system processes.
-exposed-modules:
-    System.Cmd
-    System.Process
-    System.Process.Internals
-c-sources:
-    cbits/execvpe.c
-    cbits/runProcess.c
-include-dirs: include
-includes:
-    execvpe.h
-    runProcess.h
-install-includes:
-    execvpe.h
-    runProcess.h
-    HsProcessConfig.h
-extensions: CPP
-build-depends: base, directory, filepath
+
+Library {
+    exposed-modules:
+        System.Cmd
+        System.Process
+        System.Process.Internals
+    c-sources:
+        cbits/runProcess.c
+    include-dirs: include
+    includes:
+        runProcess.h
+    install-includes:
+        runProcess.h
+        HsProcessConfig.h
+    extensions: CPP
+    build-depends: base, directory, filepath
+    if !os(windows) {
+        build-depends: unix
+    }
+}
 

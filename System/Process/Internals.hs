@@ -41,6 +41,7 @@ import Prelude -- necessary to get dependencies right
 
 #if !defined(mingw32_HOST_OS) && !defined(__MINGW32__)
 import System.Posix.Types ( CPid )
+import System.Posix.Process.Internals ( pPrPr_disableITimers, c_execvpe )
 import System.IO 	( Handle )
 #else
 import Data.Word ( Word32 )
@@ -146,18 +147,6 @@ foreign import stdcall unsafe "CloseHandle"
 #endif /* !__HUGS__ */
 
 -- ----------------------------------------------------------------------------
-
-#if !defined(mingw32_HOST_OS) && !defined(__MINGW32__)
-
--- this function disables the itimer, which would otherwise cause confusing
--- signals to be sent to the new process.
-foreign import ccall unsafe "pPrPr_disableITimers"
-  pPrPr_disableITimers :: IO ()
-
-foreign import ccall unsafe "execvpe"
-  c_execvpe :: CString -> Ptr CString -> Ptr CString -> IO CInt
-
-#endif
 
 #if !defined(mingw32_HOST_OS) && !defined(__MINGW32__)
 
