@@ -22,7 +22,7 @@ Library {
         HsProcessConfig.h
     extensions: CPP
     build-depends: base, directory, filepath
-    if !os(windows) {
+    if !os(mingw32) {
         build-depends: unix
     }
 }
