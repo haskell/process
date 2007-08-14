@@ -8,9 +8,11 @@
 #include "HsBase.h"
 
 #include "runProcess.h"
-#include "execvpe.h"
 
 #if !(defined(_MSC_VER) || defined(__MINGW32__) || defined(_WIN32))
+
+#include "execvpe.h"
+
 /* ----------------------------------------------------------------------------
    UNIX versions
    ------------------------------------------------------------------------- */
