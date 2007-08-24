@@ -37,7 +37,11 @@ runProcess (char *const args[], char *workingDirectory, char **environment,
 	
 	if (workingDirectory) {
 	    if (chdir (workingDirectory) < 0) {
-		return -1;
+                // See #1593.  The convention for the exit code when
+                // exec() fails seems to be 127 (gleened from C's
+                // system()), but there's no equivalent convention for
+                // chdir(), so I'm picking 126 --SimonM.
+                _exit(126);
 	    }
 	}
 	
