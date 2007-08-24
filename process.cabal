@@ -25,5 +25,7 @@ Library {
     if !os(mingw32) {
         build-depends: unix
     }
+    extra-tmp-files:
+        config.log config.status autom4te.cache
+        include/HsProcessConfig.h
 }
-
