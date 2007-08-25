@@ -4,12 +4,14 @@
 -- Module      :  System.Process
 -- Copyright   :  (c) The University of Glasgow 2004
 -- License     :  BSD-style (see the file libraries/base/LICENSE)
--- 
+--
 -- Maintainer  :  libraries@haskell.org
 -- Stability   :  experimental
 -- Portability :  portable
 --
 -- Operations for creating and interacting with sub-processes.
+--
+-- For a simpler, but less powerful, interface, see the "System.Cmd" module.
 --
 -----------------------------------------------------------------------------
 
