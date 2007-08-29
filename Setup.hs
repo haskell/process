@@ -3,7 +3,6 @@ module Main (main) where
 import Data.List
 import Distribution.Simple
 import Distribution.PackageDescription
-import Distribution.Setup
 import Distribution.Simple.LocalBuildInfo
 
 main :: IO ()
