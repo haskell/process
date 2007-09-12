@@ -6,6 +6,7 @@
 
 /* XXX This is a nasty hack; should put everything necessary in this package */
 #include "HsBase.h"
+#include "Rts.h"
 
 #include "runProcess.h"
 
@@ -16,6 +17,17 @@
 /* ----------------------------------------------------------------------------
    UNIX versions
    ------------------------------------------------------------------------- */
+
+static void
+disableItimers()
+{
+#if !defined(USE_TIMER_CREATE)
+    // we only need to do this if we're using itimers, because
+    // timer_create timers are not carried across a fork().
+    stopTimer();
+#endif
+}
+
 
 ProcHandle
 runProcess (char *const args[], char *workingDirectory, char **environment, 
@@ -33,7 +45,7 @@ runProcess (char *const args[], char *workingDirectory, char **environment,
 	
     case 0:
     {
-	pPrPr_disableITimers();
+        disableItimers();
 	
 	if (workingDirectory) {
 	    if (chdir (workingDirectory) < 0) {
@@ -99,7 +111,7 @@ runInteractiveProcess (char *const args[],
 	
     case 0:
     {
-	pPrPr_disableITimers();
+        disableItimers();
 	
 	if (workingDirectory) {
 	    if (chdir (workingDirectory) < 0) {
