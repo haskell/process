@@ -6,6 +6,9 @@ maintainer:   libraries@haskell.org
 synopsis:     Process libraries
 description:
     This package contains libraries for dealing with system processes.
+extra-tmp-files:
+        config.log config.status autom4te.cache
+        include/HsProcessConfig.h
 
 Library {
     exposed-modules:
@@ -25,7 +28,4 @@ Library {
     if !os(mingw32) {
         build-depends: unix
     }
-    extra-tmp-files:
-        config.log config.status autom4te.cache
-        include/HsProcessConfig.h
 }
