@@ -16,7 +16,7 @@ Library {
         System.Process.Internals
     if impl(ghc)
         exposed-modules:
-	    System.Process
+          System.Process
     c-sources:
         cbits/runProcess.c
     include-dirs: include
