@@ -13,8 +13,10 @@ extra-tmp-files:
 Library {
     exposed-modules:
         System.Cmd
-        System.Process
         System.Process.Internals
+    if impl(ghc)
+        exposed-modules:
+	    System.Process
     c-sources:
         cbits/runProcess.c
     include-dirs: include
