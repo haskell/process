@@ -7,8 +7,10 @@ synopsis:     Process libraries
 description:
     This package contains libraries for dealing with system processes.
 extra-tmp-files:
-        config.log config.status autom4te.cache
-        include/HsProcessConfig.h
+    config.log config.status autom4te.cache
+    include/HsProcessConfig.h
+build-type:    Configure
+cabal-version: >=1.2
 
 Library {
     exposed-modules:
@@ -27,7 +29,6 @@ Library {
         HsProcessConfig.h
     extensions: CPP
     build-depends: base, directory, filepath
-    if !os(mingw32) {
+    if !os(windows)
         build-depends: unix
-    }
 }
