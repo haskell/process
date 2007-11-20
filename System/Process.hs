@@ -223,7 +223,7 @@ foreign import ccall unsafe "runInteractiveProcess"
 fdToHandle :: Ptr FD -> IOMode -> IO Handle
 fdToHandle pfd mode = do
   fd <- peek pfd
-  fdToHandle' fd (Just (Stream,0,0))
+  fdToHandle' fd (Just Stream)
      False{-not a socket-}
      ("fd:" ++ show fd) mode True{-binary-}
 
