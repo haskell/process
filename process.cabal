@@ -13,6 +13,9 @@ build-type:    Configure
 cabal-version: >=1.2
 
 Library {
+  if impl(nhc98) {
+    exposed-modules: System.Cmd
+  } else {
     exposed-modules:
         System.Cmd
         System.Process.Internals
@@ -27,8 +30,9 @@ Library {
     install-includes:
         runProcess.h
         HsProcessConfig.h
-    extensions: CPP
-    build-depends: base, directory, filepath
     if !os(windows)
         build-depends: unix
+  }
+  build-depends: base, directory, filepath
+  extensions: CPP
 }
