@@ -1,4 +1,5 @@
 {-# OPTIONS_GHC -cpp -fffi #-}
+{-# OPTIONS_HADDOCK hide #-}
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  System.Process.Internals
