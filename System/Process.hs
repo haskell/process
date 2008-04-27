@@ -52,9 +52,9 @@ import Prelude
 import System.Process.Internals
 
 import Foreign
-import Foreign.C 
-import System.IO 	( IOMode(..), Handle, hClose )
-import System.Exit	( ExitCode(..) )
+import Foreign.C
+import System.IO
+import System.Exit
 
 import System.Posix.Internals
 import GHC.IOBase	( FD )
