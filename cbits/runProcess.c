@@ -156,6 +156,12 @@ runInteractiveProcess (char *const args[],
 	close(fdStdOutput[1]);
 	close(fdStdError[1]);
 	
+        // #1780: these pipe descriptors must be closed in
+        // subsequent child processes.
+        fcntl(fdStdInput[1], F_SETFD, FD_CLOEXEC);
+        fcntl(fdStdOutput[0], F_SETFD, FD_CLOEXEC);
+        fcntl(fdStdError[0], F_SETFD, FD_CLOEXEC);
+
 	*pfdStdInput  = fdStdInput[1];
 	*pfdStdOutput = fdStdOutput[0];
 	*pfdStdError  = fdStdError[0];
