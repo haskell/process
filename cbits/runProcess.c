@@ -28,19 +28,46 @@ disableItimers()
 #endif
 }
 
+static long max_fd = 0;
 
 ProcHandle
-runProcess (char *const args[], char *workingDirectory, char **environment, 
-	    int fdStdInput, int fdStdOutput, int fdStdError,
-	    int set_inthandler, long inthandler, 
-	    int set_quithandler, long quithandler)
+runInteractiveProcess (char *const args[], 
+		       char *workingDirectory, char **environment,
+                       int fdStdIn, int fdStdOut, int fdStdErr,
+		       int *pfdStdInput, int *pfdStdOutput, int *pfdStdError,
+                       int set_inthandler, long inthandler, 
+                       int set_quithandler, long quithandler,
+                       int close_fds)
 {
     int pid;
+    int fdStdInput[2], fdStdOutput[2], fdStdError[2];
     struct sigaction dfl;
+
+    if (fdStdIn == -1) {
+        pipe(fdStdInput);
+    }
+    if (fdStdOut == -1) {
+        pipe(fdStdOutput);
+    }
+    if (fdStdErr == -1) {
+        pipe(fdStdError);
+    }
 
     switch(pid = fork())
     {
     case -1:
+        if (fdStdIn == -1) {
+            close(fdStdInput[0]);
+            close(fdStdInput[1]);
+        }
+        if (fdStdOut == -1) {
+            close(fdStdOutput[0]);
+            close(fdStdOutput[1]);
+        }
+        if (fdStdErr == -1) {
+            close(fdStdError[0]);
+            close(fdStdError[1]);
+        }
 	return -1;
 	
     case 0:
@@ -57,6 +84,53 @@ runProcess (char *const args[], char *workingDirectory, char **environment,
 	    }
 	}
 	
+        if (fdStdIn == -1) {
+            if (fdStdInput[0] != STDIN_FILENO) {
+                dup2 (fdStdInput[0], STDIN_FILENO);
+                close(fdStdInput[0]);
+            }
+            close(fdStdInput[1]);
+        } else {
+            dup2(fdStdIn,  STDIN_FILENO);
+        }
+
+        if (fdStdOut == -1) {
+            if (fdStdOutput[1] != STDOUT_FILENO) {
+                dup2 (fdStdOutput[1], STDOUT_FILENO);
+                close(fdStdOutput[1]);
+            }
+            close(fdStdOutput[0]);
+        } else {
+            dup2(fdStdOut,  STDOUT_FILENO);
+        }
+
+        if (fdStdErr == -1) {
+            if (fdStdError[1] != STDERR_FILENO) {
+                dup2 (fdStdError[1], STDERR_FILENO);
+                close(fdStdError[1]);
+            }
+            close(fdStdError[0]);
+        } else {
+            dup2(fdStdErr,  STDERR_FILENO);
+        }
+            
+        if (close_fds) {
+            int i;
+            if (max_fd == 0) {
+#if HAVE_SYSCONF
+                max_fd = sysconf(_SC_OPEN_MAX);
+                if (max_fd == -1) {
+                    max_fd = 256;
+                }
+#else
+                max_fd = 256;
+#endif
+            }
+            for (i = 3; i < max_fd; i++) {
+                close(i);
+            }
+        }
+
 	/* Set the SIGINT/SIGQUIT signal handlers in the child, if requested 
 	 */
         (void)sigemptyset(&dfl.sa_mask);
@@ -70,78 +144,6 @@ runProcess (char *const args[], char *workingDirectory, char **environment,
 	    (void)sigaction(SIGQUIT,  &dfl, NULL);
 	}
 
-	dup2 (fdStdInput,  STDIN_FILENO);
-	dup2 (fdStdOutput, STDOUT_FILENO);
-	dup2 (fdStdError,  STDERR_FILENO);
-	
-	if (environment) {
-	    execvpe(args[0], args, environment);
-	} else {
-	    execvp(args[0], args);
-	}
-    }
-    _exit(127);
-    }
-    
-    return pid;
-}
-
-ProcHandle
-runInteractiveProcess (char *const args[], 
-		       char *workingDirectory, char **environment,
-		       int *pfdStdInput, int *pfdStdOutput, int *pfdStdError)
-{
-    int pid;
-    int fdStdInput[2], fdStdOutput[2], fdStdError[2];
-
-    pipe(fdStdInput);
-    pipe(fdStdOutput);
-    pipe(fdStdError);
-
-    switch(pid = fork())
-    {
-    case -1:
-	close(fdStdInput[0]);
-	close(fdStdInput[1]);
-	close(fdStdOutput[0]);
-	close(fdStdOutput[1]);
-	close(fdStdError[0]);
-	close(fdStdError[1]);
-	return -1;
-	
-    case 0:
-    {
-        disableItimers();
-	
-	if (workingDirectory) {
-	    if (chdir (workingDirectory) < 0) {
-                // See #1593.  The convention for the exit code when
-                // exec() fails seems to be 127 (gleened from C's
-                // system()), but there's no equivalent convention for
-                // chdir(), so I'm picking 126 --SimonM.
-                _exit(126);
-	    }
-	}
-	
-	if (fdStdInput[0] != STDIN_FILENO) {
-	    dup2 (fdStdInput[0], STDIN_FILENO);
-	    close(fdStdInput[0]);
-	}
-
-	if (fdStdOutput[1] != STDOUT_FILENO) {
-	    dup2 (fdStdOutput[1], STDOUT_FILENO);
-	    close(fdStdOutput[1]);
-	}
-
-	if (fdStdError[1] != STDERR_FILENO) {
-	    dup2 (fdStdError[1], STDERR_FILENO);
-	    close(fdStdError[1]);
-	}
-	
-	close(fdStdInput[1]);
-	close(fdStdOutput[0]);
-	close(fdStdError[0]);
-	
 	/* the child */
 	if (environment) {
 	    execvpe(args[0], args, environment);
@@ -152,19 +154,21 @@ runInteractiveProcess (char *const args[],
     _exit(127);
     
     default:
-	close(fdStdInput[0]);
-	close(fdStdOutput[1]);
-	close(fdStdError[1]);
-	
-        // #1780: these pipe descriptors must be closed in
-        // subsequent child processes.
-        fcntl(fdStdInput[1], F_SETFD, FD_CLOEXEC);
-        fcntl(fdStdOutput[0], F_SETFD, FD_CLOEXEC);
-        fcntl(fdStdError[0], F_SETFD, FD_CLOEXEC);
-
-	*pfdStdInput  = fdStdInput[1];
-	*pfdStdOutput = fdStdOutput[0];
-	*pfdStdError  = fdStdError[0];
+	if (fdStdIn  == -1) {
+            close(fdStdInput[0]);
+            fcntl(fdStdInput[1], F_SETFD, FD_CLOEXEC);
+            *pfdStdInput  = fdStdInput[1];
+        }
+	if (fdStdOut == -1) {
+            close(fdStdOutput[1]);
+            fcntl(fdStdOutput[0], F_SETFD, FD_CLOEXEC);
+            *pfdStdOutput = fdStdOutput[0];
+        }
+        if (fdStdErr == -1) {
+            close(fdStdError[1]);
+            fcntl(fdStdError[0], F_SETFD, FD_CLOEXEC);
+            *pfdStdError  = fdStdError[0];
+        }
 	break;
     }
     
@@ -323,28 +327,84 @@ mkAnonPipe (HANDLE* pHandleIn, BOOL isInheritableIn,
 }
 
 ProcHandle
-runProcess (char *cmd, char *workingDirectory, void *environment,
-	    int fdStdInput, int fdStdOutput, int fdStdError)
+runInteractiveProcess (char *cmd, char *workingDirectory, void *environment,
+                       int fdStdIn, int fdStdOut, int fdStdErr,
+		       int *pfdStdInput, int *pfdStdOutput, int *pfdStdError)
 {
 	STARTUPINFO sInfo;
 	PROCESS_INFORMATION pInfo;
+	HANDLE hStdInputRead   = INVALID_HANDLE_VALUE;
+        HANDLE hStdInputWrite  = INVALID_HANDLE_VALUE;
+	HANDLE hStdOutputRead  = INVALID_HANDLE_VALUE;
+        HANDLE hStdOutputWrite = INVALID_HANDLE_VALUE;
+	HANDLE hStdErrorRead   = INVALID_HANDLE_VALUE;
+        HANDLE hStdErrorWrite  = INVALID_HANDLE_VALUE;
 	DWORD flags;
+	BOOL status;
 
 	ZeroMemory(&sInfo, sizeof(sInfo));
-	sInfo.cb = sizeof(sInfo);	
-	sInfo.hStdInput = (HANDLE) _get_osfhandle(fdStdInput);
-	sInfo.hStdOutput= (HANDLE) _get_osfhandle(fdStdOutput);
-	sInfo.hStdError = (HANDLE) _get_osfhandle(fdStdError);
+	sInfo.cb = sizeof(sInfo);
+	sInfo.dwFlags = STARTF_USESTDHANDLES;
 
-	if (sInfo.hStdInput == INVALID_HANDLE_VALUE)
-		sInfo.hStdInput = NULL;
-	if (sInfo.hStdOutput == INVALID_HANDLE_VALUE)
-		sInfo.hStdOutput = NULL;
-	if (sInfo.hStdError == INVALID_HANDLE_VALUE)
-		sInfo.hStdError = NULL;
+	if (fdStdIn == -1) {
+            if (!mkAnonPipe(&hStdInputRead,  TRUE, &hStdInputWrite,  FALSE))
+                goto cleanup_err;
+            sInfo.hStdInput = hStdInputRead;
+        } else if (fdStdIn == 0) {
+            // Don't duplicate stdin, as console handles cannot be
+            // duplicated and inherited. urg.
+            sInfo.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+        } else {
+            // The handle might not be inheritable, so duplicate it
+            status = DuplicateHandle(GetCurrentProcess(), 
+                                     (HANDLE) _get_osfhandle(fdStdIn),
+                                     GetCurrentProcess(), &hStdInputRead,
+                                     0,
+                                     TRUE, /* inheritable */
+                                     DUPLICATE_SAME_ACCESS);
+            if (!status) goto cleanup_err;
+            sInfo.hStdInput = hStdInputRead;
+        }
 
-	if (sInfo.hStdInput || sInfo.hStdOutput || sInfo.hStdError)
-		sInfo.dwFlags = STARTF_USESTDHANDLES;
+	if (fdStdOut == -1) {
+            if (!mkAnonPipe(&hStdOutputRead,  FALSE, &hStdOutputWrite,  TRUE))
+                goto cleanup_err;
+            sInfo.hStdOutput = hStdOutputWrite;
+        } else if (fdStdOut == 1) {
+            // Don't duplicate stdout, as console handles cannot be
+            // duplicated and inherited. urg.
+            sInfo.hStdOutput = GetStdHandle(STD_OUTPUT_HANDLE);
+        } else {
+            // The handle might not be inheritable, so duplicate it
+            status = DuplicateHandle(GetCurrentProcess(), 
+                                     (HANDLE) _get_osfhandle(fdStdOut),
+                                     GetCurrentProcess(), &hStdOutputWrite,
+                                     0,
+                                     TRUE, /* inheritable */
+                                     DUPLICATE_SAME_ACCESS);
+            if (!status) goto cleanup_err;
+            sInfo.hStdOutput = hStdOutputWrite;
+        }
+
+	if (fdStdErr == -1) {
+            if (!mkAnonPipe(&hStdErrorRead,  TRUE, &hStdErrorWrite,  FALSE))
+                goto cleanup_err;
+            sInfo.hStdError = hStdErrorWrite;
+        } else if (fdStdErr == 2) {
+            // Don't duplicate stderr, as console handles cannot be
+            // duplicated and inherited. urg.
+            sInfo.hStdError = GetStdHandle(STD_ERROR_HANDLE);
+        } else {
+            /* The handle might not be inheritable, so duplicate it */
+            status = DuplicateHandle(GetCurrentProcess(), 
+                                     (HANDLE) _get_osfhandle(fdStdErr),
+                                     GetCurrentProcess(), &hStdErrorWrite,
+                                     0,
+                                     TRUE, /* inheritable */
+                                     DUPLICATE_SAME_ACCESS);
+            if (!status) goto cleanup_err;
+            sInfo.hStdError = hStdErrorWrite;
+        }
 
 	if (sInfo.hStdInput  != GetStdHandle(STD_INPUT_HANDLE)  &&
 	    sInfo.hStdOutput != GetStdHandle(STD_OUTPUT_HANDLE) &&
@@ -355,75 +415,32 @@ runProcess (char *cmd, char *workingDirectory, void *environment,
 
 	if (!CreateProcess(NULL, cmd, NULL, NULL, TRUE, flags, environment, workingDirectory, &sInfo, &pInfo))
 	{
-		maperrno();
-		return -1;
-	}
-
-	CloseHandle(pInfo.hThread);
-	return (ProcHandle)pInfo.hProcess;
-}
-
-ProcHandle
-runInteractiveProcess (char *cmd, char *workingDirectory, void *environment,
-		       int *pfdStdInput, int *pfdStdOutput, int *pfdStdError)
-{
-	STARTUPINFO sInfo;
-	PROCESS_INFORMATION pInfo;
-	HANDLE hStdInputRead,  hStdInputWrite;
-	HANDLE hStdOutputRead, hStdOutputWrite;
-	HANDLE hStdErrorRead,  hStdErrorWrite;
-
-	if (!mkAnonPipe(&hStdInputRead,  TRUE, &hStdInputWrite,  FALSE))
-		return -1;
-
-	if (!mkAnonPipe(&hStdOutputRead, FALSE, &hStdOutputWrite, TRUE))
-	{
-		CloseHandle(hStdInputRead);
-		CloseHandle(hStdInputWrite);
-		return -1;
-	}
-
-	if (!mkAnonPipe(&hStdErrorRead,  FALSE, &hStdErrorWrite,  TRUE))
-	{
-		CloseHandle(hStdInputRead);
-		CloseHandle(hStdInputWrite);
-		CloseHandle(hStdOutputRead);
-		CloseHandle(hStdOutputWrite);
-		return -1;
-	}
-
-	ZeroMemory(&sInfo, sizeof(sInfo));
-	sInfo.cb = sizeof(sInfo);
-	sInfo.dwFlags = STARTF_USESTDHANDLES;
-	sInfo.hStdInput = hStdInputRead;
-	sInfo.hStdOutput= hStdOutputWrite;
-	sInfo.hStdError = hStdErrorWrite;
-
-	if (!CreateProcess(NULL, cmd, NULL, NULL, TRUE, CREATE_NO_WINDOW, environment, workingDirectory, &sInfo, &pInfo))
-	{
-		maperrno();
-		CloseHandle(hStdInputRead);
-		CloseHandle(hStdInputWrite);
-		CloseHandle(hStdOutputRead);
-		CloseHandle(hStdOutputWrite);
-		CloseHandle(hStdErrorRead);
-		CloseHandle(hStdErrorWrite);
-		return -1;
+                goto cleanup_err;
 	}
 	CloseHandle(pInfo.hThread);
 
 	// Close the ends of the pipes that were inherited by the
 	// child process.  This is important, otherwise we won't see
 	// EOF on these pipes when the child process exits.
-	CloseHandle(hStdInputRead);
-	CloseHandle(hStdOutputWrite);
-	CloseHandle(hStdErrorWrite);
+        if (hStdInputRead   != INVALID_HANDLE_VALUE) CloseHandle(hStdInputRead);
+        if (hStdOutputWrite != INVALID_HANDLE_VALUE) CloseHandle(hStdOutputWrite);
+        if (hStdErrorWrite  != INVALID_HANDLE_VALUE) CloseHandle(hStdErrorWrite);
 
 	*pfdStdInput  = _open_osfhandle((intptr_t) hStdInputWrite, _O_WRONLY);
 	*pfdStdOutput = _open_osfhandle((intptr_t) hStdOutputRead, _O_RDONLY);
-  	*pfdStdError  = _open_osfhandle((intptr_t) hStdErrorRead, _O_RDONLY);
+  	*pfdStdError  = _open_osfhandle((intptr_t) hStdErrorRead,  _O_RDONLY);
 
   	return (int) pInfo.hProcess;
+
+cleanup_err:
+        if (hStdInputRead   != INVALID_HANDLE_VALUE) CloseHandle(hStdInputRead);
+        if (hStdInputWrite  != INVALID_HANDLE_VALUE) CloseHandle(hStdInputWrite);
+        if (hStdOutputRead  != INVALID_HANDLE_VALUE) CloseHandle(hStdOutputRead);
+        if (hStdOutputWrite != INVALID_HANDLE_VALUE) CloseHandle(hStdOutputWrite);
+        if (hStdErrorRead   != INVALID_HANDLE_VALUE) CloseHandle(hStdErrorRead);
+        if (hStdErrorWrite  != INVALID_HANDLE_VALUE) CloseHandle(hStdErrorWrite);
+        maperrno();
+        return -1;
 }
 
 int

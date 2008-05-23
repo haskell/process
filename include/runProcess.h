@@ -20,6 +20,10 @@
 #include <unistd.h>
 #include <sys/types.h>
 
+#ifdef HAVE_FCNTL_H
+#include <fcntl.h>
+#endif
+
 #ifdef HAVE_VFORK_H
 #include <vfork.h>
 #endif
@@ -41,28 +45,23 @@ typedef long ProcHandle;
 
 #if !(defined(_MSC_VER) || defined(__MINGW32__) || defined(_WIN32))
 
-extern ProcHandle runProcess( char *const args[], 
-			      char *workingDirectory, char **environment, 
-			      int fdStdInput, int fdStdOutput, int fdStdError,
-			      int set_inthandler, long inthandler, 
-			      int set_quithandler, long quithandler);
-
 extern ProcHandle runInteractiveProcess( char *const args[], 
 					 char *workingDirectory, 
 					 char **environment, 
+                                         int fdStdIn, int fdStdOut, int fdStdErr,
 					 int *pfdStdInput, 
 					 int *pfdStdOutput, 
-					 int *pfdStdError);
+					 int *pfdStdError,
+                                         int set_inthandler, long inthandler, 
+                                         int set_quithandler, long quithandler,
+                                         int close_fds);
 
 #else
-
-extern ProcHandle runProcess( char *cmd, 
-			      char *workingDirectory, void *environment, 
-			      int fdStdInput, int fdStdOutput, int fdStdError);
 
 extern ProcHandle runInteractiveProcess( char *cmd, 
 					 char *workingDirectory, 
 					 void *environment,
+                                         int fdStdIn, int fdStdOut, int fdStdErr,
 					 int *pfdStdInput,
 					 int *pfdStdOutput,
 					 int *pfdStdError);

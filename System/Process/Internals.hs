@@ -21,21 +21,22 @@ module System.Process.Internals (
 	PHANDLE, closePHANDLE, mkProcessHandle, 
 	withProcessHandle, withProcessHandle_,
 #endif
+#ifdef __GLASGOW_HASKELL__
+        CreateProcess(..),
+        CmdSpec(..), StdStream(..),
+	runGenProcess_,
+#endif
 #if !defined(mingw32_HOST_OS) && !defined(__MINGW32__)
 	 pPrPr_disableITimers, c_execvpe,
-# ifdef __GLASGOW_HASKELL__
-	runProcessPosix,
-# endif
 	ignoreSignal, defaultSignal,
 #else
 # ifdef __GLASGOW_HASKELL__
-	runProcessWin32, translate,
+	translate,
 # endif
 #endif
-#ifndef __HUGS__
-	commandToProcess,
-#endif
-	withFilePathException, withCEnvironment
+	withFilePathException, withCEnvironment,
+
+        fdToHandle,
   ) where
 
 import Prelude -- necessary to get dependencies right
@@ -43,25 +44,27 @@ import Prelude -- necessary to get dependencies right
 #if !defined(mingw32_HOST_OS) && !defined(__MINGW32__)
 import System.Posix.Types ( CPid )
 import System.Posix.Process.Internals ( pPrPr_disableITimers, c_execvpe )
-import System.IO 	( Handle )
+import System.IO 	( IOMode(..) )
 #else
 import Data.Word ( Word32 )
 import Data.IORef
 #endif
 
+import Control.Applicative
+import System.IO 	( Handle )
 import System.Exit	( ExitCode )
-import Data.Maybe	( fromMaybe )
-# ifdef __GLASGOW_HASKELL__
-import GHC.IOBase	( haFD, FD, Exception(..), IOException(..) )
-import GHC.Handle 	( stdin, stdout, stderr, withHandle_ )
-# elif __HUGS__
-import Hugs.Exception	( Exception(..), IOException(..) )
-# endif
-
 import Control.Concurrent
 import Control.Exception ( handle, throwIO )
 import Foreign.C
 import Foreign
+
+# ifdef __GLASGOW_HASKELL__
+import System.Posix.Internals
+import GHC.IOBase	( haFD, FD, Exception(..), IOException(..) )
+import GHC.Handle
+# elif __HUGS__
+import Hugs.Exception	( Exception(..), IOException(..) )
+# endif
 
 #if defined(mingw32_HOST_OS)
 import Control.Monad		( when )
@@ -149,36 +152,64 @@ foreign import stdcall unsafe "CloseHandle"
 
 -- ----------------------------------------------------------------------------
 
+data CreateProcess = CreateProcess{
+  cmdspec   :: CmdSpec,                 -- ^ Executable & arguments, or shell command
+  cwd       :: Maybe FilePath,          -- ^ Optional path to the working directory for the new process
+  env       :: Maybe [(String,String)], -- ^ Optional environment (otherwise inherit from the current process)
+  std_in    :: StdStream,               -- ^ How to determine stdin
+  std_out   :: StdStream,               -- ^ How to determine stdout
+  std_err   :: StdStream,               -- ^ How to determine stderr
+  close_fds :: Bool                     -- ^ Close all file descriptors except stdin, stdout and stderr in the new process
+ }
+
+data CmdSpec 
+  = ShellCommand String            
+      -- ^ a command line to execute using the shell
+  | RawCommand FilePath [String]
+      -- ^ the filename of an executable with a list of arguments
+
+data StdStream
+  = Inherit                             -- ^ Inherit Handle from parent
+  | UseHandle Handle                    -- ^ Use the supplied Handle
+  | CreatePipe                          -- ^ Create a new pipe
+
+runGenProcess_
+  :: String                     -- ^ function name (for error messages)
+  -> CreateProcess
+  -> Maybe CLong		-- ^ handler for SIGINT
+  -> Maybe CLong		-- ^ handler for SIGQUIT
+  -> IO (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)
+
 #if !defined(mingw32_HOST_OS) && !defined(__MINGW32__)
 
 #ifdef __GLASGOW_HASKELL__
+
 -- -----------------------------------------------------------------------------
 -- POSIX runProcess with signal handling in the child
 
-runProcessPosix
-  :: String
-  -> FilePath			-- ^ Filename of the executable
-  -> [String]			-- ^ Arguments to pass to the executable
-  -> Maybe FilePath		-- ^ Optional path to the working directory
-  -> Maybe [(String,String)]	-- ^ Optional environment (otherwise inherit)
-  -> Maybe Handle		-- ^ Handle to use for @stdin@
-  -> Maybe Handle		-- ^ Handle to use for @stdout@
-  -> Maybe Handle		-- ^ Handle to use for @stderr@
-  -> Maybe CLong		-- handler for SIGINT
-  -> Maybe CLong		-- handler for SIGQUIT
-  -> IO ProcessHandle
+runGenProcess_ fun CreateProcess{ cmdspec = cmdsp,
+                                  cwd = mb_cwd,
+                                  env = mb_env,
+                                  std_in = mb_stdin,
+                                  std_out = mb_stdout,
+                                  std_err = mb_stderr,
+                                  close_fds = mb_close_fds }
+               mb_sigint mb_sigquit
+ = do
+  let (cmd,args) = commandToProcess cmdsp
+  withFilePathException cmd $
+   alloca $ \ pfdStdInput  ->
+   alloca $ \ pfdStdOutput ->
+   alloca $ \ pfdStdError  ->
+   maybeWith withCEnvironment mb_env $ \pEnv ->
+   maybeWith withCString mb_cwd $ \pWorkDir ->
+   withMany withCString (cmd:args) $ \cstrs ->
+   withArray0 nullPtr cstrs $ \pargs -> do
+     
+     fdin  <- mbFd fun fd_stdin  mb_stdin
+     fdout <- mbFd fun fd_stdout mb_stdout
+     fderr <- mbFd fun fd_stderr mb_stderr
 
-runProcessPosix fun cmd args mb_cwd mb_env mb_stdin mb_stdout mb_stderr
-	mb_sigint mb_sigquit
- = withFilePathException cmd $ do
-     fd_stdin  <- withHandle_ fun (fromMaybe stdin  mb_stdin)  $ return . haFD
-     fd_stdout <- withHandle_ fun (fromMaybe stdout mb_stdout) $ return . haFD
-     fd_stderr <- withHandle_ fun (fromMaybe stderr mb_stderr) $ return . haFD
-	-- some of these might refer to the same Handle, so don't do
-	-- nested withHandle_'s (that will deadlock).
-     maybeWith withCEnvironment mb_env $ \pEnv -> do
-     maybeWith withCString mb_cwd $ \pWorkDir -> do
-     withMany withCString (cmd:args) $ \cstrs -> do
      let (set_int, inthand) 
 		= case mb_sigint of
 			Nothing   -> (0, 0)
@@ -187,63 +218,95 @@ runProcessPosix fun cmd args mb_cwd mb_env mb_stdin mb_stdout mb_stderr
 		= case mb_sigquit of
 			Nothing   -> (0, 0)
 			Just hand -> (1, hand)
-     withArray0 nullPtr cstrs $ \pargs -> do
-         ph <- throwErrnoIfMinus1 fun $
-		 c_runProcess pargs pWorkDir pEnv 
-			fd_stdin fd_stdout fd_stderr
-			set_int inthand set_quit quithand
-	 mkProcessHandle ph
 
-foreign import ccall unsafe "runProcess" 
-  c_runProcess
-        :: Ptr CString			-- args
-        -> CString			-- working directory (or NULL)
-        -> Ptr CString			-- env (or NULL)
-        -> FD				-- stdin
-        -> FD				-- stdout
-        -> FD				-- stderr
+     proc_handle <- throwErrnoIfMinus1 fun $
+	                 c_runInteractiveProcess pargs pWorkDir pEnv 
+                                fdin fdout fderr
+				pfdStdInput pfdStdOutput pfdStdError
+			        set_int inthand set_quit quithand
+                                (if mb_close_fds then 1 else 0)
+
+     hndStdInput  <- mbPipe mb_stdin  pfdStdInput  WriteMode
+     hndStdOutput <- mbPipe mb_stdout pfdStdOutput ReadMode
+     hndStdError  <- mbPipe mb_stderr pfdStdError  ReadMode
+
+     ph <- mkProcessHandle proc_handle
+     return (hndStdInput, hndStdOutput, hndStdError, ph)
+
+foreign import ccall unsafe "runInteractiveProcess" 
+  c_runInteractiveProcess
+        ::  Ptr CString
+	-> CString
+        -> Ptr CString
+        -> FD
+        -> FD
+        -> FD
+        -> Ptr FD
+        -> Ptr FD
+        -> Ptr FD
 	-> CInt				-- non-zero: set child's SIGINT handler
 	-> CLong			-- SIGINT handler
 	-> CInt				-- non-zero: set child's SIGQUIT handler
 	-> CLong			-- SIGQUIT handler
+        -> CInt                         -- close_fds
         -> IO PHANDLE
 
 #endif /* __GLASGOW_HASKELL__ */
 
-ignoreSignal  = CONST_SIG_IGN :: CLong
-defaultSignal = CONST_SIG_DFL :: CLong
+ignoreSignal, defaultSignal :: CLong
+ignoreSignal  = CONST_SIG_IGN
+defaultSignal = CONST_SIG_DFL
 
 #else
 
 #ifdef __GLASGOW_HASKELL__
 
-runProcessWin32 fun cmd args mb_cwd mb_env
-	mb_stdin mb_stdout mb_stderr extra_cmdline
- = withFilePathException cmd $ do
-     fd_stdin  <- withHandle_ fun (fromMaybe stdin  mb_stdin)  $ return . haFD
-     fd_stdout <- withHandle_ fun (fromMaybe stdout mb_stdout) $ return . haFD
-     fd_stderr <- withHandle_ fun (fromMaybe stderr mb_stderr) $ return . haFD
-	-- some of these might refer to the same Handle, so don't do
-	-- nested withHandle_'s (that will deadlock).
-     maybeWith withCEnvironment mb_env $ \pEnv -> do
-     maybeWith withCString      mb_cwd $ \pWorkDir -> do
-       let cmdline = translate cmd ++ 
-		   concat (map ((' ':) . translate) args) ++
-		   (if null extra_cmdline then "" else ' ':extra_cmdline)
-       withCString cmdline $ \pcmdline -> do
-         proc_handle <- throwErrnoIfMinus1 fun
-	                  (c_runProcess pcmdline pWorkDir pEnv 
-				fd_stdin fd_stdout fd_stderr)
-	 mkProcessHandle proc_handle
+runGenProcess_ fun CreateProcess{ cmdspec = cmdsp,
+                                  cwd = mb_cwd,
+                                  env = mb_env,
+                                  std_in = mb_stdin,
+                                  std_out = mb_stdout,
+                                  std_err = mb_stderr,
+                                  close_fds = _ignored_mb_close_fds }
+               _ignored_mb_sigint _ignored_mb_sigquit
+ = do
+  (cmd, cmdline) <- commandToProcess cmdsp
+  withFilePathException cmd $
+   alloca $ \ pfdStdInput  ->
+   alloca $ \ pfdStdOutput ->
+   alloca $ \ pfdStdError  ->
+   maybeWith withCEnvironment mb_env $ \pEnv ->
+   maybeWith withCString mb_cwd $ \pWorkDir -> do
+   withCString cmdline $ \pcmdline -> do
+     
+     fdin  <- mbFd fun fd_stdin  mb_stdin
+     fdout <- mbFd fun fd_stdout mb_stdout
+     fderr <- mbFd fun fd_stderr mb_stderr
 
-foreign import ccall unsafe "runProcess" 
-  c_runProcess
+     proc_handle <- throwErrnoIfMinus1 fun $
+	                 c_runInteractiveProcess pcmdline pWorkDir pEnv 
+                                fdin fdout fderr
+				pfdStdInput pfdStdOutput pfdStdError
+
+     hndStdInput  <- mbPipe mb_stdin  pfdStdInput  WriteMode
+     hndStdOutput <- mbPipe mb_stdout pfdStdOutput ReadMode
+     hndStdError  <- mbPipe mb_stderr pfdStdError  ReadMode
+
+     ph <- mkProcessHandle proc_handle
+     return (hndStdInput, hndStdOutput, hndStdError, ph)
+
+
+foreign import ccall unsafe "runInteractiveProcess" 
+  c_runInteractiveProcess
         :: CString
         -> CString
         -> Ptr ()
         -> FD
         -> FD
         -> FD
+        -> Ptr FD
+        -> Ptr FD
+        -> Ptr FD
         -> IO PHANDLE
 
 -- ------------------------------------------------------------------------
@@ -318,6 +381,27 @@ translate str = '"' : snd (foldr escape (True,"\"") str)
 
 #endif
 
+fd_stdin, fd_stdout, fd_stderr :: FD
+fd_stdin  = 0
+fd_stdout = 1
+fd_stderr = 2
+
+mbFd :: String -> FD -> StdStream -> IO FD
+mbFd _fun std Inherit         = return std
+mbFd fun _std (UseHandle hdl) = withHandle_ fun hdl $ return . haFD
+mbFd _   _std CreatePipe      = return (-1)
+
+mbPipe :: StdStream -> Ptr FD -> IOMode -> IO (Maybe Handle)
+mbPipe CreatePipe pfd  mode = Just <$> pfdToHandle pfd mode
+mbPipe _std      _pfd _mode = return Nothing
+
+pfdToHandle :: Ptr FD -> IOMode -> IO Handle
+pfdToHandle pfd mode = do
+  fd <- peek pfd
+  fdToHandle' fd (Just Stream)
+     False{-Windows: not a socket,  Unix: don't set non-blocking-}
+     ("fd:" ++ show fd) mode True{-binary-}
+
 #ifndef __HUGS__
 -- ----------------------------------------------------------------------------
 -- commandToProcess
@@ -338,25 +422,26 @@ translate str = '"' : snd (foldr escape (True,"\"") str)
 
 #if !defined(mingw32_HOST_OS) && !defined(__MINGW32__)
 
-commandToProcess
-  :: String
-  -> IO (FilePath,[String])
-commandToProcess string = return ("/bin/sh", ["-c", string])
+commandToProcess :: CmdSpec -> (FilePath, [String])
+commandToProcess (ShellCommand string) = ("/bin/sh", ["-c", string])
+commandToProcess (RawCommand cmd args) = (cmd, args)
 
 #else
 
 commandToProcess
-  :: String
-  -> IO (FilePath,String)
-commandToProcess string = do
+  :: CmdSpec
+  -> IO (FilePath, String)
+commandToProcess (ShellCommand string) = do
   cmd <- findCommandInterpreter
-  return (cmd, "/c "++string)
+  return (cmd, translate cmd ++ "/c " ++ string)
 	-- We don't want to put the cmd into a single
 	-- argument, because cmd.exe will not try to split it up.  Instead,
 	-- we just tack the command on the end of the cmd.exe command line,
 	-- which partly works.  There seem to be some quoting issues, but
 	-- I don't have the energy to find+fix them right now (ToDo). --SDM
 	-- (later) Now I don't know what the above comment means.  sigh.
+commandToProcess (RawCommand cmd args) = do
+  return (cmd, translate cmd ++ concatMap ((' ':) . translate) args)
 
 -- Find CMD.EXE (or COMMAND.COM on Win98).  We use the same algorithm as
 -- system() in the VC++ CRT (Vc7/crt/src/system.c in a VC++ installation).
@@ -411,13 +496,13 @@ withFilePathException fpath act = handle mapEx act
 
 #if !defined(mingw32_HOST_OS) && !defined(__MINGW32__)
 withCEnvironment :: [(String,String)] -> (Ptr CString  -> IO a) -> IO a
-withCEnvironment env act =
-  let env' = map (\(name, val) -> name ++ ('=':val)) env 
+withCEnvironment envir act =
+  let env' = map (\(name, val) -> name ++ ('=':val)) envir 
   in withMany withCString env' (\pEnv -> withArray0 nullPtr pEnv act)
 #else
 withCEnvironment :: [(String,String)] -> (Ptr () -> IO a) -> IO a
-withCEnvironment env act =
-  let env' = foldr (\(name, val) env -> name ++ ('=':val)++'\0':env) "\0" env 
+withCEnvironment envir act =
+  let env' = foldr (\(name, val) env -> name ++ ('=':val)++'\0':env) "\0" envir
   in withCString env' (act . castPtr)
 #endif
 

@@ -2,7 +2,7 @@
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  System.Process
--- Copyright   :  (c) The University of Glasgow 2004
+-- Copyright   :  (c) The University of Glasgow 2004-2008
 -- License     :  BSD-style (see the file libraries/base/LICENSE)
 --
 -- Maintainer  :  libraries@haskell.org
@@ -11,14 +11,10 @@
 --
 -- Operations for creating and interacting with sub-processes.
 --
--- For a simpler, but less powerful, interface, see the "System.Cmd" module.
---
 -----------------------------------------------------------------------------
 
 -- ToDo:
 --	* Flag to control whether exiting the parent also kills the child.
--- 	* Windows impl of runProcess should close the Handles.
---      * Add system/rawSystem replacements
 
 {- NOTES on createPipe:
  
@@ -35,11 +31,22 @@
 
 module System.Process (
 	-- * Running sub-processes
+        createProcess,
+        shell, proc,
+        CreateProcess(..),
+        CmdSpec(..),
+        StdStream(..),
 	ProcessHandle,
+
+        -- ** Specific variants of createProcess
 	runCommand,
 	runProcess,
 	runInteractiveCommand,
 	runInteractiveProcess,
+        readProcess,
+        readProcessWithExitCode,
+        system,
+        rawSystem,
 
 	-- * Process completion
 	waitForProcess,
@@ -47,18 +54,36 @@ module System.Process (
 	terminateProcess,
  ) where
 
-import Prelude
+import Prelude hiding (mapM)
 
 import System.Process.Internals
 
+import System.IO.Error
+import qualified Control.Exception as C
+import Control.Concurrent
+import Control.Monad
 import Foreign
 import Foreign.C
 import System.IO
-import System.Exit
+import Data.Maybe
+import System.Exit	( ExitCode(..) )
 
-import System.Posix.Internals
-import GHC.IOBase	( FD )
-import GHC.Handle 	( fdToHandle' )
+#ifdef __GLASGOW_HASKELL__
+import GHC.IOBase	( ioException, IOException(..), IOErrorType(..) )
+#if !defined(mingw32_HOST_OS)
+import System.Process.Internals
+import System.Posix.Signals
+#endif
+#endif
+
+#ifdef __HUGS__
+import Hugs.System
+#endif
+
+#ifdef __NHC__
+import System (system)
+#endif
+
 
 -- ----------------------------------------------------------------------------
 -- runCommand
@@ -70,13 +95,8 @@ runCommand
   -> IO ProcessHandle
 
 runCommand string = do
-  (cmd,args) <- commandToProcess string
-#if !defined(mingw32_HOST_OS) && !defined(__MINGW32__)
-  runProcessPosix "runCommand" cmd args Nothing Nothing Nothing Nothing Nothing
-	Nothing Nothing
-#else
-  runProcessWin32 "runCommand" cmd [] Nothing Nothing Nothing Nothing Nothing args
-#endif
+  (_,_,_,ph) <- runGenProcess_ "runCommand" (shell string) Nothing Nothing
+  return ph
 
 -- ----------------------------------------------------------------------------
 -- runProcess
@@ -88,30 +108,122 @@ runCommand string = do
 
      Any 'Handle's passed to 'runProcess' are placed immediately in the 
      closed state.
+
+     Note: consider using the more general 'createProcess' instead of
+     'runProcess'.
 -}
 runProcess
   :: FilePath			-- ^ Filename of the executable
   -> [String]			-- ^ Arguments to pass to the executable
   -> Maybe FilePath		-- ^ Optional path to the working directory
   -> Maybe [(String,String)]	-- ^ Optional environment (otherwise inherit)
-  -> Maybe Handle		-- ^ Handle to use for @stdin@
-  -> Maybe Handle		-- ^ Handle to use for @stdout@
-  -> Maybe Handle		-- ^ Handle to use for @stderr@
+  -> Maybe Handle		-- ^ Handle to use for @stdin@ (Nothing => use existing @stdin@)
+  -> Maybe Handle		-- ^ Handle to use for @stdout@ (Nothing => use existing @stdout@)
+  -> Maybe Handle		-- ^ Handle to use for @stderr@ (Nothing => use existing @stderr@)
   -> IO ProcessHandle
 
 runProcess cmd args mb_cwd mb_env mb_stdin mb_stdout mb_stderr = do
-#if !defined(mingw32_HOST_OS) && !defined(__MINGW32__)
-  h <- runProcessPosix "runProcess" cmd args mb_cwd mb_env 
-	mb_stdin mb_stdout mb_stderr
-	Nothing Nothing
-#else
-  h <- runProcessWin32 "runProcess" cmd args mb_cwd mb_env 
-	mb_stdin mb_stdout mb_stderr ""
-#endif
-  maybe (return ()) hClose mb_stdin
-  maybe (return ()) hClose mb_stdout
-  maybe (return ()) hClose mb_stderr
-  return h
+  (_,_,_,ph) <-
+      runGenProcess_ "runProcess"
+         (proc cmd args){ cwd = mb_cwd,
+                          env = mb_env,
+                          std_in  = mbToStd mb_stdin,
+                          std_out = mbToStd mb_stdout,
+                          std_err = mbToStd mb_stderr }
+	  Nothing Nothing
+  maybeClose mb_stdin
+  maybeClose mb_stdout
+  maybeClose mb_stderr
+  return ph
+ where
+  maybeClose :: Maybe Handle -> IO ()
+  maybeClose (Just  hdl)
+    | hdl /= stdin && hdl /= stdout && hdl /= stderr = hClose hdl
+  maybeClose _ = return ()
+
+  mbToStd :: Maybe Handle -> StdStream
+  mbToStd Nothing    = Inherit
+  mbToStd (Just hdl) = UseHandle hdl
+
+-- ----------------------------------------------------------------------------
+-- createProcess
+
+-- | Construct a 'CreateProcess' record for passing to 'createProcess',
+-- representing a raw command with arguments.
+proc :: FilePath -> [String] -> CreateProcess
+proc cmd args = CreateProcess { cmdspec = RawCommand cmd args,
+                                cwd = Nothing,
+                                env = Nothing,
+                                std_in = Inherit,
+                                std_out = Inherit,
+                                std_err = Inherit,
+                                close_fds = False}
+
+-- | Construct a 'CreateProcess' record for passing to 'createProcess',
+-- representing a command to be passed to the shell.
+shell :: String -> CreateProcess
+shell str = CreateProcess { cmdspec = ShellCommand str,
+                            cwd = Nothing,
+                            env = Nothing,
+                            std_in = Inherit,
+                            std_out = Inherit,
+                            std_err = Inherit,
+                            close_fds = False}
+                                            
+{- |
+This is the most general way to spawn an external process.  The
+process can be a command line to be executed by a shell or a raw command
+with a list of arguments.  The stdin, stdout, and stderr streams of
+the new process may individually be attached to new pipes, to existing
+'Handle's, or just inherited from the parent (the default.)
+
+The details of how to create the process are passed in the
+'CreateProcess' record.  To make it easier to construct a
+'CreateProcess', the functions 'proc' and 'shell' are supplied that
+fill in the fields with default values which can be overriden as
+needed.
+
+'createProcess' returns @(mb_stdin_hdl, mb_stdout_hdl, mb_stderr_hdl, p)@,
+where 
+
+ * if @std_in == CreatePipe@, then @mb_stdin_hdl@ will be @Just h@,
+   where @h@ is the write end of the pipe connected to the child
+   process's @stdin@.
+
+ * otherwise, @mb_stdin_hdl == Nothing@
+
+Similarly for @mb_stdout_hdl@ and @mb_stderr_hdl@.
+
+For example, to execute a simple @ls@ command:
+
+>   r <- createProcess (proc "ls" [])
+
+To create a pipe from which to read the output of @ls@:
+
+>   (_, Just hout, _, _) <-
+>       createProcess (proc "ls" []){ std_out = CreatePipe }
+
+To also set the directory in which to run @ls@:
+
+>   (_, Just hout, _, _) <-
+>       createProcess (proc "ls" []){ cwd = Just "\home\bob",
+>                                     std_out = CreatePipe }
+
+-}
+createProcess
+  :: CreateProcess
+  -> IO (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)
+createProcess cp = do
+  r <- runGenProcess_ "runGenProcess" cp Nothing Nothing
+  maybeCloseStd (std_in  cp)
+  maybeCloseStd (std_out cp)
+  maybeCloseStd (std_err cp)
+  return r
+ where
+  maybeCloseStd :: StdStream -> IO ()
+  maybeCloseStd (UseHandle hdl)
+    | hdl /= stdin && hdl /= stdout && hdl /= stderr = hClose hdl
+  maybeCloseStd _ = return ()
 
 -- ----------------------------------------------------------------------------
 -- runInteractiveCommand
@@ -125,13 +237,8 @@ runInteractiveCommand
   :: String
   -> IO (Handle,Handle,Handle,ProcessHandle)
 
-runInteractiveCommand string = do
-  (cmd,args) <- commandToProcess string
-#if !defined(mingw32_HOST_OS) && !defined(__MINGW32__)
-  runInteractiveProcess1 "runInteractiveCommand" cmd args Nothing Nothing
-#else
-  runInteractiveProcess1 "runInteractiveCommand" cmd [] Nothing Nothing args
-#endif
+runInteractiveCommand string =
+  runInteractiveProcess1 "runInteractiveCommand" (shell string)
 
 -- ----------------------------------------------------------------------------
 -- runInteractiveProcess
@@ -154,82 +261,22 @@ runInteractiveProcess
   -> Maybe [(String,String)]	-- ^ Optional environment (otherwise inherit)
   -> IO (Handle,Handle,Handle,ProcessHandle)
 
-#if !defined(mingw32_HOST_OS) && !defined(__MINGW32__)
+runInteractiveProcess cmd args mb_cwd mb_env = do
+  runInteractiveProcess1 "runInteractiveProcess" 
+        (proc cmd args){ cwd = mb_cwd, env = mb_env }
 
-runInteractiveProcess cmd args mb_cwd mb_env = 
-  runInteractiveProcess1 "runInteractiveProcess" cmd args mb_cwd mb_env
-
-runInteractiveProcess1 fun cmd args mb_cwd mb_env = do
-  withFilePathException cmd $
-   alloca $ \ pfdStdInput  ->
-   alloca $ \ pfdStdOutput ->
-   alloca $ \ pfdStdError  ->
-   maybeWith withCEnvironment mb_env $ \pEnv ->
-   maybeWith withCString mb_cwd $ \pWorkDir ->
-   withMany withCString (cmd:args) $ \cstrs ->
-   withArray0 nullPtr cstrs $ \pargs -> do
-     proc_handle <- throwErrnoIfMinus1 fun
-	                  (c_runInteractiveProcess pargs pWorkDir pEnv 
-				pfdStdInput pfdStdOutput pfdStdError)
-     hndStdInput  <- fdToHandle pfdStdInput  WriteMode
-     hndStdOutput <- fdToHandle pfdStdOutput ReadMode
-     hndStdError  <- fdToHandle pfdStdError  ReadMode
-     ph <- mkProcessHandle proc_handle
-     return (hndStdInput, hndStdOutput, hndStdError, ph)
-
-foreign import ccall unsafe "runInteractiveProcess" 
-  c_runInteractiveProcess
-        ::  Ptr CString
-	-> CString
-        -> Ptr CString
-        -> Ptr FD
-        -> Ptr FD
-        -> Ptr FD
-        -> IO PHANDLE
-
-#else
-
-runInteractiveProcess cmd args mb_cwd mb_env = 
-  runInteractiveProcess1 "runInteractiveProcess" cmd args mb_cwd mb_env ""
-
-runInteractiveProcess1 fun cmd args workDir env extra_cmdline
- = withFilePathException cmd $ do
-     let cmdline = translate cmd ++ 
-  		       concat (map ((' ':) . translate) args) ++
-  		       (if null extra_cmdline then "" else ' ':extra_cmdline)
-     withCString cmdline $ \pcmdline ->
-      alloca $ \ pfdStdInput  ->
-      alloca $ \ pfdStdOutput ->
-      alloca $ \ pfdStdError  -> do
-      maybeWith withCEnvironment env $ \pEnv -> do
-      maybeWith withCString workDir $ \pWorkDir -> do
-  	proc_handle <- throwErrnoIfMinus1 fun $
-  			     c_runInteractiveProcess pcmdline pWorkDir pEnv
-				  pfdStdInput pfdStdOutput pfdStdError
-  	hndStdInput  <- fdToHandle pfdStdInput  WriteMode
-  	hndStdOutput <- fdToHandle pfdStdOutput ReadMode
-  	hndStdError  <- fdToHandle pfdStdError  ReadMode
-	ph <- mkProcessHandle proc_handle
-  	return (hndStdInput, hndStdOutput, hndStdError, ph)
-
-foreign import ccall unsafe "runInteractiveProcess" 
-  c_runInteractiveProcess
-        :: CString 
-        -> CString
-        -> Ptr ()
-        -> Ptr FD
-        -> Ptr FD
-        -> Ptr FD
-        -> IO PHANDLE
-
-#endif
-
-fdToHandle :: Ptr FD -> IOMode -> IO Handle
-fdToHandle pfd mode = do
-  fd <- peek pfd
-  fdToHandle' fd (Just Stream)
-     False{-not a socket-}
-     ("fd:" ++ show fd) mode True{-binary-}
+runInteractiveProcess1
+  :: String
+  -> CreateProcess
+  -> IO (Handle,Handle,Handle,ProcessHandle)
+runInteractiveProcess1 fun cmd = do
+  (mb_in, mb_out, mb_err, p) <- 
+      runGenProcess_ fun
+           cmd{ std_in  = CreatePipe,
+                std_out = CreatePipe,
+                std_err = CreatePipe } 
+           Nothing Nothing
+  return (fromJust mb_in, fromJust mb_out, fromJust mb_err, p)
 
 -- ----------------------------------------------------------------------------
 -- waitForProcess
@@ -261,6 +308,185 @@ waitForProcess ph = do
 	  	   then ExitSuccess
 		   else (ExitFailure (fromIntegral code))
 	      return (ClosedHandle e, e)
+
+-- -----------------------------------------------------------------------------
+--
+-- | readProcess forks an external process, reads its standard output
+-- strictly, blocking until the process terminates, and returns either the output
+-- string, or, in the case of non-zero exit status, an error code, and
+-- any output.
+--
+-- Output is returned strictly, so this is not suitable for
+-- interactive applications.
+--
+-- Users of this function should compile with @-threaded@ if they
+-- want other Haskell threads to keep running while waiting on
+-- the result of readProcess.
+--
+-- >  > readProcess "date" [] []
+-- >  Right "Thu Feb  7 10:03:39 PST 2008\n"
+--
+-- The argumenst are:
+--
+-- * The command to run, which must be in the $PATH, or an absolute path 
+--  
+-- * A list of separate command line arguments to the program
+--
+-- * A string to pass on the standard input to the program.
+--
+readProcess 
+    :: FilePath                 -- ^ command to run
+    -> [String]                 -- ^ any arguments
+    -> String                   -- ^ standard input
+    -> IO String                -- ^ stdout + stderr
+readProcess cmd args input = do
+   (ex, output) <- readProcessWithExitCode_ cmd args input Inherit
+   case ex of
+     ExitSuccess   -> return output
+     ExitFailure r -> 
+      ioError (mkIOError OtherError ("readProcess: " ++ cmd ++ 
+                                     ' ':unwords (map show args) ++ 
+                                     " (exit " ++ show r ++ ")")
+                                 Nothing Nothing)
+
+{- |
+readProcessWithExitCode creates an external process, reads its
+standard output and standard error strictly, waits until the process
+terminates, and then returns both the 'ExitCode' of the process and
+the combined standard output and standard error in a 'String'.
+
+'readProcess' and 'readProcessWithExitCode' are fairly simple wrappers
+around 'createProcess'.  Constructing variants of these functions is
+quite easy: follow the link to the source code to see how
+'readProcess' is implemented.
+-}
+
+readProcessWithExitCode
+    :: FilePath                 -- ^ command to run
+    -> [String]                 -- ^ any arguments
+    -> String                   -- ^ standard input
+    -> IO (ExitCode,String)     -- ^ exitcode, and stdout + stderr
+
+readProcessWithExitCode cmd args input = 
+  readProcessWithExitCode_ cmd args input (UseHandle stdout)
+
+readProcessWithExitCode_
+    :: FilePath
+    -> [String]
+    -> String  
+    -> StdStream
+    -> IO (ExitCode,String)
+readProcessWithExitCode_ cmd args input std_err = do
+
+    (Just inh, Just outh, _, pid) <-
+        createProcess (proc cmd args){ std_in  = CreatePipe,
+                                       std_out = CreatePipe,
+                                       std_err = std_err }
+
+    -- fork off a thread to start consuming the output
+    output  <- hGetContents outh
+    outMVar <- newEmptyMVar
+    forkIO $ C.evaluate (length output) >> putMVar outMVar ()
+
+    -- now write and flush any input
+    when (not (null input)) $ do hPutStr inh input; hFlush inh
+    hClose inh -- done with stdin
+
+    -- wait on the output
+    takeMVar outMVar
+    hClose outh
+
+    -- wait on the process
+    ex <- waitForProcess pid
+
+    return (ex, output)
+
+-- ---------------------------------------------------------------------------
+-- system
+
+{-| 
+Computation @system cmd@ returns the exit code produced when the
+operating system runs the shell command @cmd@.
+
+This computation may fail with
+
+   * @PermissionDenied@: The process has insufficient privileges to
+     perform the operation.
+
+   * @ResourceExhausted@: Insufficient resources are available to
+     perform the operation.
+
+   * @UnsupportedOperation@: The implementation does not support
+     system calls.
+
+On Windows, 'system' passes the command to the Windows command
+interpreter (@CMD.EXE@ or @COMMAND.COM@), hence Unixy shell tricks
+will not work.
+-}
+#ifdef __GLASGOW_HASKELL__
+system :: String -> IO ExitCode
+system "" = ioException (IOError Nothing InvalidArgument "system" "null command" Nothing)
+system str = syncProcess (shell str)
+
+
+syncProcess :: CreateProcess -> IO ExitCode
+syncProcess c = do
+#if mingw32_HOST_OS
+  (_,_,_,p) <- createProcess c
+  waitForProcess p
+#else
+  -- The POSIX version of system needs to do some manipulation of signal
+  -- handlers.  Since we're going to be synchronously waiting for the child,
+  -- we want to ignore ^C in the parent, but handle it the default way
+  -- in the child (using SIG_DFL isn't really correct, it should be the
+  -- original signal handler, but the GHC RTS will have already set up
+  -- its own handler and we don't want to use that).
+  old_int  <- installHandler sigINT  Ignore Nothing
+  old_quit <- installHandler sigQUIT Ignore Nothing
+  (_,_,_,p) <- runGenProcess_ "runCommand" c
+		(Just defaultSignal) (Just defaultSignal)
+  r <- waitForProcess p
+  installHandler sigINT  old_int Nothing
+  installHandler sigQUIT old_quit Nothing
+  return r
+#endif  /* mingw32_HOST_OS */
+#endif  /* __GLASGOW_HASKELL__ */
+
+{-|
+The computation @'rawSystem' cmd args@ runs the operating system command
+@cmd@ in such a way that it receives as arguments the @args@ strings
+exactly as given, with no funny escaping or shell meta-syntax expansion.
+It will therefore behave more portably between operating systems than 'system'.
+
+The return codes and possible failures are the same as for 'system'.
+-}
+rawSystem :: String -> [String] -> IO ExitCode
+#ifdef __GLASGOW_HASKELL__
+rawSystem cmd args = syncProcess (proc cmd args)
+
+#elif !mingw32_HOST_OS
+-- crude fallback implementation: could do much better than this under Unix
+rawSystem cmd args = system (unwords (map translate (cmd:args)))
+
+translate :: String -> String
+translate str = '\'' : foldr escape "'" str
+  where	escape '\'' = showString "'\\''"
+	escape c    = showChar c
+#else /* mingw32_HOST_OS &&  ! __GLASGOW_HASKELL__ */
+# if __HUGS__
+rawSystem cmd args = system (unwords (cmd : map translate args))
+# else
+rawSystem cmd args = system (unwords (map translate (cmd:args)))
+#endif
+
+-- copied from System.Process (qv)
+translate :: String -> String
+translate str = '"' : snd (foldr escape (True,"\"") str)
+  where	escape '"'  (b,     str) = (True,  '\\' : '"'  : str)
+	escape '\\' (True,  str) = (True,  '\\' : '\\' : str)
+	escape '\\' (False, str) = (False, '\\' : str)
+	escape c    (b,     str) = (False, c : str)
+#endif
 
 -- ----------------------------------------------------------------------------
 -- terminateProcess
