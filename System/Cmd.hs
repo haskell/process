@@ -22,4 +22,20 @@ module System.Cmd
       rawSystem,     -- :: FilePath -> [String] -> IO ExitCode
     ) where
 
+#ifndef __NHC__
 import System.Process
+#else
+import System
+
+rawSystem :: String -> [String] -> IO ExitCode
+rawSystem cmd args = system (unwords (map translate (cmd:args)))
+
+-- copied from System.Process (qv)
+translate :: String -> String
+translate str = '"' : snd (foldr escape (True,"\"") str)
+  where escape '"'  (b,     str) = (True,  '\\' : '"'  : str)
+        escape '\\' (True,  str) = (True,  '\\' : '\\' : str)
+        escape '\\' (False, str) = (False, '\\' : str)
+        escape c    (b,     str) = (False, c : str)
+
+#endif

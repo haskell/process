@@ -7,7 +7,7 @@
 --
 -- Maintainer  :  libraries@haskell.org
 -- Stability   :  experimental
--- Portability :  portable
+-- Portability :  non-portable (requires concurrency)
 --
 -- Operations for creating and interacting with sub-processes.
 --
