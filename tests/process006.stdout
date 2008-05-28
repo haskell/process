@@ -1,4 +1,4 @@
 "yan\ntan\tether\n"
-(ExitSuccess,"yan\ntan\tether\n")
-(ExitFailure 2,"ls: /does/not/exist: No such file or directory\n")
+(ExitSuccess,"yan\ntan\tether\n","")
+(ExitFailure 2,"","ls: /does/not/exist: No such file or directory\n")
 Left readProcess: ls "/does/not/exist" (exit 2): failed

@@ -340,48 +340,10 @@ readProcess
     -> String                   -- ^ standard input
     -> IO String                -- ^ stdout + stderr
 readProcess cmd args input = do
-   (ex, output) <- readProcessWithExitCode_ cmd args input Inherit
-   case ex of
-     ExitSuccess   -> return output
-     ExitFailure r -> 
-      ioError (mkIOError OtherError ("readProcess: " ++ cmd ++ 
-                                     ' ':unwords (map show args) ++ 
-                                     " (exit " ++ show r ++ ")")
-                                 Nothing Nothing)
-
-{- |
-readProcessWithExitCode creates an external process, reads its
-standard output and standard error strictly, waits until the process
-terminates, and then returns both the 'ExitCode' of the process and
-the combined standard output and standard error in a 'String'.
-
-'readProcess' and 'readProcessWithExitCode' are fairly simple wrappers
-around 'createProcess'.  Constructing variants of these functions is
-quite easy: follow the link to the source code to see how
-'readProcess' is implemented.
--}
-
-readProcessWithExitCode
-    :: FilePath                 -- ^ command to run
-    -> [String]                 -- ^ any arguments
-    -> String                   -- ^ standard input
-    -> IO (ExitCode,String)     -- ^ exitcode, and stdout + stderr
-
-readProcessWithExitCode cmd args input = 
-  readProcessWithExitCode_ cmd args input (UseHandle stdout)
-
-readProcessWithExitCode_
-    :: FilePath
-    -> [String]
-    -> String  
-    -> StdStream
-    -> IO (ExitCode,String)
-readProcessWithExitCode_ cmd args input std_err = do
-
     (Just inh, Just outh, _, pid) <-
         createProcess (proc cmd args){ std_in  = CreatePipe,
                                        std_out = CreatePipe,
-                                       std_err = std_err }
+                                       std_err = Inherit }
 
     -- fork off a thread to start consuming the output
     output  <- hGetContents outh
@@ -399,7 +361,60 @@ readProcessWithExitCode_ cmd args input std_err = do
     -- wait on the process
     ex <- waitForProcess pid
 
-    return (ex, output)
+    case ex of
+     ExitSuccess   -> return output
+     ExitFailure r -> 
+      ioError (mkIOError OtherError ("readProcess: " ++ cmd ++ 
+                                     ' ':unwords (map show args) ++ 
+                                     " (exit " ++ show r ++ ")")
+                                 Nothing Nothing)
+
+{- |
+readProcessWithExitCode creates an external process, reads its
+standard output and standard error strictly, waits until the process
+terminates, and then returns the 'ExitCode' of the process,
+the standard output, and the standard error.
+
+'readProcess' and 'readProcessWithExitCode' are fairly simple wrappers
+around 'createProcess'.  Constructing variants of these functions is
+quite easy: follow the link to the source code to see how
+'readProcess' is implemented.
+-}
+
+readProcessWithExitCode
+    :: FilePath                 -- ^ command to run
+    -> [String]                 -- ^ any arguments
+    -> String                   -- ^ standard input
+    -> IO (ExitCode,String,String) -- ^ exitcode, stdout, stderr
+readProcessWithExitCode cmd args input = do
+    (Just inh, Just outh, Just errh, pid) <-
+        createProcess (proc cmd args){ std_in  = CreatePipe,
+                                       std_out = CreatePipe,
+                                       std_err = CreatePipe }
+
+    outMVar <- newEmptyMVar
+
+    -- fork off a thread to start consuming stdout
+    out  <- hGetContents outh
+    forkIO $ C.evaluate (length out) >> putMVar outMVar ()
+
+    -- fork off a thread to start consuming stderr
+    err  <- hGetContents errh
+    forkIO $ C.evaluate (length err) >> putMVar outMVar ()
+
+    -- now write and flush any input
+    when (not (null input)) $ do hPutStr inh input; hFlush inh
+    hClose inh -- done with stdin
+
+    -- wait on the output
+    takeMVar outMVar
+    takeMVar outMVar
+    hClose outh
+
+    -- wait on the process
+    ex <- waitForProcess pid
+
+    return (ex, out, err)
 
 -- ---------------------------------------------------------------------------
 -- system
