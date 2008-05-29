@@ -387,7 +387,7 @@ runInteractiveProcess (char *cmd, char *workingDirectory, void *environment,
         }
 
 	if (fdStdErr == -1) {
-            if (!mkAnonPipe(&hStdErrorRead,  TRUE, &hStdErrorWrite,  FALSE))
+            if (!mkAnonPipe(&hStdErrorRead,  TRUE, &hStdErrorWrite,  TRUE))
                 goto cleanup_err;
             sInfo.hStdError = hStdErrorWrite;
         } else if (fdStdErr == 2) {
