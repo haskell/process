@@ -10,5 +10,5 @@ main :: IO ()
 main = do 
   print =<< readProcess "cat" [] "yan\ntan\tether\n"
   print =<< readProcessWithExitCode "cat" [] "yan\ntan\tether\n"
-  print =<< readProcessWithExitCode "ls" ["/does/not/exist"] ""
-  print =<< (try $ readProcess "ls" ["/does/not/exist"] "")
+  print =<< readProcessWithExitCode "sh" ["-c", "echo stdout; echo stderr 1>&2; exit 3"] ""
+  print =<< (try $ readProcess "sh" ["-c", "echo stdout; echo stderr 1>&2; exit 3"] "")
