@@ -30,6 +30,7 @@
 -}
 
 module System.Process (
+#ifndef __HUGS__
 	-- * Running sub-processes
         createProcess,
         shell, proc,
@@ -45,17 +46,21 @@ module System.Process (
 	runInteractiveProcess,
         readProcess,
         readProcessWithExitCode,
+#endif
         system,
         rawSystem,
 
+#ifndef __HUGS__
 	-- * Process completion
 	waitForProcess,
 	getProcessExitCode,
 	terminateProcess,
+#endif
  ) where
 
 import Prelude hiding (mapM)
 
+#ifndef __HUGS__
 import System.Process.Internals
 
 import System.IO.Error
@@ -66,6 +71,7 @@ import Foreign
 import Foreign.C
 import System.IO
 import Data.Maybe
+#endif
 import System.Exit	( ExitCode(..) )
 
 #ifdef __GLASGOW_HASKELL__
@@ -85,6 +91,7 @@ import System (system)
 #endif
 
 
+#ifndef __HUGS__
 -- ----------------------------------------------------------------------------
 -- runCommand
 
@@ -415,6 +422,7 @@ readProcessWithExitCode cmd args input = do
     ex <- waitForProcess pid
 
     return (ex, out, err)
+#endif /* !__HUGS__ */
 
 -- ---------------------------------------------------------------------------
 -- system
@@ -503,6 +511,7 @@ translate str = '"' : snd (foldr escape (True,"\"") str)
 	escape c    (b,     str) = (False, c : str)
 #endif
 
+#ifndef __HUGS__
 -- ----------------------------------------------------------------------------
 -- terminateProcess
 
@@ -571,3 +580,4 @@ foreign import ccall safe "waitForProcess" -- NB. safe - can block
   c_waitForProcess
 	:: PHANDLE
 	-> IO CInt
+#endif /* !__HUGS__ */

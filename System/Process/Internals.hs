@@ -20,7 +20,6 @@ module System.Process.Internals (
 	ProcessHandle(..), ProcessHandle__(..), 
 	PHANDLE, closePHANDLE, mkProcessHandle, 
 	withProcessHandle, withProcessHandle_,
-#endif
 #ifdef __GLASGOW_HASKELL__
         CreateProcess(..),
         CmdSpec(..), StdStream(..),
@@ -34,13 +33,17 @@ module System.Process.Internals (
 	translate,
 # endif
 #endif
+#endif
 	withFilePathException, withCEnvironment,
 
+#ifndef __HUGS__
         fdToHandle,
+#endif
   ) where
 
 import Prelude -- necessary to get dependencies right
 
+#ifndef __HUGS__
 #if !defined(mingw32_HOST_OS) && !defined(__MINGW32__)
 import System.Posix.Types ( CPid )
 import System.Posix.Process.Internals ( pPrPr_disableITimers, c_execvpe )
@@ -48,6 +51,7 @@ import System.IO 	( IOMode(..) )
 #else
 import Data.Word ( Word32 )
 import Data.IORef
+#endif
 #endif
 
 import Control.Applicative
