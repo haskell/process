@@ -1,4 +1,4 @@
-{-# OPTIONS_GHC -cpp -fffi #-}
+{-# LANGUAGE CPP, ForeignFunctionInterface #-}
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  System.Process

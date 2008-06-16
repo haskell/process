@@ -1,4 +1,4 @@
-{-# OPTIONS_GHC -cpp -fffi #-}
+{-# LANGUAGE CPP, ForeignFunctionInterface #-}
 {-# OPTIONS_HADDOCK hide #-}
 -----------------------------------------------------------------------------
 -- |
