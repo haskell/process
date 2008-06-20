@@ -306,11 +306,11 @@ waitForProcess ph = do
 	-- (XXX but there's a small race window here during which another
 	-- thread could close the handle or call waitForProcess)
 	code <- throwErrnoIfMinus1 "waitForProcess" (c_waitForProcess h)
-	withProcessHandle ph $ \p_ ->
-	  case p_ of
-	    ClosedHandle e -> return (p_,e)
-	    OpenHandle ph  -> do
-	      closePHANDLE ph
+	withProcessHandle ph $ \p_' ->
+	  case p_' of
+	    ClosedHandle e -> return (p_',e)
+	    OpenHandle ph' -> do
+	      closePHANDLE ph'
 	      let e = if (code == 0)
 	  	   then ExitSuccess
 		   else (ExitFailure (fromIntegral code))
