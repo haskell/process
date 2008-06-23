@@ -61,13 +61,13 @@ import Control.Applicative
 import System.IO 	( Handle )
 import System.Exit	( ExitCode )
 import Control.Concurrent
-import Control.Exception ( handle, throwIO )
+import Control.OldException ( handle, throwIO, Exception(..) )
 import Foreign.C
 import Foreign
 
 # ifdef __GLASGOW_HASKELL__
 import System.Posix.Internals
-import GHC.IOBase	( haFD, FD, Exception(..), IOException(..) )
+import GHC.IOBase	( haFD, FD, IOException(..) )
 import GHC.Handle
 # elif __HUGS__
 import Hugs.Exception	( Exception(..), IOException(..) )
