@@ -1,5 +1,8 @@
 {-# LANGUAGE CPP, ForeignFunctionInterface #-}
 {-# OPTIONS_HADDOCK hide #-}
+{-# OPTIONS_GHC -w #-}
+-- XXX We get some warnings on Windows
+
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  System.Process.Internals
