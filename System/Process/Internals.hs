@@ -44,8 +44,6 @@ module System.Process.Internals (
 #endif
   ) where
 
-import Prelude -- necessary to get dependencies right
-
 #ifndef __HUGS__
 #if !defined(mingw32_HOST_OS) && !defined(__MINGW32__)
 import System.Posix.Types ( CPid )
