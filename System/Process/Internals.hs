@@ -74,7 +74,7 @@ import Hugs.Exception	( Exception(..), IOException(..) )
 #if defined(mingw32_HOST_OS)
 import Control.Monad		( when )
 import System.Directory		( doesFileExist )
-import Control.Exception 	( catchJust, ioErrors )
+import Control.OldException 	( catchJust, ioErrors )
 import System.IO.Error		( isDoesNotExistError, doesNotExistErrorType,
 				  mkIOError )
 import System.Environment	( getEnv )
