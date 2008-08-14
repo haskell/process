@@ -59,7 +59,7 @@ import Control.Applicative
 import System.IO 	( Handle )
 import System.Exit	( ExitCode )
 import Control.Concurrent
-import Control.OldException ( handle, throwIO, Exception(..) )
+import Control.Exception.Base ( catchJust, handle )
 import Foreign.C
 import Foreign
 
@@ -68,13 +68,12 @@ import System.Posix.Internals
 import GHC.IOBase	( haFD, FD, IOException(..) )
 import GHC.Handle
 # elif __HUGS__
-import Hugs.Exception	( Exception(..), IOException(..) )
+import Hugs.Exception	( IOException(..) )
 # endif
 
 #if defined(mingw32_HOST_OS)
 import Control.Monad		( when )
 import System.Directory		( doesFileExist )
-import Control.OldException 	( catchJust, ioErrors )
 import System.IO.Error		( isDoesNotExistError, doesNotExistErrorType,
 				  mkIOError )
 import System.Environment	( getEnv )
@@ -453,8 +452,8 @@ commandToProcess (RawCommand cmd args) = do
 findCommandInterpreter :: IO FilePath
 findCommandInterpreter = do
   -- try COMSPEC first
-  catchJust ioErrors (getEnv "COMSPEC") $ \e -> do
-    when (not (isDoesNotExistError e)) $ ioError e
+  catchJust (\e -> if isDoesNotExistError e then Just e else Nothing)
+            (getEnv "COMSPEC") $ \e -> do
 
     -- try to find CMD.EXE or COMMAND.COM
     {-
@@ -496,8 +495,7 @@ findCommandInterpreter = do
 withFilePathException :: FilePath -> IO a -> IO a
 withFilePathException fpath act = handle mapEx act
   where
-    mapEx (IOException (IOError h iot fun str _)) = ioError (IOError h iot fun str (Just fpath))
-    mapEx e                                       = throwIO e
+    mapEx (IOError h iot fun str _) = ioError (IOError h iot fun str (Just fpath))
 
 #if !defined(mingw32_HOST_OS) && !defined(__MINGW32__)
 withCEnvironment :: [(String,String)] -> (Ptr CString  -> IO a) -> IO a
