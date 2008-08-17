@@ -55,7 +55,6 @@ import Data.IORef
 #endif
 #endif
 
-import Control.Applicative
 import System.IO 	( Handle )
 import System.Exit	( ExitCode )
 import Control.Concurrent
@@ -396,7 +395,7 @@ mbFd fun _std (UseHandle hdl) = withHandle_ fun hdl $ return . haFD
 mbFd _   _std CreatePipe      = return (-1)
 
 mbPipe :: StdStream -> Ptr FD -> IOMode -> IO (Maybe Handle)
-mbPipe CreatePipe pfd  mode = Just <$> pfdToHandle pfd mode
+mbPipe CreatePipe pfd  mode = fmap Just (pfdToHandle pfd mode)
 mbPipe _std      _pfd _mode = return Nothing
 
 pfdToHandle :: Ptr FD -> IOMode -> IO Handle
