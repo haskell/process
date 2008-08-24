@@ -4,6 +4,7 @@ license:      BSD3
 license-file: LICENSE
 maintainer:   libraries@haskell.org
 synopsis:     Process libraries
+category:     System
 description:
     This package contains libraries for dealing with system processes.
 extra-source-files:
