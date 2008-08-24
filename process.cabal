@@ -6,6 +6,10 @@ maintainer:   libraries@haskell.org
 synopsis:     Process libraries
 description:
     This package contains libraries for dealing with system processes.
+extra-source-files:
+    config.guess config.sub install-sh
+    configure.ac configure
+    include/HsProcessConfig.h.in
 extra-tmp-files:
     config.log config.status autom4te.cache
     include/HsProcessConfig.h
