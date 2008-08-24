@@ -33,6 +33,6 @@ Library {
     if !os(windows)
         build-depends: unix
   }
-  build-depends: base, directory, filepath
+  build-depends: base, directory, filepath, concurrent
   extensions: CPP
 }
