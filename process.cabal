@@ -37,7 +37,8 @@ Library {
         HsProcessConfig.h
     if !os(windows)
         build-depends: unix
+    build-depends: concurrent
   }
-  build-depends: base, directory, filepath, concurrent
+  build-depends: base, directory, filepath
   extensions: CPP
 }
