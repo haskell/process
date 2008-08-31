@@ -23,10 +23,10 @@ Library {
   } else {
     exposed-modules:
         System.Cmd
-        System.Process.Internals
+        System.Process
     if impl(ghc)
         exposed-modules:
-          System.Process
+          System.Process.Internals
     c-sources:
         cbits/runProcess.c
     include-dirs: include
