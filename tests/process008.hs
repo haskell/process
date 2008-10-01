@@ -2,6 +2,6 @@
 import System.IO
 import System.Cmd
 
-test = rawSystem "echo" ["testing"]
+test = rawSystem "printf" ["testing\n"]
 
 main = test >> test >> return ()
