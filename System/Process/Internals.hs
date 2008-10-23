@@ -58,7 +58,7 @@ import Data.IORef
 import System.IO 	( Handle )
 import System.Exit	( ExitCode )
 import Control.Concurrent
-import Control.Exception.Base ( catchJust, handle )
+import Control.Exception
 import Foreign.C
 import Foreign
 
@@ -494,7 +494,11 @@ findCommandInterpreter = do
 withFilePathException :: FilePath -> IO a -> IO a
 withFilePathException fpath act = handle mapEx act
   where
+#ifdef base_4
     mapEx (IOError h iot fun str _) = ioError (IOError h iot fun str (Just fpath))
+#else
+    mapEx (IOException (IOError h iot fun str _)) = ioError (IOError h iot fun str (Just fpath))
+#endif
 
 #if !defined(mingw32_HOST_OS) && !defined(__MINGW32__)
 withCEnvironment :: [(String,String)] -> (Ptr CString  -> IO a) -> IO a

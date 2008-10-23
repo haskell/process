@@ -1,5 +1,5 @@
 name:         process
-version:      1.0.1.0
+version:      1.0.1.1
 license:      BSD3
 license-file: LICENSE
 maintainer:   libraries@haskell.org
@@ -16,6 +16,8 @@ extra-tmp-files:
     include/HsProcessConfig.h
 build-type:    Configure
 cabal-version: >=1.2
+
+flag base4
 
 Library {
   if impl(nhc98) {
@@ -38,6 +40,19 @@ Library {
     if !os(windows)
         build-depends: unix
   }
-  build-depends: base, directory, filepath
+
+  if (flag(base4)) {
+     build-depends: base >= 4 && < 3
+     ghc-options: -Dbase4
+     -- later, we can use the new MIN_VERSION_base() stuff that
+     -- arrived in Cabal-1.6.
+  } else {
+     build-depends: base >= 3 && < 4
+     ghc-options: -Dbase3
+  }
+
+  build-depends: directory >= 1.0 && < 1.1,
+                 filepath  >= 1.1 && < 1.2
+
   extensions: CPP
 }
