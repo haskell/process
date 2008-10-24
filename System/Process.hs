@@ -523,6 +523,13 @@ translate str = '"' : snd (foldr escape (True,"\"") str)
 -- On Unix systems, 'terminateProcess' sends the process the SIGKILL signal.
 -- On Windows systems, the Win32 @TerminateProcess@ function is called, passing
 -- an exit code of 1.
+--
+-- Note: on Windows, if the process was a shell command created by
+-- 'createProcess' with 'shell', or created by 'runCommand' or
+-- 'runInteractiveCommand', then 'terminateProcess' will only
+-- terminate the shell, not the command itself.  On Unix systems, both
+-- processes are in a process group and will be terminated together.
+
 terminateProcess :: ProcessHandle -> IO ()
 terminateProcess ph = do
   withProcessHandle_ ph $ \p_ ->
