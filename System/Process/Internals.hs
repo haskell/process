@@ -451,7 +451,13 @@ commandToProcess (RawCommand cmd args) = do
 findCommandInterpreter :: IO FilePath
 findCommandInterpreter = do
   -- try COMSPEC first
+#ifdef base3
+  catchJust (\e -> case e of 
+                     IOException e | isDoesNotExistError e -> Just e
+                     _otherwise -> Nothing)
+#else
   catchJust (\e -> if isDoesNotExistError e then Just e else Nothing)
+#endif
             (getEnv "COMSPEC") $ \e -> do
 
     -- try to find CMD.EXE or COMMAND.COM
@@ -494,7 +500,7 @@ findCommandInterpreter = do
 withFilePathException :: FilePath -> IO a -> IO a
 withFilePathException fpath act = handle mapEx act
   where
-#ifdef base_4
+#ifdef base4
     mapEx (IOError h iot fun str _) = ioError (IOError h iot fun str (Just fpath))
 #else
     mapEx (IOException (IOError h iot fun str _)) = ioError (IOError h iot fun str (Just fpath))

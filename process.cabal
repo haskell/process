@@ -42,7 +42,7 @@ Library {
   }
 
   if (flag(base4)) {
-     build-depends: base >= 4 && < 3
+     build-depends: base >= 4 && < 5
      ghc-options: -Dbase4
      -- later, we can use the new MIN_VERSION_base() stuff that
      -- arrived in Cabal-1.6.
