@@ -20,11 +20,9 @@ cabal-version: >=1.2
 flag base4
 
 Library {
-  if impl(nhc98) {
-    exposed-modules: System.Cmd
-  } else {
+  exposed-modules: System.Cmd
+  if !impl(nhc98) {
     exposed-modules:
-        System.Cmd
         System.Process
     if impl(ghc)
         exposed-modules:
@@ -43,12 +41,12 @@ Library {
 
   if (flag(base4)) {
      build-depends: base >= 4 && < 5
-     ghc-options: -Dbase4
+     cpp-options: -Dbase4
      -- later, we can use the new MIN_VERSION_base() stuff that
      -- arrived in Cabal-1.6.
   } else {
      build-depends: base >= 3 && < 4
-     ghc-options: -Dbase3
+     cpp-options: -Dbase3
   }
 
   build-depends: directory >= 1.0 && < 1.1,
