@@ -8,7 +8,6 @@ category:     System
 description:
     This package contains libraries for dealing with system processes.
 extra-source-files:
-    config.guess config.sub install-sh
     configure.ac configure
     include/HsProcessConfig.h.in
 extra-tmp-files:
