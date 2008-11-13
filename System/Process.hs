@@ -221,7 +221,7 @@ createProcess
   :: CreateProcess
   -> IO (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)
 createProcess cp = do
-  r <- runGenProcess_ "runGenProcess" cp Nothing Nothing
+  r <- runGenProcess_ "createProcess" cp Nothing Nothing
   maybeCloseStd (std_in  cp)
   maybeCloseStd (std_out cp)
   maybeCloseStd (std_err cp)
@@ -449,11 +449,11 @@ will not work.
 #ifdef __GLASGOW_HASKELL__
 system :: String -> IO ExitCode
 system "" = ioException (IOError Nothing InvalidArgument "system" "null command" Nothing)
-system str = syncProcess (shell str)
+system str = syncProcess "system" (shell str)
 
 
-syncProcess :: CreateProcess -> IO ExitCode
-syncProcess c = do
+syncProcess :: String -> CreateProcess -> IO ExitCode
+syncProcess fun c = do
 #if mingw32_HOST_OS
   (_,_,_,p) <- createProcess c
   waitForProcess p
@@ -466,7 +466,7 @@ syncProcess c = do
   -- its own handler and we don't want to use that).
   old_int  <- installHandler sigINT  Ignore Nothing
   old_quit <- installHandler sigQUIT Ignore Nothing
-  (_,_,_,p) <- runGenProcess_ "runCommand" c
+  (_,_,_,p) <- runGenProcess_ fun c
 		(Just defaultSignal) (Just defaultSignal)
   r <- waitForProcess p
   installHandler sigINT  old_int Nothing
@@ -485,7 +485,7 @@ The return codes and possible failures are the same as for 'system'.
 -}
 rawSystem :: String -> [String] -> IO ExitCode
 #ifdef __GLASGOW_HASKELL__
-rawSystem cmd args = syncProcess (proc cmd args)
+rawSystem cmd args = syncProcess "rawSystem" (proc cmd args)
 
 #elif !mingw32_HOST_OS
 -- crude fallback implementation: could do much better than this under Unix
