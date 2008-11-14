@@ -453,11 +453,12 @@ system str = syncProcess "system" (shell str)
 
 
 syncProcess :: String -> CreateProcess -> IO ExitCode
-syncProcess fun c = do
 #if mingw32_HOST_OS
+syncProcess _fun c = do
   (_,_,_,p) <- createProcess c
   waitForProcess p
 #else
+syncProcess fun c = do
   -- The POSIX version of system needs to do some manipulation of signal
   -- handlers.  Since we're going to be synchronously waiting for the child,
   -- we want to ignore ^C in the parent, but handle it the default way
