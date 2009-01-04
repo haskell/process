@@ -70,6 +70,9 @@ import GHC.Handle
 import Hugs.Exception	( IOException(..) )
 # endif
 
+#ifdef base4
+import System.IO.Error		( ioeSetFileName )
+#endif
 #if defined(mingw32_HOST_OS)
 import Control.Monad		( when )
 import System.Directory		( doesFileExist )
@@ -501,7 +504,7 @@ withFilePathException :: FilePath -> IO a -> IO a
 withFilePathException fpath act = handle mapEx act
   where
 #ifdef base4
-    mapEx (IOError h iot fun str _) = ioError (IOError h iot fun str (Just fpath))
+    mapEx ex = ioError (ioeSetFileName ex fpath)
 #else
     mapEx (IOException (IOError h iot fun str _)) = ioError (IOError h iot fun str (Just fpath))
 #endif

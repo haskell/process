@@ -75,7 +75,7 @@ import Data.Maybe
 import System.Exit	( ExitCode(..) )
 
 #ifdef __GLASGOW_HASKELL__
-import GHC.IOBase	( ioException, IOException(..), IOErrorType(..) )
+import GHC.IOBase	( ioException, IOErrorType(..) )
 #if !defined(mingw32_HOST_OS)
 import System.Process.Internals
 import System.Posix.Signals
@@ -448,7 +448,7 @@ will not work.
 -}
 #ifdef __GLASGOW_HASKELL__
 system :: String -> IO ExitCode
-system "" = ioException (IOError Nothing InvalidArgument "system" "null command" Nothing)
+system "" = ioException (ioeSetErrorString (mkIOError InvalidArgument "system" Nothing Nothing) "null command")
 system str = syncProcess "system" (shell str)
 
 
