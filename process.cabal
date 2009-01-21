@@ -3,6 +3,7 @@ version:      1.0.1.1
 license:      BSD3
 license-file: LICENSE
 maintainer:   libraries@haskell.org
+bug-reports: http://hackage.haskell.org/trac/ghc/newticket?component=libraries/process
 synopsis:     Process libraries
 category:     System
 description:
@@ -15,6 +16,10 @@ extra-tmp-files:
     include/HsProcessConfig.h
 build-type:    Configure
 cabal-version: >=1.2
+
+source-repository head
+    type:     darcs
+    location: http://darcs.haskell.org/packages/process/
 
 flag base4
 
