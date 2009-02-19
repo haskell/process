@@ -30,6 +30,10 @@ disableItimers()
 
 static long max_fd = 0;
 
+// Rts internal API, not exposed in a public header file:
+extern void blockUserSignals(void);
+extern void unblockUserSignals(void);
+
 ProcHandle
 runInteractiveProcess (char *const args[], 
 		       char *workingDirectory, char **environment,
@@ -53,6 +57,13 @@ runInteractiveProcess (char *const args[],
         pipe(fdStdError);
     }
 
+    // Block signals with Haskell handlers.  The danger here is that
+    // with the threaded RTS, a signal arrives in the child process,
+    // the RTS writes the signal information into the pipe (which is
+    // shared between parent and child), and the parent behaves as if
+    // the signal had been raised.
+    blockUserSignals();
+
     switch(pid = fork())
     {
     case -1:
@@ -73,6 +84,8 @@ runInteractiveProcess (char *const args[],
     case 0:
     {
         disableItimers();
+        setIOManagerPipe(-1);
+        unblockUserSignals();
 	
 	if (workingDirectory) {
 	    if (chdir (workingDirectory) < 0) {
@@ -171,6 +184,7 @@ runInteractiveProcess (char *const args[],
         }
 	break;
     }
+    unblockUserSignals();
     
     return pid;
 }
