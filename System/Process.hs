@@ -521,7 +521,7 @@ translate str = '"' : snd (foldr escape (True,"\"") str)
 -- how cleanly the process is terminated.  To check whether the process
 -- has indeed terminated, use 'getProcessExitCode'.
 --
--- On Unix systems, 'terminateProcess' sends the process the SIGKILL signal.
+-- On Unix systems, 'terminateProcess' sends the process the SIGTERM signal.
 -- On Windows systems, the Win32 @TerminateProcess@ function is called, passing
 -- an exit code of 1.
 --
