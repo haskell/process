@@ -67,6 +67,7 @@ runInteractiveProcess (char *const args[],
     switch(pid = fork())
     {
     case -1:
+        unblockUserSignals();
         if (fdStdIn == -1) {
             close(fdStdInput[0]);
             close(fdStdInput[1]);
@@ -83,10 +84,9 @@ runInteractiveProcess (char *const args[],
 	
     case 0:
     {
-        disableItimers();
-        setIOManagerPipe(-1);
-        unblockUserSignals();
-	
+        // WARNING!  we are now in the child of vfork(), so any memory
+        // we modify below will also be seen in the parent process.
+
 	if (workingDirectory) {
 	    if (chdir (workingDirectory) < 0) {
                 // See #1593.  The convention for the exit code when
