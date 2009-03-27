@@ -45,16 +45,30 @@ runInteractiveProcess (char *const args[],
 {
     int pid;
     int fdStdInput[2], fdStdOutput[2], fdStdError[2];
+    int r;
     struct sigaction dfl;
 
     if (fdStdIn == -1) {
-        pipe(fdStdInput);
+        r = pipe(fdStdInput);
+        if (r == -1) { 
+            sysErrorBelch("runInteractiveProcess: pipe");
+            return -1;
+        }
+        
     }
     if (fdStdOut == -1) {
-        pipe(fdStdOutput);
+        r = pipe(fdStdOutput);
+        if (r == -1) { 
+            sysErrorBelch("runInteractiveProcess: pipe");
+            return -1;
+        }
     }
     if (fdStdErr == -1) {
-        pipe(fdStdError);
+        r = pipe(fdStdError);
+        if (r == -1) { 
+            sysErrorBelch("runInteractiveProcess: pipe");
+            return -1;
+        }
     }
 
     // Block signals with Haskell handlers.  The danger here is that
