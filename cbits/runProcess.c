@@ -87,6 +87,8 @@ runInteractiveProcess (char *const args[],
         // WARNING!  we are now in the child of vfork(), so any memory
         // we modify below will also be seen in the parent process.
 
+        disableItimers();
+
 	if (workingDirectory) {
 	    if (chdir (workingDirectory) < 0) {
                 // See #1593.  The convention for the exit code when
