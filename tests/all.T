@@ -16,3 +16,4 @@ test('process006', normal, compile_and_run, [''])
 
 test('process007', [extra_clean(['process007.tmp']), reqlib('unix')], compile_and_run, [''])
 test('process008', normal, compile_and_run, [''])
+test('3231', only_ways(['normal','threaded1','threaded2']), compile_and_run, [''])
