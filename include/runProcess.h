@@ -64,7 +64,8 @@ extern ProcHandle runInteractiveProcess( char *cmd,
                                          int fdStdIn, int fdStdOut, int fdStdErr,
 					 int *pfdStdInput,
 					 int *pfdStdOutput,
-					 int *pfdStdError);
+					 int *pfdStdError,
+                                         int close_fds);
 
 #endif
 

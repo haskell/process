@@ -345,7 +345,8 @@ mkAnonPipe (HANDLE* pHandleIn, BOOL isInheritableIn,
 ProcHandle
 runInteractiveProcess (char *cmd, char *workingDirectory, void *environment,
                        int fdStdIn, int fdStdOut, int fdStdErr,
-		       int *pfdStdInput, int *pfdStdOutput, int *pfdStdError)
+		       int *pfdStdInput, int *pfdStdOutput, int *pfdStdError,
+                       int close_fds)
 {
 	STARTUPINFO sInfo;
 	PROCESS_INFORMATION pInfo;
@@ -357,6 +358,7 @@ runInteractiveProcess (char *cmd, char *workingDirectory, void *environment,
         HANDLE hStdErrorWrite  = INVALID_HANDLE_VALUE;
 	DWORD flags;
 	BOOL status;
+        BOOL inherit;
 
 	ZeroMemory(&sInfo, sizeof(sInfo));
 	sInfo.cb = sizeof(sInfo);
@@ -429,7 +431,14 @@ runInteractiveProcess (char *cmd, char *workingDirectory, void *environment,
 	else
 		flags = 0;
 
-	if (!CreateProcess(NULL, cmd, NULL, NULL, TRUE, flags, environment, workingDirectory, &sInfo, &pInfo))
+        // See #3231
+        if (close_fds && fdStdIn == 0 && fdStdOut == 1 && fdStdErr == 2) {
+            inherit = FALSE;
+        } else {
+            inherit = TRUE;
+        }
+
+	if (!CreateProcess(NULL, cmd, NULL, NULL, inherit, flags, environment, workingDirectory, &sInfo, &pInfo))
 	{
                 goto cleanup_err;
 	}
