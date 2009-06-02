@@ -289,7 +289,18 @@ runGenProcess_ fun CreateProcess{ cmdspec = cmdsp,
      fdout <- mbFd fun fd_stdout mb_stdout
      fderr <- mbFd fun fd_stderr mb_stderr
 
-     proc_handle <- throwErrnoIfMinus1 fun $
+     -- #2650: we must ensure mutual exclusion of c_runInteractiveProcess,
+     -- because otherwise there is a race condition whereby one thread
+     -- has created some pipes, and another thread spawns a process which
+     -- accidentally inherits some of the pipe handles that the first
+     -- thread has created.
+     -- 
+     -- An MVar in Haskell is the best way to do this, because there
+     -- is no way to do one-time thread-safe initialisation of a mutex
+     -- the C code.  Also the MVar will be cheaper when not running
+     -- the threaded RTS.
+     proc_handle <- withMVar runInteractiveProcess_lock $ \_ ->
+                    throwErrnoIfMinus1 fun $
 	                 c_runInteractiveProcess pcmdline pWorkDir pEnv 
                                 fdin fdout fderr
 				pfdStdInput pfdStdOutput pfdStdError
@@ -302,6 +313,9 @@ runGenProcess_ fun CreateProcess{ cmdspec = cmdsp,
      ph <- mkProcessHandle proc_handle
      return (hndStdInput, hndStdOutput, hndStdError, ph)
 
+{-# NOINLINE runInteractiveProcess_lock #-}
+runInteractiveProcess_lock :: MVar ()
+runInteractiveProcess_lock = unsafePerformIO $ newMVar ()
 
 foreign import ccall unsafe "runInteractiveProcess" 
   c_runInteractiveProcess
