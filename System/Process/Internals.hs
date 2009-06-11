@@ -63,11 +63,31 @@ import Foreign.C
 import Foreign
 
 # ifdef __GLASGOW_HASKELL__
+
 import System.Posix.Internals
+#if __GLASGOW_HASKELL__ >= 611
+import GHC.IO.Exception
+import GHC.IO.Encoding
+import qualified GHC.IO.FD as FD
+import GHC.IO.Device
+import GHC.IO.Handle
+import GHC.IO.Handle.FD
+import GHC.IO.Handle.Internals
+import GHC.IO.Handle.Types
+import System.IO.Error
+import Data.Typeable
+#if defined(mingw32_HOST_OS)
+import GHC.IO.IOMode
+#endif
+#else
 import GHC.IOBase	( haFD, FD, IOException(..) )
 import GHC.Handle
+#endif
+
 # elif __HUGS__
+
 import Hugs.Exception	( IOException(..) )
+
 # endif
 
 #ifdef base4
@@ -409,9 +429,20 @@ fd_stdout = 1
 fd_stderr = 2
 
 mbFd :: String -> FD -> StdStream -> IO FD
-mbFd _fun std Inherit         = return std
-mbFd fun _std (UseHandle hdl) = withHandle_ fun hdl $ return . haFD
 mbFd _   _std CreatePipe      = return (-1)
+mbFd _fun std Inherit         = return std
+mbFd fun _std (UseHandle hdl) = 
+#if __GLASGOW_HASKELL__ < 611
+  withHandle_ fun hdl $ return . haFD
+#else
+  withHandle_ fun hdl $ \Handle__{haDevice=dev} ->
+    case cast dev of
+      Just fd -> return (FD.fdFD fd)
+      Nothing -> 
+          ioError (mkIOError illegalOperationErrorType
+		      "createProcess" (Just hdl) Nothing
+                   `ioeSetErrorString` "handle is not a file descriptor")
+#endif
 
 mbPipe :: StdStream -> Ptr FD -> IOMode -> IO (Maybe Handle)
 mbPipe CreatePipe pfd  mode = fmap Just (pfdToHandle pfd mode)
@@ -420,9 +451,19 @@ mbPipe _std      _pfd _mode = return Nothing
 pfdToHandle :: Ptr FD -> IOMode -> IO Handle
 pfdToHandle pfd mode = do
   fd <- peek pfd
+  let filepath = "fd:" ++ show fd
+#if __GLASGOW_HASKELL__ >= 611
+  (fD,fd_type) <- FD.mkFD (fromIntegral fd) mode 
+                       (Just (Stream,0,0)) -- avoid calling fstat()
+                       False {-is_socket-}
+                       False {-non-blocking-}
+  mkHandleFromFD fD fd_type filepath mode False{-is_socket-}
+                       (Just localeEncoding)
+#else
   fdToHandle' fd (Just Stream)
      False{-Windows: not a socket,  Unix: don't set non-blocking-}
-     ("fd:" ++ show fd) mode True{-binary-}
+     filepath mode True{-binary-}
+#endif
 
 #ifndef __HUGS__
 -- ----------------------------------------------------------------------------

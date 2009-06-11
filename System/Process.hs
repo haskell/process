@@ -75,7 +75,11 @@ import Data.Maybe
 import System.Exit	( ExitCode(..) )
 
 #ifdef __GLASGOW_HASKELL__
+#if __GLASGOW_HASKELL__ >= 611
+import GHC.IO.Exception	( ioException, IOErrorType(..) )
+#else
 import GHC.IOBase	( ioException, IOErrorType(..) )
+#endif
 #if !defined(mingw32_HOST_OS)
 import System.Process.Internals
 import System.Posix.Signals
