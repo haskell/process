@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP, ForeignFunctionInterface #-}
+{-# LANGUAGE CPP, ForeignFunctionInterface, RecordWildCards #-}
 {-# OPTIONS_HADDOCK hide #-}
 {-# OPTIONS_GHC -w #-}
 -- XXX We get some warnings on Windows
@@ -435,10 +435,14 @@ mbFd fun _std (UseHandle hdl) =
 #if __GLASGOW_HASKELL__ < 611
   withHandle_ fun hdl $ return . haFD
 #else
-  withHandle_ fun hdl $ \Handle__{haDevice=dev} ->
+  withHandle fun hdl $ \h@Handle__{haDevice=dev,..} ->
     case cast dev of
-      Just fd -> return (FD.fdFD fd)
-      Nothing -> 
+      Just fd -> do
+         -- clear the O_NONBLOCK flag on this FD, if it is set, since
+         -- we're exposing it externally (see #3316)
+         fd <- FD.setNonBlockingMode fd False
+         return (Handle__{haDevice=fd,..}, FD.fdFD fd)
+      Nothing ->
           ioError (mkIOError illegalOperationErrorType
 		      "createProcess" (Just hdl) Nothing
                    `ioeSetErrorString` "handle is not a file descriptor")
@@ -457,6 +461,7 @@ pfdToHandle pfd mode = do
                        (Just (Stream,0,0)) -- avoid calling fstat()
                        False {-is_socket-}
                        False {-non-blocking-}
+  fD <- FD.setNonBlockingMode fD True -- see #3316
   mkHandleFromFD fD fd_type filepath mode False{-is_socket-}
                        (Just localeEncoding)
 #else
