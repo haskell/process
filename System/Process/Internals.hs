@@ -245,7 +245,12 @@ runGenProcess_ fun CreateProcess{ cmdspec = cmdsp,
 			Nothing   -> (0, 0)
 			Just hand -> (1, hand)
 
-     proc_handle <- throwErrnoIfMinus1 fun $
+     -- runInteractiveProcess() blocks signals around the fork().
+     -- Since blocking/unblocking of signals is a global state
+     -- operation, we better ensure mutual exclusion of calls to
+     -- runInteractiveProcess().
+     proc_handle <- withMVar runInteractiveProcess_lock $ \_ ->
+                    throwErrnoIfMinus1 fun $
 	                 c_runInteractiveProcess pargs pWorkDir pEnv 
                                 fdin fdout fderr
 				pfdStdInput pfdStdOutput pfdStdError
@@ -258,6 +263,10 @@ runGenProcess_ fun CreateProcess{ cmdspec = cmdsp,
 
      ph <- mkProcessHandle proc_handle
      return (hndStdInput, hndStdOutput, hndStdError, ph)
+
+{-# NOINLINE runInteractiveProcess_lock #-}
+runInteractiveProcess_lock :: MVar ()
+runInteractiveProcess_lock = unsafePerformIO $ newMVar ()
 
 foreign import ccall unsafe "runInteractiveProcess" 
   c_runInteractiveProcess
