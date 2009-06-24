@@ -102,6 +102,7 @@ runInteractiveProcess (char *const args[],
         // we modify below will also be seen in the parent process.
 
         disableItimers();
+        unblockUserSignals();
 
 	if (workingDirectory) {
 	    if (chdir (workingDirectory) < 0) {
