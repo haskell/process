@@ -16,4 +16,7 @@ test('process006', normal, compile_and_run, [''])
 
 test('process007', [extra_clean(['process007.tmp']), reqlib('unix')], compile_and_run, [''])
 test('process008', normal, compile_and_run, [''])
-test('3231', only_ways(['normal','threaded1','threaded2']), compile_and_run, [''])
+
+# not the normal way: this test runs processes from multiple threads, and
+# will get stuck without the threaded RTS.
+test('3231', only_ways(['threaded1','threaded2']), compile_and_run, [''])
