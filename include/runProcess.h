@@ -13,6 +13,7 @@
 #undef PACKAGE_VERSION
 
 #if defined(_MSC_VER) || defined(__MINGW32__) || defined(_WIN32)
+#define UNICODE
 #include <windows.h>
 #include <stdlib.h>
 #endif
@@ -58,8 +59,8 @@ extern ProcHandle runInteractiveProcess( char *const args[],
 
 #else
 
-extern ProcHandle runInteractiveProcess( char *cmd, 
-					 char *workingDirectory, 
+extern ProcHandle runInteractiveProcess( wchar_t *cmd,
+					 wchar_t *workingDirectory,
 					 void *environment,
                                          int fdStdIn, int fdStdOut, int fdStdErr,
 					 int *pfdStdInput,

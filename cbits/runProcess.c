@@ -4,6 +4,10 @@
    Support for System.Process
    ------------------------------------------------------------------------- */
 
+#if defined(_MSC_VER) || defined(__MINGW32__) || defined(_WIN32)
+#define UNICODE
+#endif
+
 /* XXX This is a nasty hack; should put everything necessary in this package */
 #include "HsBase.h"
 #include "Rts.h"
@@ -340,7 +344,8 @@ mkAnonPipe (HANDLE* pHandleIn, BOOL isInheritableIn,
 }
 
 ProcHandle
-runInteractiveProcess (char *cmd, char *workingDirectory, void *environment,
+runInteractiveProcess (wchar_t *cmd, wchar_t *workingDirectory, 
+                       void *environment,
                        int fdStdIn, int fdStdOut, int fdStdErr,
 		       int *pfdStdInput, int *pfdStdOutput, int *pfdStdError,
                        int close_fds)

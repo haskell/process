@@ -311,8 +311,8 @@ runGenProcess_ fun CreateProcess{ cmdspec = cmdsp,
    alloca $ \ pfdStdOutput ->
    alloca $ \ pfdStdError  ->
    maybeWith withCEnvironment mb_env $ \pEnv ->
-   maybeWith withCString mb_cwd $ \pWorkDir -> do
-   withCString cmdline $ \pcmdline -> do
+   maybeWith withCWString mb_cwd $ \pWorkDir -> do
+   withCWString cmdline $ \pcmdline -> do
      
      fdin  <- mbFd fun fd_stdin  mb_stdin
      fdout <- mbFd fun fd_stdout mb_stdout
@@ -348,8 +348,8 @@ runInteractiveProcess_lock = unsafePerformIO $ newMVar ()
 
 foreign import ccall unsafe "runInteractiveProcess" 
   c_runInteractiveProcess
-        :: CString
-        -> CString
+        :: CWString
+        -> CWString
         -> Ptr ()
         -> FD
         -> FD
