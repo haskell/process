@@ -81,7 +81,6 @@ import GHC.IO.Exception	( ioException, IOErrorType(..) )
 import GHC.IOBase	( ioException, IOErrorType(..) )
 #endif
 #if !defined(mingw32_HOST_OS)
-import System.Process.Internals
 import System.Posix.Signals
 #endif
 #endif
