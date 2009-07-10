@@ -358,7 +358,7 @@ readProcess cmd args input = do
     -- fork off a thread to start consuming the output
     output  <- hGetContents outh
     outMVar <- newEmptyMVar
-    forkIO $ C.evaluate (length output) >> putMVar outMVar ()
+    _ <- forkIO $ C.evaluate (length output) >> putMVar outMVar ()
 
     -- now write and flush any input
     when (not (null input)) $ do hPutStr inh input; hFlush inh
@@ -406,11 +406,11 @@ readProcessWithExitCode cmd args input = do
 
     -- fork off a thread to start consuming stdout
     out  <- hGetContents outh
-    forkIO $ C.evaluate (length out) >> putMVar outMVar ()
+    _ <- forkIO $ C.evaluate (length out) >> putMVar outMVar ()
 
     -- fork off a thread to start consuming stderr
     err  <- hGetContents errh
-    forkIO $ C.evaluate (length err) >> putMVar outMVar ()
+    _ <- forkIO $ C.evaluate (length err) >> putMVar outMVar ()
 
     -- now write and flush any input
     when (not (null input)) $ do hPutStr inh input; hFlush inh
@@ -473,8 +473,8 @@ syncProcess fun c = do
   (_,_,_,p) <- runGenProcess_ fun c
 		(Just defaultSignal) (Just defaultSignal)
   r <- waitForProcess p
-  installHandler sigINT  old_int Nothing
-  installHandler sigQUIT old_quit Nothing
+  _ <- installHandler sigINT  old_int Nothing
+  _ <- installHandler sigQUIT old_quit Nothing
   return r
 #endif  /* mingw32_HOST_OS */
 #endif  /* __GLASGOW_HASKELL__ */
