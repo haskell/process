@@ -1,7 +1,5 @@
-test('process001', normal, compile_and_run, [''])
-clean(['output'])
-test('process002', normal, compile_and_run, [''])
-clean(['output'])
+test('process001', extra_clean(['process001.out']), compile_and_run, [''])
+test('process002', extra_clean(['process002.out']), compile_and_run, [''])
 test('process003', omit_ways(['ghci']), compile_and_run, [''])
 
 if config.platform == "i386-unknown-mingw32":

@@ -9,7 +9,7 @@ cmd = "/bin/ls"
 #endif
 
 test = do
-  h <- openFile "output" WriteMode
+  h <- openFile "process001.out" WriteMode
   ph <- runProcess cmd [] Nothing Nothing Nothing (Just h) Nothing
   waitForProcess ph
 
