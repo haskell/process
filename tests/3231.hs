@@ -15,7 +15,7 @@ main = do
 f file = do
     h <- openFile file WriteMode
     hPutStrLn h "fjkladsf"
-    system "sleep 1s"
+    system "sleep 1"
     -- putChar '.'
     hClose h
     removeFile file
