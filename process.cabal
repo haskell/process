@@ -9,7 +9,7 @@ category:     System
 description:
     This package contains libraries for dealing with system processes.
 extra-source-files:
-    configure.ac configure
+    aclocal.m4 configure.ac configure
     include/HsProcessConfig.h.in
 extra-tmp-files:
     config.log config.status autom4te.cache
