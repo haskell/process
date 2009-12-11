@@ -52,6 +52,7 @@ runInteractiveProcess (char *const args[],
     int r;
     struct sigaction dfl;
 
+    // Ordering matters here, see below [Note #431].
     if (fdStdIn == -1) {
         r = pipe(fdStdInput);
         if (r == -1) { 
@@ -118,6 +119,12 @@ runInteractiveProcess (char *const args[],
 	    }
 	}
 	
+        // [Note #431]: Ordering matters here.  If any of the FDs
+        // 0,1,2 were initially closed, then our pipes may have used
+        // these FDs.  So when we dup2 the pipe FDs down to 0,1,2, we
+        // must do it in that order, otherwise we could overwrite an
+        // FD that we need later.
+
         if (fdStdIn == -1) {
             if (fdStdInput[0] != STDIN_FILENO) {
                 dup2 (fdStdInput[0], STDIN_FILENO);
