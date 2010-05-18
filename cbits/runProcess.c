@@ -22,16 +22,6 @@
    UNIX versions
    ------------------------------------------------------------------------- */
 
-static void
-disableItimers()
-{
-#if !defined(USE_TIMER_CREATE)
-    // we only need to do this if we're using itimers, because
-    // timer_create timers are not carried across a fork().
-    stopTimer();
-#endif
-}
-
 static long max_fd = 0;
 
 // Rts internal API, not exposed in a public header file:
@@ -83,10 +73,17 @@ runInteractiveProcess (char *const args[],
     // the signal had been raised.
     blockUserSignals();
 
+    // See #4074.  Sometimes fork() gets interrupted by the timer
+    // signal and keeps restarting indefinitely.
+    stopTimer();
+
     switch(pid = fork())
     {
     case -1:
         unblockUserSignals();
+#if __GLASGOW_HASKELL__ > 612
+        startTimer();
+#endif
         if (fdStdIn == -1) {
             close(fdStdInput[0]);
             close(fdStdInput[1]);
@@ -106,7 +103,6 @@ runInteractiveProcess (char *const args[],
         // WARNING!  we are now in the child of vfork(), so any memory
         // we modify below will also be seen in the parent process.
 
-        disableItimers();
         unblockUserSignals();
 
 	if (workingDirectory) {
@@ -213,6 +209,7 @@ runInteractiveProcess (char *const args[],
 	break;
     }
     unblockUserSignals();
+    startTimer();
     
     return pid;
 }
