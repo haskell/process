@@ -335,10 +335,10 @@ waitForProcess ph = do
 -- >  > readProcess "date" [] []
 -- >  "Thu Feb  7 10:03:39 PST 2008\n"
 --
--- The argumenst are:
+-- The arguments are:
 --
--- * The command to run, which must be in the $PATH, or an absolute path 
---  
+-- * The command to run, which must be in the $PATH, or an absolute path
+--
 -- * A list of separate command line arguments to the program
 --
 -- * A string to pass on the standard input to the program.
