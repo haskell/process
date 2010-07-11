@@ -322,9 +322,8 @@ waitForProcess ph = do
 -- -----------------------------------------------------------------------------
 --
 -- | readProcess forks an external process, reads its standard output
--- strictly, blocking until the process terminates, and returns either the output
--- string, or, in the case of non-zero exit status, an error code, and
--- any output.
+-- strictly, blocking until the process terminates, and returns the output
+-- string.
 --
 -- Output is returned strictly, so this is not suitable for
 -- interactive applications.
@@ -334,7 +333,7 @@ waitForProcess ph = do
 -- the result of readProcess.
 --
 -- >  > readProcess "date" [] []
--- >  Right "Thu Feb  7 10:03:39 PST 2008\n"
+-- >  "Thu Feb  7 10:03:39 PST 2008\n"
 --
 -- The argumenst are:
 --
@@ -348,7 +347,7 @@ readProcess
     :: FilePath                 -- ^ command to run
     -> [String]                 -- ^ any arguments
     -> String                   -- ^ standard input
-    -> IO String                -- ^ stdout + stderr
+    -> IO String                -- ^ stdout
 readProcess cmd args input = do
     (Just inh, Just outh, _, pid) <-
         createProcess (proc cmd args){ std_in  = CreatePipe,
