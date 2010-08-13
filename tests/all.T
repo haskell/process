@@ -18,3 +18,5 @@ test('process008', normal, compile_and_run, [''])
 # not the normal way: this test runs processes from multiple threads, and
 # will get stuck without the threaded RTS.
 test('3231', only_ways(['threaded1','threaded2']), compile_and_run, [''])
+test('4198', cmd_prefix(config.compiler + ' exitminus1.c -o exitminus1; '),
+     compile_and_run, [''])
