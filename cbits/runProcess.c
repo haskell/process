@@ -257,7 +257,7 @@ getProcessExitCode (ProcHandle handle, int *pExitCode)
     return -1;
 }
 
-int waitForProcess (ProcHandle handle)
+int waitForProcess (ProcHandle handle, int *pret)
 {
     int wstat;
     
@@ -269,12 +269,15 @@ int waitForProcess (ProcHandle handle)
 	}
     }
     
-    if (WIFEXITED(wstat))
-	return WEXITSTATUS(wstat);
+    if (WIFEXITED(wstat)) {
+        *pret = WEXITSTATUS(wstat);
+	return 0;
+    }
     else
 	if (WIFSIGNALED(wstat))
 	{
-	    return wstat;
+            *pret = wstat;
+	    return 0;
 	}
 	else
 	{
@@ -503,7 +506,7 @@ getProcessExitCode (ProcHandle handle, int *pExitCode)
 }
 
 int
-waitForProcess (ProcHandle handle)
+waitForProcess (ProcHandle handle, int *pret)
 {
     DWORD retCode;
 
@@ -514,7 +517,8 @@ waitForProcess (ProcHandle handle)
 	    maperrno();
 	    return -1;
 	}
-	return retCode;
+        *pret = retCode;
+	return 0;
     }
     
     maperrno();
