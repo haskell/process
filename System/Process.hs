@@ -510,10 +510,10 @@ rawSystem cmd args = system (unwords (map translate (cmd:args)))
 -- copied from System.Process (qv)
 translate :: String -> String
 translate str = '"' : snd (foldr escape (True,"\"") str)
-  where	escape '"'  (b,     str) = (True,  '\\' : '"'  : str)
-	escape '\\' (True,  str) = (True,  '\\' : '\\' : str)
-	escape '\\' (False, str) = (False, '\\' : str)
-	escape c    (b,     str) = (False, c : str)
+  where escape '"'  (b,     str) = (True,  '\\' : '"'  : str)
+        escape '\\' (True,  str) = (True,  '\\' : '\\' : str)
+        escape '\\' (False, str) = (False, '\\' : str)
+        escape c    (b,     str) = (False, c : str)
 #endif
 
 #ifndef __HUGS__
