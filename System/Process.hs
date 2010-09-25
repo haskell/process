@@ -580,6 +580,11 @@ foreign import ccall unsafe "getProcessExitCode"
 	-> Ptr CInt
 	-> IO CInt
 
+#if __GLASGOW_HASKELL__ < 700
+-- not available prior to 700
+#define interruptible safe
+#endif
+
 foreign import ccall interruptible "waitForProcess" -- NB. safe - can block
   c_waitForProcess
 	:: PHANDLE
