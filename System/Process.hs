@@ -310,7 +310,7 @@ waitForProcess ph = do
 	-- (XXX but there's a small race window here during which another
 	-- thread could close the handle or call waitForProcess)
         alloca $ \pret -> do
-          throwErrnoIfMinus1_ "waitForProcess" (c_waitForProcess h pret)
+          throwErrnoIfMinus1Retry_ "waitForProcess" (c_waitForProcess h pret)
           withProcessHandle ph $ \p_' ->
             case p_' of
               ClosedHandle e -> return (p_',e)
@@ -580,7 +580,7 @@ foreign import ccall unsafe "getProcessExitCode"
 	-> Ptr CInt
 	-> IO CInt
 
-foreign import ccall safe "waitForProcess" -- NB. safe - can block
+foreign import ccall interruptible "waitForProcess" -- NB. safe - can block
   c_waitForProcess
 	:: PHANDLE
         -> Ptr CInt

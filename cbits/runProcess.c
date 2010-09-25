@@ -261,12 +261,9 @@ int waitForProcess (ProcHandle handle, int *pret)
 {
     int wstat;
     
-    while (waitpid(handle, &wstat, 0) < 0)
+    if (waitpid(handle, &wstat, 0) < 0)
     {
-	if (errno != EINTR)
-	{
-	    return -1;
-	}
+        return -1;
     }
     
     if (WIFEXITED(wstat)) {
