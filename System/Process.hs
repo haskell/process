@@ -49,6 +49,7 @@ module System.Process (
 #endif
         system,
         rawSystem,
+        showCommandForUser,
 
 #ifndef __HUGS__
 	-- * Process completion
@@ -491,30 +492,35 @@ The return codes and possible failures are the same as for 'system'.
 rawSystem :: String -> [String] -> IO ExitCode
 #ifdef __GLASGOW_HASKELL__
 rawSystem cmd args = syncProcess "rawSystem" (proc cmd args)
-
 #elif !mingw32_HOST_OS
 -- crude fallback implementation: could do much better than this under Unix
-rawSystem cmd args = system (unwords (map translate (cmd:args)))
-
-translate :: String -> String
-translate str = '\'' : foldr escape "'" str
-  where	escape '\'' = showString "'\\''"
-	escape c    = showChar c
+rawSystem cmd args = system (showCommandForUser cmd args)
 #else /* mingw32_HOST_OS &&  ! __GLASGOW_HASKELL__ */
 # if __HUGS__
-rawSystem cmd args = system (unwords (cmd : map translate args))
+rawSystem cmd args = system (cmd ++ showCommandForUser "" args)
 # else
-rawSystem cmd args = system (unwords (map translate (cmd:args)))
+rawSystem cmd args = system (showCommandForUser cmd args)
+#endif
 #endif
 
--- copied from System.Process (qv)
 translate :: String -> String
+#if mingw32_HOST_OS
 translate str = '"' : snd (foldr escape (True,"\"") str)
   where escape '"'  (b,     str) = (True,  '\\' : '"'  : str)
         escape '\\' (True,  str) = (True,  '\\' : '\\' : str)
         escape '\\' (False, str) = (False, '\\' : str)
         escape c    (b,     str) = (False, c : str)
+#else
+translate str = '\'' : foldr escape "'" str
+  where escape '\'' = showString "'\\''"
+        escape c    = showChar c
 #endif
+
+-- | Given a program @p@ and arguments @args@,
+--   @showCommandForUser p args@ returns a string suitable for pasting
+--   into sh (on POSIX OSs) or cmd.exe (on Windows).
+showCommandForUser :: FilePath -> [String] -> String
+showCommandForUser cmd args = unwords (map translate (cmd : args))
 
 #ifndef __HUGS__
 -- ----------------------------------------------------------------------------
