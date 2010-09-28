@@ -503,19 +503,6 @@ rawSystem cmd args = system (showCommandForUser cmd args)
 #endif
 #endif
 
-translate :: String -> String
-#if mingw32_HOST_OS
-translate str = '"' : snd (foldr escape (True,"\"") str)
-  where escape '"'  (b,     str) = (True,  '\\' : '"'  : str)
-        escape '\\' (True,  str) = (True,  '\\' : '\\' : str)
-        escape '\\' (False, str) = (False, '\\' : str)
-        escape c    (b,     str) = (False, c : str)
-#else
-translate str = '\'' : foldr escape "'" str
-  where escape '\'' = showString "'\\''"
-        escape c    = showChar c
-#endif
-
 -- | Given a program @p@ and arguments @args@,
 --   @showCommandForUser p args@ returns a string suitable for pasting
 --   into sh (on POSIX OSs) or cmd.exe (on Windows).
