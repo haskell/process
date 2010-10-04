@@ -422,6 +422,7 @@ readProcessWithExitCode cmd args input = do
     takeMVar outMVar
     takeMVar outMVar
     hClose outh
+    hClose errh
 
     -- wait on the process
     ex <- waitForProcess pid
