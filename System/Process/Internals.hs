@@ -192,9 +192,12 @@ data CmdSpec
       -- ^ the filename of an executable with a list of arguments
 
 data StdStream
-  = Inherit                             -- ^ Inherit Handle from parent
-  | UseHandle Handle                    -- ^ Use the supplied Handle
-  | CreatePipe                          -- ^ Create a new pipe
+  = Inherit                  -- ^ Inherit Handle from parent
+  | UseHandle Handle         -- ^ Use the supplied Handle
+  | CreatePipe               -- ^ Create a new pipe.  The returned
+                             -- @Handle@ will use the default encoding
+                             -- and newline translation mode (just
+                             -- like @Handle@s created by @openFile@).
 
 runGenProcess_
   :: String                     -- ^ function name (for error messages)
