@@ -535,7 +535,7 @@ terminateProcess ph = do
     case p_ of 
       ClosedHandle _ -> return p_
       OpenHandle h -> do
-	throwErrnoIfMinus1_ "terminateProcess" $ c_terminateProcess h
+        throwErrnoIfMinus1Retry_ "terminateProcess" $ c_terminateProcess h
 	return p_
 	-- does not close the handle, we might want to try terminating it
 	-- again, or get its exit code.
@@ -555,7 +555,7 @@ getProcessExitCode ph = do
       ClosedHandle e -> return (p_, Just e)
       OpenHandle h ->
 	alloca $ \pExitCode -> do
-	    res <- throwErrnoIfMinus1 "getProcessExitCode" $
+            res <- throwErrnoIfMinus1Retry "getProcessExitCode" $
 	        	c_getProcessExitCode h pExitCode
 	    code <- peek pExitCode
 	    if res == 0
