@@ -18,8 +18,8 @@ build-type:    Configure
 cabal-version: >=1.6
 
 source-repository head
-    type:     darcs
-    location: http://darcs.haskell.org/packages/process/
+    type:     git
+    location: http://darcs.haskell.org/packages/process.git/
 
 flag base4
 
