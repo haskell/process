@@ -44,12 +44,11 @@ typedef pid_t ProcHandle;
 typedef long ProcHandle;
 #endif
 
-#define RUN_PROCESS_IN_CLOSE_FDS 0x1
-#define RUN_PROCESS_IN_NEW_GROUP 0x2
+#include "processFlags.h"
 
 #if !(defined(_MSC_VER) || defined(__MINGW32__) || defined(_WIN32))
 
-extern ProcHandle runInteractiveProcess2( char *const args[],
+extern ProcHandle runInteractiveProcess( char *const args[],
 					 char *workingDirectory,
 					 char **environment,
                                          int fdStdIn, int fdStdOut, int fdStdErr,
@@ -62,7 +61,7 @@ extern ProcHandle runInteractiveProcess2( char *const args[],
 
 #else
 
-extern ProcHandle runInteractiveProcess2( wchar_t *cmd,
+extern ProcHandle runInteractiveProcess( wchar_t *cmd,
 					 wchar_t *workingDirectory,
 					 void *environment,
                                          int fdStdIn, int fdStdOut, int fdStdErr,
@@ -73,6 +72,6 @@ extern ProcHandle runInteractiveProcess2( wchar_t *cmd,
 
 #endif
 
-extern int terminateProcess2( ProcHandle handle );
-extern int getProcessExitCode2( ProcHandle handle, int *pExitCode );
-extern int waitForProcess2( ProcHandle handle, int *ret );
+extern int terminateProcess( ProcHandle handle );
+extern int getProcessExitCode( ProcHandle handle, int *pExitCode );
+extern int waitForProcess( ProcHandle handle, int *ret );

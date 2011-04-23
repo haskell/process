@@ -56,7 +56,7 @@ module System.Process (
 	waitForProcess,
 	getProcessExitCode,
 	terminateProcess,
-	interruptProcessGroup,
+	interruptProcessGroupOf,
 #endif
  ) where
 
@@ -172,7 +172,7 @@ proc cmd args = CreateProcess { cmdspec = RawCommand cmd args,
                                 std_out = Inherit,
                                 std_err = Inherit,
                                 close_fds = False,
-                                new_group = False}
+                                create_group = False}
 
 -- | Construct a 'CreateProcess' record for passing to 'createProcess',
 -- representing a command to be passed to the shell.
@@ -184,7 +184,7 @@ shell str = CreateProcess { cmdspec = ShellCommand str,
                             std_out = Inherit,
                             std_err = Inherit,
                             close_fds = False,
-                            new_group = False}
+                            create_group = False}
 
 {- |
 This is the most general way to spawn an external process.  The
@@ -546,15 +546,19 @@ terminateProcess ph = do
 	-- again, or get its exit code.
 
 -- ----------------------------------------------------------------------------
--- interruptProcessGroup
+-- interruptProcessGroupOf
 
--- | Sends and interrupt signal process group.
--- On Unix systems, 'interuptProcess' sends the process group the SIGINT signal.
--- On Windows systems, generates a CTRL_BREAK_EVENT
-interruptProcessGroup
+-- | Sends an interrupt signal to the process group of the given process.
+--
+-- On Unix systems, it sends the group the SIGINT signal.
+--
+-- On Windows systems, it generates a CTRL_BREAK_EVENT and will only work for
+-- processes created using 'createProcess' and setting the 'create_group' flag
+
+interruptProcessGroupOf
     :: ProcessHandle    -- ^ Lead process in the process group
     -> IO ()
-interruptProcessGroup ph = do
+interruptProcessGroupOf ph = do
 #if mingw32_HOST_OS
     withProcessInfo_ ph $ \p_ -> do
         case p_ of
@@ -601,12 +605,12 @@ getProcessExitCode ph = do
 -- ----------------------------------------------------------------------------
 -- Interface to C bits
 
-foreign import ccall unsafe "terminateProcess2"
+foreign import ccall unsafe "terminateProcess"
   c_terminateProcess
 	:: PHANDLE
 	-> IO CInt
 
-foreign import ccall unsafe "getProcessExitCode2"
+foreign import ccall unsafe "getProcessExitCode"
   c_getProcessExitCode
 	:: PHANDLE
 	-> Ptr CInt
@@ -617,7 +621,7 @@ foreign import ccall unsafe "getProcessExitCode2"
 #define interruptible safe
 #endif
 
-foreign import ccall interruptible "waitForProcess2" -- NB. safe - can block
+foreign import ccall interruptible "waitForProcess" -- NB. safe - can block
   c_waitForProcess
 	:: PHANDLE
         -> Ptr CInt

@@ -20,3 +20,5 @@ test('process008', normal, compile_and_run, [''])
 test('3231', only_ways(['threaded1','threaded2']), compile_and_run, [''])
 test('4198', cmd_prefix('\'' + config.compiler + '\'' + ' exitminus1.c -o exitminus1; '),
      compile_and_run, [''])
+
+test('3994', only_ways(['threaded1','threaded2']), compile_and_run, [''])

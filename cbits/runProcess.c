@@ -29,7 +29,7 @@ extern void blockUserSignals(void);
 extern void unblockUserSignals(void);
 
 ProcHandle
-runInteractiveProcess2 (char *const args[],
+runInteractiveProcess (char *const args[],
 		       char *workingDirectory, char **environment,
                        int fdStdIn, int fdStdOut, int fdStdErr,
 		       int *pfdStdInput, int *pfdStdOutput, int *pfdStdError,
@@ -222,13 +222,13 @@ runInteractiveProcess2 (char *const args[],
 }
 
 int
-terminateProcess2 (ProcHandle handle)
+terminateProcess (ProcHandle handle)
 {
     return (kill(handle, SIGTERM) == 0);
 }
 
 int
-getProcessExitCode2 (ProcHandle handle, int *pExitCode)
+getProcessExitCode (ProcHandle handle, int *pExitCode)
 {
     int wstat, res;
     
@@ -264,7 +264,7 @@ getProcessExitCode2 (ProcHandle handle, int *pExitCode)
     return -1;
 }
 
-int waitForProcess2 (ProcHandle handle, int *pret)
+int waitForProcess (ProcHandle handle, int *pret)
 {
     int wstat;
     
@@ -355,7 +355,7 @@ mkAnonPipe (HANDLE* pHandleIn, BOOL isInheritableIn,
 }
 
 ProcHandle
-runInteractiveProcess2 (wchar_t *cmd, wchar_t *workingDirectory,
+runInteractiveProcess (wchar_t *cmd, wchar_t *workingDirectory,
                        void *environment,
                        int fdStdIn, int fdStdOut, int fdStdErr,
 		       int *pfdStdInput, int *pfdStdOutput, int *pfdStdError,
@@ -487,7 +487,7 @@ cleanup_err:
 }
 
 int
-terminateProcess2 (ProcHandle handle)
+terminateProcess (ProcHandle handle)
 {
     if (!TerminateProcess((HANDLE) handle, 1)) {
 	maperrno();
@@ -497,7 +497,7 @@ terminateProcess2 (ProcHandle handle)
 }
 
 int
-getProcessExitCode2 (ProcHandle handle, int *pExitCode)
+getProcessExitCode (ProcHandle handle, int *pExitCode)
 {
     *pExitCode = 0;
 
@@ -515,7 +515,7 @@ getProcessExitCode2 (ProcHandle handle, int *pExitCode)
 }
 
 int
-waitForProcess2 (ProcHandle handle, int *pret)
+waitForProcess (ProcHandle handle, int *pret)
 {
     DWORD retCode;
 
