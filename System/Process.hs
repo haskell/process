@@ -56,6 +56,7 @@ module System.Process (
 	waitForProcess,
 	getProcessExitCode,
 	terminateProcess,
+	interruptProcessGroupOf,
 #endif
  ) where
 
@@ -81,7 +82,9 @@ import GHC.IO.Exception	( ioException, IOErrorType(..) )
 #else
 import GHC.IOBase	( ioException, IOErrorType(..) )
 #endif
-#if !defined(mingw32_HOST_OS)
+#if defined(mingw32_HOST_OS)
+import System.Win32.Console (generateConsoleCtrlEvent, cTRL_BREAK_EVENT)
+#else
 import System.Posix.Signals
 #endif
 #endif
@@ -168,7 +171,8 @@ proc cmd args = CreateProcess { cmdspec = RawCommand cmd args,
                                 std_in = Inherit,
                                 std_out = Inherit,
                                 std_err = Inherit,
-                                close_fds = False}
+                                close_fds = False,
+                                create_group = False}
 
 -- | Construct a 'CreateProcess' record for passing to 'createProcess',
 -- representing a command to be passed to the shell.
@@ -179,8 +183,9 @@ shell str = CreateProcess { cmdspec = ShellCommand str,
                             std_in = Inherit,
                             std_out = Inherit,
                             std_err = Inherit,
-                            close_fds = False}
-                                            
+                            close_fds = False,
+                            create_group = False}
+
 {- |
 This is the most general way to spawn an external process.  The
 process can be a command line to be executed by a shell or a raw command
@@ -539,6 +544,38 @@ terminateProcess ph = do
 	return p_
 	-- does not close the handle, we might want to try terminating it
 	-- again, or get its exit code.
+
+-- ----------------------------------------------------------------------------
+-- interruptProcessGroupOf
+
+-- | Sends an interrupt signal to the process group of the given process.
+--
+-- On Unix systems, it sends the group the SIGINT signal.
+--
+-- On Windows systems, it generates a CTRL_BREAK_EVENT and will only work for
+-- processes created using 'createProcess' and setting the 'create_group' flag
+
+interruptProcessGroupOf
+    :: ProcessHandle    -- ^ Lead process in the process group
+    -> IO ()
+interruptProcessGroupOf ph = do
+#if mingw32_HOST_OS
+    withProcessHandle_ ph $ \p_ -> do
+        case p_ of
+            ClosedHandle _ -> return p_
+            OpenHandle h -> do
+				-- getProcessId h
+                -- generateConsoleCtrlEvent cTRL_BREAK_EVENT pid
+                return p_
+            _ -> return p_
+#else
+    withProcessHandle_ ph $ \p_ -> do
+        case p_ of
+            ClosedHandle _ -> return p_
+            OpenHandle h -> do
+                signalProcessGroup sigINT h
+                return p_
+#endif
 
 -- ----------------------------------------------------------------------------
 -- getProcessExitCode

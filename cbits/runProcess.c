@@ -35,8 +35,9 @@ runInteractiveProcess (char *const args[],
 		       int *pfdStdInput, int *pfdStdOutput, int *pfdStdError,
                        int set_inthandler, long inthandler, 
                        int set_quithandler, long quithandler,
-                       int close_fds)
+                       int flags)
 {
+    int close_fds = ((flags & RUN_PROCESS_IN_CLOSE_FDS) != 0);
     int pid;
     int fdStdInput[2], fdStdOutput[2], fdStdError[2];
     int r;
@@ -103,6 +104,9 @@ runInteractiveProcess (char *const args[],
         // WARNING!  we are now in the child of vfork(), so any memory
         // we modify below will also be seen in the parent process.
 
+        if ((flags & RUN_PROCESS_IN_NEW_GROUP) != 0) {
+            setpgid(0, 0);
+        }
         unblockUserSignals();
 
 	if (workingDirectory) {
@@ -191,6 +195,9 @@ runInteractiveProcess (char *const args[],
     _exit(127);
     
     default:
+	if ((flags & RUN_PROCESS_IN_NEW_GROUP) != 0) {
+            setpgid(pid, pid);
+	}
 	if (fdStdIn  == -1) {
             close(fdStdInput[0]);
             fcntl(fdStdInput[1], F_SETFD, FD_CLOEXEC);
@@ -352,7 +359,7 @@ runInteractiveProcess (wchar_t *cmd, wchar_t *workingDirectory,
                        void *environment,
                        int fdStdIn, int fdStdOut, int fdStdErr,
 		       int *pfdStdInput, int *pfdStdOutput, int *pfdStdError,
-                       int close_fds)
+                       int flags)
 {
 	STARTUPINFO sInfo;
 	PROCESS_INFORMATION pInfo;
@@ -362,7 +369,8 @@ runInteractiveProcess (wchar_t *cmd, wchar_t *workingDirectory,
         HANDLE hStdOutputWrite = INVALID_HANDLE_VALUE;
 	HANDLE hStdErrorRead   = INVALID_HANDLE_VALUE;
         HANDLE hStdErrorWrite  = INVALID_HANDLE_VALUE;
-	DWORD flags;
+    BOOL close_fds = ((flags & RUN_PROCESS_IN_CLOSE_FDS) != 0);
+	DWORD dwFlags = 0;
 	BOOL status;
         BOOL inherit;
 
@@ -432,10 +440,9 @@ runInteractiveProcess (wchar_t *cmd, wchar_t *workingDirectory,
 
 	if (sInfo.hStdInput  != GetStdHandle(STD_INPUT_HANDLE)  &&
 	    sInfo.hStdOutput != GetStdHandle(STD_OUTPUT_HANDLE) &&
-	    sInfo.hStdError  != GetStdHandle(STD_ERROR_HANDLE))
-		flags = CREATE_NO_WINDOW;   // Run without console window only when both output and error are redirected
-	else
-		flags = 0;
+	    sInfo.hStdError  != GetStdHandle(STD_ERROR_HANDLE)  &&
+	    (flags & RUN_PROCESS_IN_NEW_GROUP) == 0)
+		dwFlags |= CREATE_NO_WINDOW;   // Run without console window only when both output and error are redirected
 
         // See #3231
         if (close_fds && fdStdIn == 0 && fdStdOut == 1 && fdStdErr == 2) {
@@ -444,7 +451,11 @@ runInteractiveProcess (wchar_t *cmd, wchar_t *workingDirectory,
             inherit = TRUE;
         }
 
-	if (!CreateProcess(NULL, cmd, NULL, NULL, inherit, flags, environment, workingDirectory, &sInfo, &pInfo))
+        if ((flags & RUN_PROCESS_IN_NEW_GROUP) != 0) {
+            dwFlags |= CREATE_NEW_PROCESS_GROUP;
+        }
+
+	if (!CreateProcess(NULL, cmd, NULL, NULL, inherit, dwFlags, environment, workingDirectory, &sInfo, &pInfo))
 	{
                 goto cleanup_err;
 	}

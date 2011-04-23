@@ -39,7 +39,10 @@ Library {
     install-includes:
         runProcess.h
         HsProcessConfig.h
-    if !os(windows)
+    if os(windows)
+        build-depends: Win32 >=2.2.0.0
+        extra-libraries: kernel32
+    else
         build-depends: unix
   }
 
