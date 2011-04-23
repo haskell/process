@@ -31,6 +31,12 @@ module System.Process.Internals (
 #if !defined(mingw32_HOST_OS) && !defined(__MINGW32__)
 	 pPrPr_disableITimers, c_execvpe,
 	ignoreSignal, defaultSignal,
+#else
+# ifdef __GLASGOW_HASKELL__
+	ProcessInfo__(..),
+	withProcessInfo, withProcessInfo_,
+	mkProcessHandleWithPID,
+# endif
 #endif
 #endif
 	withFilePathException, withCEnvironment,
@@ -70,7 +76,7 @@ import GHC.IO.Device
 import GHC.IO.Handle
 import GHC.IO.Handle.FD
 import GHC.IO.Handle.Internals
-import GHC.IO.Handle.Types
+import GHC.IO.Handle.Types hiding(ClosedHandle)
 import System.IO.Error
 import Data.Typeable
 #if defined(mingw32_HOST_OS)
@@ -116,6 +122,8 @@ import System.FilePath
      termination: they all return a 'ProcessHandle' which may be used
      to wait for the process later.
 -}
+#if !defined(mingw32_HOST_OS) && !defined(__MINGW32__)
+
 data ProcessHandle__ = OpenHandle PHANDLE | ClosedHandle ExitCode
 newtype ProcessHandle = ProcessHandle (MVar ProcessHandle__)
 
@@ -131,8 +139,6 @@ withProcessHandle_
 	-> IO ()
 withProcessHandle_ (ProcessHandle m) io = modifyMVar_ m io
 
-#if !defined(mingw32_HOST_OS) && !defined(__MINGW32__)
-
 type PHANDLE = CPid
 
 mkProcessHandle :: PHANDLE -> IO ProcessHandle
@@ -146,20 +152,78 @@ closePHANDLE _ = return ()
 #else
 
 type PHANDLE = Word32
+type PINFO = (PHANDLE, Maybe Word32) -- Handle and Process ID
+
+data ProcessHandle__ = OpenHandle PHANDLE | ClosedHandle ExitCode
+data ProcessInfo__ = OpenInfo PINFO | ClosedInfo ExitCode
+newtype ProcessHandle = ProcessHandle (MVar ProcessInfo__)
+
+withProcessInfo
+	:: ProcessHandle
+	-> (ProcessInfo__ -> IO (ProcessInfo__, a))
+	-> IO a
+withProcessInfo (ProcessHandle m) io = modifyMVar m io
+
+withProcessInfo_
+	:: ProcessHandle
+	-> (ProcessInfo__ -> IO ProcessInfo__)
+	-> IO ()
+withProcessInfo_ (ProcessHandle m) io = modifyMVar_ m io
+
+withProcessHandle
+	:: ProcessHandle
+	-> (ProcessHandle__ -> IO (ProcessHandle__, a))
+	-> IO a
+withProcessHandle (ProcessHandle m) io =
+    modifyMVar m $ \ info -> case info of
+        OpenInfo (h, pid) -> do
+            result <- io $ OpenHandle h
+            case result of
+                (OpenHandle h', x)   -> return (OpenInfo (h', pid), x)
+                (ClosedHandle e', x) -> return (ClosedInfo e', x)
+        ClosedInfo e -> do
+            result <- io $ ClosedHandle e
+            case result of
+                (OpenHandle h', x)   -> return (OpenInfo (h', Nothing), x)
+                (ClosedHandle e', x) -> return (ClosedInfo e', x)
+
+withProcessHandle_
+	:: ProcessHandle
+	-> (ProcessHandle__ -> IO ProcessHandle__)
+	-> IO ()
+withProcessHandle_ (ProcessHandle m) io =
+    modifyMVar_ m $ \ info -> case info of
+        OpenInfo (h, pid) -> do
+            result <- io $ OpenHandle h
+            case result of
+                OpenHandle h'   -> return $ OpenInfo (h', pid)
+                ClosedHandle e' -> return $ ClosedInfo e'
+        ClosedInfo e -> do
+            result <- io $ ClosedHandle e
+            case result of
+                OpenHandle h'   -> return $ OpenInfo (h', Nothing)
+                ClosedHandle e' -> return $ ClosedInfo e'
+
 
 -- On Windows, we have to close this HANDLE when it is no longer required,
 -- hence we add a finalizer to it, using an IORef as the box on which to
 -- attach the finalizer.
 mkProcessHandle :: PHANDLE -> IO ProcessHandle
 mkProcessHandle h = do
-   m <- newMVar (OpenHandle h)
+   m <- newMVar (OpenInfo (h, Nothing))
+   addMVarFinalizer m (processHandleFinaliser m)
+   return (ProcessHandle m)
+
+mkProcessHandleWithPID :: PHANDLE -> Word32 -> IO ProcessHandle
+mkProcessHandleWithPID h pid = do
+   m <- newMVar (OpenInfo (h, Just pid))
    addMVarFinalizer m (processHandleFinaliser m)
    return (ProcessHandle m)
 
 processHandleFinaliser m =
-   modifyMVar_ m $ \p_ -> do 
+   modifyMVar_ m $ \p_ -> do
 	case p_ of
-	  OpenHandle ph -> closePHANDLE ph
+	  OpenInfo (ph, _) -> closePHANDLE ph
 	  _ -> return ()
 	return (error "closed process handle")
 
@@ -182,7 +246,8 @@ data CreateProcess = CreateProcess{
   std_in    :: StdStream,               -- ^ How to determine stdin
   std_out   :: StdStream,               -- ^ How to determine stdout
   std_err   :: StdStream,               -- ^ How to determine stderr
-  close_fds :: Bool                     -- ^ Close all file descriptors except stdin, stdout and stderr in the new process (on Windows, only works if std_in, std_out, and std_err are all Inherit)
+  close_fds :: Bool,                    -- ^ Close all file descriptors except stdin, stdout and stderr in the new process (on Windows, only works if std_in, std_out, and std_err are all Inherit)
+  new_group :: Bool                     -- ^ Create a new process group
  }
 
 data CmdSpec 
@@ -219,7 +284,8 @@ runGenProcess_ fun CreateProcess{ cmdspec = cmdsp,
                                   std_in = mb_stdin,
                                   std_out = mb_stdout,
                                   std_err = mb_stderr,
-                                  close_fds = mb_close_fds }
+                                  close_fds = mb_close_fds,
+                                  new_group = mb_new_group }
                mb_sigint mb_sigquit
  = do
   let (cmd,args) = commandToProcess cmdsp
@@ -255,7 +321,8 @@ runGenProcess_ fun CreateProcess{ cmdspec = cmdsp,
                                 fdin fdout fderr
 				pfdStdInput pfdStdOutput pfdStdError
 			        set_int inthand set_quit quithand
-                                (if mb_close_fds then 1 else 0)
+                                ((if mb_close_fds then 1 else 0)
+                                .|.(if mb_new_group then 2 else 0))
 
      hndStdInput  <- mbPipe mb_stdin  pfdStdInput  WriteMode
      hndStdOutput <- mbPipe mb_stdout pfdStdOutput ReadMode
@@ -268,7 +335,7 @@ runGenProcess_ fun CreateProcess{ cmdspec = cmdsp,
 runInteractiveProcess_lock :: MVar ()
 runInteractiveProcess_lock = unsafePerformIO $ newMVar ()
 
-foreign import ccall unsafe "runInteractiveProcess" 
+foreign import ccall unsafe "runInteractiveProcess2"
   c_runInteractiveProcess
         ::  Ptr CString
 	-> CString
@@ -283,7 +350,7 @@ foreign import ccall unsafe "runInteractiveProcess"
 	-> CLong			-- SIGINT handler
 	-> CInt				-- non-zero: set child's SIGQUIT handler
 	-> CLong			-- SIGQUIT handler
-        -> CInt                         -- close_fds
+        -> CInt                         -- flags
         -> IO PHANDLE
 
 #endif /* __GLASGOW_HASKELL__ */
@@ -302,7 +369,8 @@ runGenProcess_ fun CreateProcess{ cmdspec = cmdsp,
                                   std_in = mb_stdin,
                                   std_out = mb_stdout,
                                   std_err = mb_stderr,
-                                  close_fds = mb_close_fds }
+                                  close_fds = mb_close_fds,
+                                  new_group = mb_new_group }
                _ignored_mb_sigint _ignored_mb_sigquit
  = do
   (cmd, cmdline) <- commandToProcess cmdsp
@@ -310,6 +378,7 @@ runGenProcess_ fun CreateProcess{ cmdspec = cmdsp,
    alloca $ \ pfdStdInput  ->
    alloca $ \ pfdStdOutput ->
    alloca $ \ pfdStdError  ->
+   alloca $ \ pPid         ->
    maybeWith withCEnvironment mb_env $ \pEnv ->
    maybeWith withCWString mb_cwd $ \pWorkDir -> do
    withCWString cmdline $ \pcmdline -> do
@@ -333,20 +402,23 @@ runGenProcess_ fun CreateProcess{ cmdspec = cmdsp,
 	                 c_runInteractiveProcess pcmdline pWorkDir pEnv 
                                 fdin fdout fderr
 				pfdStdInput pfdStdOutput pfdStdError
-                                (if mb_close_fds then 1 else 0)
+                                ((if mb_close_fds then 1 else 0)
+                                .|.(if mb_new_group then 2 else 0))
+                                pPid
 
      hndStdInput  <- mbPipe mb_stdin  pfdStdInput  WriteMode
      hndStdOutput <- mbPipe mb_stdout pfdStdOutput ReadMode
      hndStdError  <- mbPipe mb_stderr pfdStdError  ReadMode
+     pid <- peek pPid
 
-     ph <- mkProcessHandle proc_handle
+     ph <- mkProcessHandleWithPID proc_handle pid
      return (hndStdInput, hndStdOutput, hndStdError, ph)
 
 {-# NOINLINE runInteractiveProcess_lock #-}
 runInteractiveProcess_lock :: MVar ()
 runInteractiveProcess_lock = unsafePerformIO $ newMVar ()
 
-foreign import ccall unsafe "runInteractiveProcess" 
+foreign import ccall unsafe "runInteractiveProcess2"
   c_runInteractiveProcess
         :: CWString
         -> CWString
@@ -357,7 +429,8 @@ foreign import ccall unsafe "runInteractiveProcess"
         -> Ptr FD
         -> Ptr FD
         -> Ptr FD
-        -> CInt                         -- close_fds
+        -> CInt                         -- flags
+        -> Ptr Word32                   -- pPid
         -> IO PHANDLE
 
 #endif /* __GLASGOW_HASKELL__ */
