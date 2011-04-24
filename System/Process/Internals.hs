@@ -75,6 +75,7 @@ import System.IO.Error
 import Data.Typeable
 #if defined(mingw32_HOST_OS)
 import GHC.IO.IOMode
+import System.Win32.DebugApi (PHANDLE)
 #endif
 #else
 import GHC.IOBase	( haFD, FD, IOException(..) )
@@ -136,6 +137,9 @@ withProcessHandle_ (ProcessHandle m) io = modifyMVar_ m io
 
 type PHANDLE = CPid
 
+throwErrnoIfBadPHandle :: String -> IO PHANDLE -> IO PHANDLE  
+throwErrnoIfBadPHandle = throwErrnoIfMinus1
+
 mkProcessHandle :: PHANDLE -> IO ProcessHandle
 mkProcessHandle p = do
   m <- newMVar (OpenHandle p)
@@ -146,7 +150,8 @@ closePHANDLE _ = return ()
 
 #else
 
-type PHANDLE = Word32
+throwErrnoIfBadPHandle :: String -> IO PHANDLE -> IO PHANDLE  
+throwErrnoIfBadPHandle = throwErrnoIfNull
 
 -- On Windows, we have to close this HANDLE when it is no longer required,
 -- hence we add a finalizer to it, using an IORef as the box on which to
@@ -334,7 +339,7 @@ runGenProcess_ fun CreateProcess{ cmdspec = cmdsp,
      -- the C code.  Also the MVar will be cheaper when not running
      -- the threaded RTS.
      proc_handle <- withMVar runInteractiveProcess_lock $ \_ ->
-                    throwErrnoIfMinus1 fun $
+                    throwErrnoIfBadPHandle fun $
 	                 c_runInteractiveProcess pcmdline pWorkDir pEnv 
                                 fdin fdout fderr
 				pfdStdInput pfdStdOutput pfdStdError
@@ -364,7 +369,6 @@ foreign import ccall unsafe "runInteractiveProcess"
         -> Ptr FD
         -> Ptr FD
         -> CInt                         -- flags
-        -> Ptr Word32                   -- pPid
         -> IO PHANDLE
 
 #endif /* __GLASGOW_HASKELL__ */

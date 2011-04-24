@@ -472,7 +472,7 @@ runInteractiveProcess (wchar_t *cmd, wchar_t *workingDirectory,
 	*pfdStdOutput = _open_osfhandle((intptr_t) hStdOutputRead, _O_RDONLY);
   	*pfdStdError  = _open_osfhandle((intptr_t) hStdErrorRead,  _O_RDONLY);
 
-  	return (int) pInfo.hProcess;
+  	return pInfo.hProcess;
 
 cleanup_err:
         if (hStdInputRead   != INVALID_HANDLE_VALUE) CloseHandle(hStdInputRead);
@@ -482,7 +482,7 @@ cleanup_err:
         if (hStdErrorRead   != INVALID_HANDLE_VALUE) CloseHandle(hStdErrorRead);
         if (hStdErrorWrite  != INVALID_HANDLE_VALUE) CloseHandle(hStdErrorWrite);
         maperrno();
-        return -1;
+        return NULL;
 }
 
 int

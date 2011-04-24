@@ -83,6 +83,7 @@ import GHC.IO.Exception	( ioException, IOErrorType(..) )
 import GHC.IOBase	( ioException, IOErrorType(..) )
 #endif
 #if defined(mingw32_HOST_OS)
+import System.Win32.Process (getProcessId)
 import System.Win32.Console (generateConsoleCtrlEvent, cTRL_BREAK_EVENT)
 #else
 import System.Posix.Signals
@@ -564,10 +565,9 @@ interruptProcessGroupOf ph = do
         case p_ of
             ClosedHandle _ -> return p_
             OpenHandle h -> do
-				-- getProcessId h
-                -- generateConsoleCtrlEvent cTRL_BREAK_EVENT pid
+                pid <- getProcessId h
+                generateConsoleCtrlEvent cTRL_BREAK_EVENT pid
                 return p_
-            _ -> return p_
 #else
     withProcessHandle_ ph $ \p_ -> do
         case p_ of

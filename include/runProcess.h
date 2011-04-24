@@ -41,7 +41,7 @@
 typedef pid_t ProcHandle;
 #else
 // Should really be intptr_t, but we don't have that type on the Haskell side
-typedef long ProcHandle;
+typedef PHANDLE ProcHandle;
 #endif
 
 #include "processFlags.h"
