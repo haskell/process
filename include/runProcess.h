@@ -63,7 +63,7 @@ extern ProcHandle runInteractiveProcess( char *const args[],
 
 extern ProcHandle runInteractiveProcess( wchar_t *cmd,
 					 wchar_t *workingDirectory,
-					 void *environment,
+					 wchar_t *environment,
                                          int fdStdIn, int fdStdOut, int fdStdErr,
 					 int *pfdStdInput,
 					 int *pfdStdOutput,

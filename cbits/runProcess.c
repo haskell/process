@@ -107,6 +107,7 @@ runInteractiveProcess (char *const args[],
         if ((flags & RUN_PROCESS_IN_NEW_GROUP) != 0) {
             setpgid(0, 0);
         }
+
         unblockUserSignals();
 
 	if (workingDirectory) {
@@ -356,7 +357,7 @@ mkAnonPipe (HANDLE* pHandleIn, BOOL isInheritableIn,
 
 ProcHandle
 runInteractiveProcess (wchar_t *cmd, wchar_t *workingDirectory, 
-                       void *environment,
+                       wchar_t *environment,
                        int fdStdIn, int fdStdOut, int fdStdErr,
 		       int *pfdStdInput, int *pfdStdOutput, int *pfdStdError,
                        int flags)
@@ -370,7 +371,8 @@ runInteractiveProcess (wchar_t *cmd, wchar_t *workingDirectory,
 	HANDLE hStdErrorRead   = INVALID_HANDLE_VALUE;
         HANDLE hStdErrorWrite  = INVALID_HANDLE_VALUE;
     BOOL close_fds = ((flags & RUN_PROCESS_IN_CLOSE_FDS) != 0);
-	DWORD dwFlags = 0;
+	// We always pass a wide environment block, so we MUST set this flag 
+        DWORD dwFlags = CREATE_UNICODE_ENVIRONMENT;
 	BOOL status;
         BOOL inherit;
 
@@ -438,7 +440,7 @@ runInteractiveProcess (wchar_t *cmd, wchar_t *workingDirectory,
             sInfo.hStdError = hStdErrorWrite;
         }
 
-	if (sInfo.hStdInput  != GetStdHandle(STD_INPUT_HANDLE)  &&
+        if (sInfo.hStdInput  != GetStdHandle(STD_INPUT_HANDLE)  &&
 	    sInfo.hStdOutput != GetStdHandle(STD_OUTPUT_HANDLE) &&
 	    sInfo.hStdError  != GetStdHandle(STD_ERROR_HANDLE)  &&
 	    (flags & RUN_PROCESS_IN_NEW_GROUP) == 0)
@@ -450,7 +452,7 @@ runInteractiveProcess (wchar_t *cmd, wchar_t *workingDirectory,
         } else {
             inherit = TRUE;
         }
-
+ 
         if ((flags & RUN_PROCESS_IN_NEW_GROUP) != 0) {
             dwFlags |= CREATE_NEW_PROCESS_GROUP;
         }

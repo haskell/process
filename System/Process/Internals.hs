@@ -236,8 +236,8 @@ runGenProcess_ fun CreateProcess{ cmdspec = cmdsp,
    alloca $ \ pfdStdOutput ->
    alloca $ \ pfdStdError  ->
    maybeWith withCEnvironment mb_env $ \pEnv ->
-   maybeWith withCString mb_cwd $ \pWorkDir ->
-   withMany withCString (cmd:args) $ \cstrs ->
+   maybeWith withFilePath mb_cwd $ \pWorkDir ->
+   withMany withFilePath (cmd:args) $ \cstrs ->
    withArray0 nullPtr cstrs $ \pargs -> do
      
      fdin  <- mbFd fun fd_stdin  mb_stdin
@@ -361,7 +361,7 @@ foreign import ccall unsafe "runInteractiveProcess"
   c_runInteractiveProcess
         :: CWString
         -> CWString
-        -> Ptr ()
+        -> Ptr CWString
         -> FD
         -> FD
         -> FD
@@ -370,10 +370,9 @@ foreign import ccall unsafe "runInteractiveProcess"
         -> Ptr FD
         -> CInt                         -- flags
         -> IO PHANDLE
+#endif
 
 #endif /* __GLASGOW_HASKELL__ */
-
-#endif
 
 fd_stdin, fd_stdout, fd_stderr :: FD
 fd_stdin  = 0
@@ -602,9 +601,9 @@ withCEnvironment envir act =
   let env' = map (\(name, val) -> name ++ ('=':val)) envir 
   in withMany withCString env' (\pEnv -> withArray0 nullPtr pEnv act)
 #else
-withCEnvironment :: [(String,String)] -> (Ptr () -> IO a) -> IO a
+withCEnvironment :: [(String,String)] -> (Ptr CWString -> IO a) -> IO a
 withCEnvironment envir act =
   let env' = foldr (\(name, val) env -> name ++ ('=':val)++'\0':env) "\0" envir
-  in withCString env' (act . castPtr)
+  in withCWString env' (act . castPtr)
 #endif
 
