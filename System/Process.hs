@@ -617,8 +617,8 @@ foreign import ccall unsafe "getProcessExitCode"
 	-> Ptr CInt
 	-> IO CInt
 
-#if __GLASGOW_HASKELL__ < 700
--- not available prior to 700
+#if __GLASGOW_HASKELL__ < 701
+-- not available prior to 7.1
 #define interruptible safe
 #endif
 
