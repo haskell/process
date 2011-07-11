@@ -1,4 +1,8 @@
 {-# LANGUAGE CPP, ForeignFunctionInterface #-}
+#if __GLASGOW_HASKELL__ >= 701
+-- not available prior to 7.1
+{-# LANGUAGE InterruptibleFFI #-}
+#endif
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  System.Process
