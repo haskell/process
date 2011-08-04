@@ -1,5 +1,6 @@
 {-# LANGUAGE CPP, ForeignFunctionInterface #-}
 #if __GLASGOW_HASKELL__ >= 701
+{-# LANGUAGE Trustworthy #-}
 -- not available prior to 7.1
 {-# LANGUAGE InterruptibleFFI #-}
 #endif
