@@ -1,11 +1,11 @@
 {-# LANGUAGE CPP #-}
-#if __GLASGOW_HASKELL__ >= 701
-{-# LANGUAGE Trustworthy #-}
-#endif
 {-# LANGUAGE ForeignFunctionInterface, RecordWildCards #-}
 {-# OPTIONS_HADDOCK hide #-}
 {-# OPTIONS_GHC -w #-}
 -- XXX We get some warnings on Windows
+#if __GLASGOW_HASKELL__ >= 701
+{-# LANGUAGE Trustworthy #-}
+#endif
 
 -----------------------------------------------------------------------------
 -- |
