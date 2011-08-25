@@ -342,6 +342,9 @@ waitForProcess ph = do
 -- Output is returned strictly, so this is not suitable for
 -- interactive applications.
 --
+-- This function throws an 'IOError' if the process 'ExitCode' is
+-- anything other than 'ExitSuccess'.
+--
 -- Users of this function should compile with @-threaded@ if they
 -- want other Haskell threads to keep running while waiting on
 -- the result of readProcess.
