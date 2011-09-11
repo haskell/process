@@ -456,7 +456,7 @@ commandToProcess
   -> IO (FilePath, String)
 commandToProcess (ShellCommand string) = do
   cmd <- findCommandInterpreter
-  return (cmd, translate cmd ++ "/c " ++ string)
+  return (cmd, translate cmd ++ " /c " ++ string)
 	-- We don't want to put the cmd into a single
 	-- argument, because cmd.exe will not try to split it up.  Instead,
 	-- we just tack the command on the end of the cmd.exe command line,
