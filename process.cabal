@@ -38,6 +38,7 @@ Library {
         runProcess.h
     install-includes:
         runProcess.h
+        processFlags.h
         HsProcessConfig.h
     if os(windows)
         build-depends: Win32 >=2.2.0.0
