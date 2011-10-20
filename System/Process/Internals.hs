@@ -47,7 +47,7 @@ module System.Process.Internals (
 
 #ifndef __HUGS__
 #if !defined(mingw32_HOST_OS) && !defined(__MINGW32__)
-import System.Posix.Types ( CPid )
+import System.Posix.Types
 import System.Posix.Process.Internals ( pPrPr_disableITimers, c_execvpe )
 import System.IO 	( IOMode(..) )
 #else
