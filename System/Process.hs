@@ -71,7 +71,9 @@ import Prelude hiding (mapM)
 import System.Process.Internals
 
 import System.IO.Error
-import System.Posix.Types as Z
+#if !defined(mingw32_HOST_OS)
+import System.Posix.Types
+#endif
 import qualified Control.Exception as C
 import Control.Concurrent
 import Control.Monad
