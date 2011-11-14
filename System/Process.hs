@@ -73,6 +73,9 @@ import System.Process.Internals
 import System.IO.Error
 #if !defined(mingw32_HOST_OS)
 import System.Posix.Types
+#if MIN_VERSION_unix(2,5,0)
+import System.Posix.Process (getProcessGroupIDOf)
+#endif
 #endif
 import qualified Control.Exception as C
 import Control.Concurrent
@@ -568,7 +571,7 @@ terminateProcess ph = do
 -- processes created using 'createProcess' and setting the 'create_group' flag
 
 interruptProcessGroupOf
-    :: ProcessHandle    -- ^ Lead process in the process group
+    :: ProcessHandle    -- ^ A process in the process group
     -> IO ()
 interruptProcessGroupOf ph = do
 #if mingw32_HOST_OS
@@ -584,7 +587,13 @@ interruptProcessGroupOf ph = do
         case p_ of
             ClosedHandle _ -> return p_
             OpenHandle h -> do
+#if MIN_VERSION_unix(2,5,0)
+                -- getProcessGroupIDOf was added in unix-2.5.0.0
+                pgid <- getProcessGroupIDOf h
+                signalProcessGroup sigINT pgid
+#else
                 signalProcessGroup sigINT h
+#endif
                 return p_
 #endif
 
