@@ -23,7 +23,7 @@ test('3231',
      compile_and_run,
      [''])
 test('4198',
-     [cmd_prefix('\'' + config.compiler + '\'' + ' exitminus1.c -o exitminus1; '),
+     [cmd_prefix('\'' + config.compiler + '\'' + ' exitminus1.c -no-hs-main -o exitminus1; '),
       extra_clean(['exitminus1.o', 'exitminus1', 'exitminus1.exe'])],
      compile_and_run,
      [''])
