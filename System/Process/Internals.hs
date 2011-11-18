@@ -417,12 +417,17 @@ pfdToHandle pfd mode = do
                        False {-is_socket-}
                        False {-non-blocking-}
   fD <- FD.setNonBlockingMode fD True -- see #3316
-  mkHandleFromFD fD fd_type filepath mode False{-is_socket-}
-                       (Just localeEncoding)
+  enc <- getLocaleEncoding
+  mkHandleFromFD fD fd_type filepath mode False {-is_socket-} (Just enc)
 #else
   fdToHandle' fd (Just Stream)
-     False{-Windows: not a socket,  Unix: don't set non-blocking-}
-     filepath mode True{-binary-}
+     False {-Windows: not a socket,  Unix: don't set non-blocking-}
+     filepath mode True {-binary-}
+#endif
+
+#if __GLASGOW_HASKELL__ < 703
+getLocaleEncoding :: IO TextEncoding
+getLocaleEncoding = return localEncoding
 #endif
 
 #ifndef __HUGS__
