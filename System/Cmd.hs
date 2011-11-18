@@ -2,6 +2,7 @@
 #if __GLASGOW_HASKELL__ >= 701
 {-# LANGUAGE Trustworthy #-}
 #endif
+
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  System.Cmd
@@ -43,3 +44,4 @@ translate str = '"' : snd (foldr escape (True,"\"") str)
         escape c    (b,     str) = (False, c : str)
 
 #endif
+
