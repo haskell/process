@@ -417,8 +417,13 @@ pfdToHandle pfd mode = do
                        False {-is_socket-}
                        False {-non-blocking-}
   fD <- FD.setNonBlockingMode fD True -- see #3316
+#if __GLASGOW_HASKELL__ >= 703
+  enc <- getLocaleEncoding
+#else
+  let enc = localeEncoding
+#endif
   mkHandleFromFD fD fd_type filepath mode False{-is_socket-}
-                       (Just localeEncoding)
+                       (Just enc)
 #else
   fdToHandle' fd (Just Stream)
      False{-Windows: not a socket,  Unix: don't set non-blocking-}
