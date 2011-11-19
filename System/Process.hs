@@ -1,9 +1,9 @@
 {-# LANGUAGE CPP, ForeignFunctionInterface #-}
 #if __GLASGOW_HASKELL__ >= 701
 {-# LANGUAGE Trustworthy #-}
--- not available prior to 7.1
 {-# LANGUAGE InterruptibleFFI #-}
 #endif
+
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  System.Process
@@ -19,36 +19,36 @@
 -----------------------------------------------------------------------------
 
 -- ToDo:
---	* Flag to control whether exiting the parent also kills the child.
+--      * Flag to control whether exiting the parent also kills the child.
 
 {- NOTES on createPipe:
  
    createPipe is no longer exported, because of the following problems:
 
-	- it wasn't used to implement runInteractiveProcess on Unix, because
-	  the file descriptors for the unused ends of the pipe need to be closed
-	  in the child process.
+        - it wasn't used to implement runInteractiveProcess on Unix, because
+          the file descriptors for the unused ends of the pipe need to be closed
+          in the child process.
 
         - on Windows, a special version of createPipe is needed that sets
-	  the inheritance flags correctly on the ends of the pipe (see
-	  mkAnonPipe below).
+          the inheritance flags correctly on the ends of the pipe (see
+          mkAnonPipe below).
 -}
 
 module System.Process (
 #ifndef __HUGS__
-	-- * Running sub-processes
+        -- * Running sub-processes
         createProcess,
         shell, proc,
         CreateProcess(..),
         CmdSpec(..),
         StdStream(..),
-	ProcessHandle,
+        ProcessHandle,
 
         -- ** Specific variants of createProcess
-	runCommand,
-	runProcess,
-	runInteractiveCommand,
-	runInteractiveProcess,
+        runCommand,
+        runProcess,
+        runInteractiveCommand,
+        runInteractiveProcess,
         readProcess,
         readProcessWithExitCode,
 #endif
@@ -57,11 +57,11 @@ module System.Process (
         showCommandForUser,
 
 #ifndef __HUGS__
-	-- * Process completion
-	waitForProcess,
-	getProcessExitCode,
-	terminateProcess,
-	interruptProcessGroupOf,
+        -- * Process completion
+        waitForProcess,
+        getProcessExitCode,
+        terminateProcess,
+        interruptProcessGroupOf,
 #endif
  ) where
 
@@ -85,13 +85,13 @@ import Foreign.C
 import System.IO
 import Data.Maybe
 #endif
-import System.Exit	( ExitCode(..) )
+import System.Exit      ( ExitCode(..) )
 
 #ifdef __GLASGOW_HASKELL__
 #if __GLASGOW_HASKELL__ >= 611
-import GHC.IO.Exception	( ioException, IOErrorType(..) )
+import GHC.IO.Exception ( ioException, IOErrorType(..) )
 #else
-import GHC.IOBase	( ioException, IOErrorType(..) )
+import GHC.IOBase       ( ioException, IOErrorType(..) )
 #endif
 #if defined(mingw32_HOST_OS)
 import System.Win32.Process (getProcessId)
@@ -139,13 +139,13 @@ runCommand string = do
      'runProcess'.
 -}
 runProcess
-  :: FilePath			-- ^ Filename of the executable
-  -> [String]			-- ^ Arguments to pass to the executable
-  -> Maybe FilePath		-- ^ Optional path to the working directory
-  -> Maybe [(String,String)]	-- ^ Optional environment (otherwise inherit)
-  -> Maybe Handle		-- ^ Handle to use for @stdin@ (Nothing => use existing @stdin@)
-  -> Maybe Handle		-- ^ Handle to use for @stdout@ (Nothing => use existing @stdout@)
-  -> Maybe Handle		-- ^ Handle to use for @stderr@ (Nothing => use existing @stderr@)
+  :: FilePath                   -- ^ Filename of the executable
+  -> [String]                   -- ^ Arguments to pass to the executable
+  -> Maybe FilePath             -- ^ Optional path to the working directory
+  -> Maybe [(String,String)]    -- ^ Optional environment (otherwise inherit)
+  -> Maybe Handle               -- ^ Handle to use for @stdin@ (Nothing => use existing @stdin@)
+  -> Maybe Handle               -- ^ Handle to use for @stdout@ (Nothing => use existing @stdout@)
+  -> Maybe Handle               -- ^ Handle to use for @stderr@ (Nothing => use existing @stderr@)
   -> IO ProcessHandle
 
 runProcess cmd args mb_cwd mb_env mb_stdin mb_stdout mb_stderr = do
@@ -156,7 +156,7 @@ runProcess cmd args mb_cwd mb_env mb_stdin mb_stdout mb_stderr = do
                           std_in  = mbToStd mb_stdin,
                           std_out = mbToStd mb_stdout,
                           std_err = mbToStd mb_stderr }
-	  Nothing Nothing
+          Nothing Nothing
   maybeClose mb_stdin
   maybeClose mb_stdout
   maybeClose mb_stderr
@@ -283,10 +283,10 @@ runInteractiveCommand string =
     in text mode then use 'hSetBinaryMode'.
 -}
 runInteractiveProcess
-  :: FilePath			-- ^ Filename of the executable
-  -> [String]			-- ^ Arguments to pass to the executable
-  -> Maybe FilePath		-- ^ Optional path to the working directory
-  -> Maybe [(String,String)]	-- ^ Optional environment (otherwise inherit)
+  :: FilePath                   -- ^ Filename of the executable
+  -> [String]                   -- ^ Arguments to pass to the executable
+  -> Maybe FilePath             -- ^ Optional path to the working directory
+  -> Maybe [(String,String)]    -- ^ Optional environment (otherwise inherit)
   -> IO (Handle,Handle,Handle,ProcessHandle)
 
 runInteractiveProcess cmd args mb_cwd mb_env = do
@@ -323,9 +323,9 @@ waitForProcess ph = do
   case p_ of
     ClosedHandle e -> return e
     OpenHandle h  -> do
-	-- don't hold the MVar while we call c_waitForProcess...
-	-- (XXX but there's a small race window here during which another
-	-- thread could close the handle or call waitForProcess)
+        -- don't hold the MVar while we call c_waitForProcess...
+        -- (XXX but there's a small race window here during which another
+        -- thread could close the handle or call waitForProcess)
         alloca $ \pret -> do
           throwErrnoIfMinus1Retry_ "waitForProcess" (c_waitForProcess h pret)
           withProcessHandle ph $ \p_' ->
@@ -494,7 +494,7 @@ syncProcess fun c = do
   old_int  <- installHandler sigINT  Ignore Nothing
   old_quit <- installHandler sigQUIT Ignore Nothing
   (_,_,_,p) <- runGenProcess_ fun c
-		(Just defaultSignal) (Just defaultSignal)
+                (Just defaultSignal) (Just defaultSignal)
   r <- waitForProcess p
   _ <- installHandler sigINT  old_int Nothing
   _ <- installHandler sigQUIT old_quit Nothing
@@ -556,9 +556,9 @@ terminateProcess ph = do
       ClosedHandle _ -> return p_
       OpenHandle h -> do
         throwErrnoIfMinus1Retry_ "terminateProcess" $ c_terminateProcess h
-	return p_
-	-- does not close the handle, we might want to try terminating it
-	-- again, or get its exit code.
+        return p_
+        -- does not close the handle, we might want to try terminating it
+        -- again, or get its exit code.
 
 -- ----------------------------------------------------------------------------
 -- interruptProcessGroupOf
@@ -611,31 +611,31 @@ getProcessExitCode ph = do
     case p_ of
       ClosedHandle e -> return (p_, Just e)
       OpenHandle h ->
-	alloca $ \pExitCode -> do
+        alloca $ \pExitCode -> do
             res <- throwErrnoIfMinus1Retry "getProcessExitCode" $
-	        	c_getProcessExitCode h pExitCode
-	    code <- peek pExitCode
-	    if res == 0
-	      then return (p_, Nothing)
-	      else do
-		   closePHANDLE h
-		   let e  | code == 0 = ExitSuccess
-			  | otherwise = ExitFailure (fromIntegral code)
-		   return (ClosedHandle e, Just e)
+                        c_getProcessExitCode h pExitCode
+            code <- peek pExitCode
+            if res == 0
+              then return (p_, Nothing)
+              else do
+                   closePHANDLE h
+                   let e  | code == 0 = ExitSuccess
+                          | otherwise = ExitFailure (fromIntegral code)
+                   return (ClosedHandle e, Just e)
 
 -- ----------------------------------------------------------------------------
 -- Interface to C bits
 
 foreign import ccall unsafe "terminateProcess"
   c_terminateProcess
-	:: PHANDLE
-	-> IO CInt
+        :: PHANDLE
+        -> IO CInt
 
 foreign import ccall unsafe "getProcessExitCode"
   c_getProcessExitCode
-	:: PHANDLE
-	-> Ptr CInt
-	-> IO CInt
+        :: PHANDLE
+        -> Ptr CInt
+        -> IO CInt
 
 #if __GLASGOW_HASKELL__ < 701
 -- not available prior to 7.1
@@ -644,7 +644,8 @@ foreign import ccall unsafe "getProcessExitCode"
 
 foreign import ccall interruptible "waitForProcess" -- NB. safe - can block
   c_waitForProcess
-	:: PHANDLE
+        :: PHANDLE
         -> Ptr CInt
-	-> IO CInt
+        -> IO CInt
 #endif /* !__HUGS__ */
+
