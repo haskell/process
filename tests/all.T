@@ -7,7 +7,7 @@ if config.platform == "i386-unknown-mingw32":
 else:
       proc004_config = normal
 
-test('process004', proc004_config, compile_and_run, [''])
+test('process004', [ proc004_config, normalise_exe ], compile_and_run, [''])
 test('1780', normal, compile_and_run, [''])
 test('process005', normal, compile_and_run, [''])
 test('process006', normal, compile_and_run, [''])
