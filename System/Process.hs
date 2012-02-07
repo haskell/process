@@ -22,7 +22,7 @@
 --      * Flag to control whether exiting the parent also kills the child.
 
 {- NOTES on createPipe:
- 
+
    createPipe is no longer exported, because of the following problems:
 
         - it wasn't used to implement runInteractiveProcess on Unix, because
@@ -70,7 +70,9 @@ import Prelude hiding (mapM)
 #ifndef __HUGS__
 import System.Process.Internals
 
-import System.IO.Error
+import Control.Exception (SomeException, mask, try, onException, throwIO)
+import Control.DeepSeq (rnf)
+import System.IO.Error (mkIOError, ioeSetErrorString)
 #if !defined(mingw32_HOST_OS)
 import System.Posix.Types
 #if MIN_VERSION_unix(2,5,0)
@@ -132,7 +134,7 @@ runCommand string = do
      process (otherwise these handles are inherited from the current
      process).
 
-     Any 'Handle's passed to 'runProcess' are placed immediately in the 
+     Any 'Handle's passed to 'runProcess' are placed immediately in the
      closed state.
 
      Note: consider using the more general 'createProcess' instead of
@@ -212,7 +214,7 @@ fill in the fields with default values which can be overriden as
 needed.
 
 'createProcess' returns @(mb_stdin_hdl, mb_stdout_hdl, mb_stderr_hdl, p)@,
-where 
+where
 
  * if @std_in == CreatePipe@, then @mb_stdin_hdl@ will be @Just h@,
    where @h@ is the write end of the pipe connected to the child
@@ -275,7 +277,7 @@ runInteractiveCommand string =
      with the process via its @stdin@, @stdout@ and @stderr@ respectively.
 
     For example, to start a process and feed a string to its stdin:
-   
+
 >   (inp,out,err,pid) <- runInteractiveProcess "..."
 >   forkIO (hPutStr inp str)
 
@@ -290,7 +292,7 @@ runInteractiveProcess
   -> IO (Handle,Handle,Handle,ProcessHandle)
 
 runInteractiveProcess cmd args mb_cwd mb_env = do
-  runInteractiveProcess1 "runInteractiveProcess" 
+  runInteractiveProcess1 "runInteractiveProcess"
         (proc cmd args){ cwd = mb_cwd, env = mb_env }
 
 runInteractiveProcess1
@@ -298,11 +300,11 @@ runInteractiveProcess1
   -> CreateProcess
   -> IO (Handle,Handle,Handle,ProcessHandle)
 runInteractiveProcess1 fun cmd = do
-  (mb_in, mb_out, mb_err, p) <- 
+  (mb_in, mb_out, mb_err, p) <-
       runGenProcess_ fun
            cmd{ std_in  = CreatePipe,
                 std_out = CreatePipe,
-                std_err = CreatePipe } 
+                std_err = CreatePipe }
            Nothing Nothing
   return (fromJust mb_in, fromJust mb_out, fromJust mb_err, p)
 
@@ -310,7 +312,7 @@ runInteractiveProcess1 fun cmd = do
 -- waitForProcess
 
 {- | Waits for the specified process to terminate, and returns its exit code.
-   
+
      GHC Note: in order to call @waitForProcess@ without blocking all the
      other threads in the system, you must compile the program with
      @-threaded@.
@@ -341,9 +343,13 @@ waitForProcess ph = do
 
 -- -----------------------------------------------------------------------------
 --
--- | readProcess forks an external process, reads its standard output
+-- | @readProcess@ forks an external process, reads its standard output
 -- strictly, blocking until the process terminates, and returns the output
 -- string.
+--
+-- If an asynchronous exception is thrown to the thread executing
+-- @readProcess@. The forked process will be terminated and @readProcess@ will
+-- wait (block) until the process has been terminated.
 --
 -- Output is returned strictly, so this is not suitable for
 -- interactive applications.
@@ -366,46 +372,53 @@ waitForProcess ph = do
 --
 -- * A string to pass on the standard input to the program.
 --
-readProcess 
+readProcess
     :: FilePath                 -- ^ command to run
     -> [String]                 -- ^ any arguments
     -> String                   -- ^ standard input
     -> IO String                -- ^ stdout
-readProcess cmd args input = do
-    (Just inh, Just outh, _, pid) <-
+readProcess cmd args input =
+    mask $ \restore -> do
+      (Just inh, Just outh, _, pid) <-
         createProcess (proc cmd args){ std_in  = CreatePipe,
                                        std_out = CreatePipe,
                                        std_err = Inherit }
+      flip onException
+        (do hClose inh; hClose outh;
+            terminateProcess pid; waitForProcess pid) $ restore $ do
+        -- fork off a thread to start consuming the output
+        output  <- hGetContents outh
+        waitOut <- forkWait $ C.evaluate $ rnf output
 
-    -- fork off a thread to start consuming the output
-    output  <- hGetContents outh
-    outMVar <- newEmptyMVar
-    _ <- forkIO $ C.evaluate (length output) >> putMVar outMVar ()
+        -- now write and flush any input
+        when (not (null input)) $ do hPutStr inh input; hFlush inh
+        hClose inh -- done with stdin
 
-    -- now write and flush any input
-    when (not (null input)) $ do hPutStr inh input; hFlush inh
-    hClose inh -- done with stdin
+        -- wait on the output
+        waitOut
+        hClose outh
 
-    -- wait on the output
-    takeMVar outMVar
-    hClose outh
+        -- wait on the process
+        ex <- waitForProcess pid
 
-    -- wait on the process
-    ex <- waitForProcess pid
-
-    case ex of
-     ExitSuccess   -> return output
-     ExitFailure r -> 
-      ioError (mkIOError OtherError ("readProcess: " ++ cmd ++ 
-                                     ' ':unwords (map show args) ++ 
-                                     " (exit " ++ show r ++ ")")
-                                 Nothing Nothing)
+        case ex of
+         ExitSuccess   -> return output
+         ExitFailure r ->
+          ioError (mkIOError OtherError ("readProcess: " ++ cmd ++
+                                         ' ':unwords (map show args) ++
+                                         " (exit " ++ show r ++ ")")
+                                     Nothing Nothing)
 
 {- |
-readProcessWithExitCode creates an external process, reads its
+@readProcessWithExitCode@ creates an external process, reads its
 standard output and standard error strictly, waits until the process
 terminates, and then returns the 'ExitCode' of the process,
 the standard output, and the standard error.
+
+If an asynchronous exception is thrown to the thread executing
+@readProcessWithExitCode@. The forked process will be terminated and
+@readProcessWithExitCode@ will wait (block) until the process has been
+terminated.
 
 'readProcess' and 'readProcessWithExitCode' are fairly simple wrappers
 around 'createProcess'.  Constructing variants of these functions is
@@ -418,42 +431,51 @@ readProcessWithExitCode
     -> [String]                 -- ^ any arguments
     -> String                   -- ^ standard input
     -> IO (ExitCode,String,String) -- ^ exitcode, stdout, stderr
-readProcessWithExitCode cmd args input = do
-    (Just inh, Just outh, Just errh, pid) <-
-        createProcess (proc cmd args){ std_in  = CreatePipe,
-                                       std_out = CreatePipe,
-                                       std_err = CreatePipe }
+readProcessWithExitCode cmd args input =
+    mask $ \restore -> do
+      (Just inh, Just outh, Just errh, pid) <- createProcess (proc cmd args)
+                                                   { std_in  = CreatePipe,
+                                                     std_out = CreatePipe,
+                                                     std_err = CreatePipe }
+      flip onException
+        (do hClose inh; hClose outh; hClose errh;
+            terminateProcess pid; waitForProcess pid) $ restore $ do
+        -- fork off a thread to start consuming stdout
+        out <- hGetContents outh
+        waitOut <- forkWait $ C.evaluate $ rnf out
 
-    outMVar <- newEmptyMVar
+        -- fork off a thread to start consuming stderr
+        err <- hGetContents errh
+        waitErr <- forkWait $ C.evaluate $ rnf err
 
-    -- fork off a thread to start consuming stdout
-    out  <- hGetContents outh
-    _ <- forkIO $ C.evaluate (length out) >> putMVar outMVar ()
+        -- now write and flush any input
+        when (not (null input)) $ do hPutStr inh input; hFlush inh
+        hClose inh -- done with stdin
 
-    -- fork off a thread to start consuming stderr
-    err  <- hGetContents errh
-    _ <- forkIO $ C.evaluate (length err) >> putMVar outMVar ()
+        -- wait on the output
+        waitOut
+        waitErr
 
-    -- now write and flush any input
-    when (not (null input)) $ do hPutStr inh input; hFlush inh
-    hClose inh -- done with stdin
+        hClose outh
+        hClose errh
 
-    -- wait on the output
-    takeMVar outMVar
-    takeMVar outMVar
-    hClose outh
-    hClose errh
+        -- wait on the process
+        ex <- waitForProcess pid
 
-    -- wait on the process
-    ex <- waitForProcess pid
+        return (ex, out, err)
 
-    return (ex, out, err)
+forkWait :: IO a -> IO (IO a)
+forkWait a = do
+  res <- newEmptyMVar
+  _ <- mask $ \restore -> forkIO $ try (restore a) >>= putMVar res
+  return (takeMVar res >>= either (\ex -> throwIO (ex :: SomeException)) return)
+
 #endif /* !__HUGS__ */
 
 -- ---------------------------------------------------------------------------
 -- system
 
-{-| 
+{-|
 Computation @system cmd@ returns the exit code produced when the
 operating system runs the shell command @cmd@.
 
@@ -552,7 +574,7 @@ showCommandForUser cmd args = unwords (map translate (cmd : args))
 terminateProcess :: ProcessHandle -> IO ()
 terminateProcess ph = do
   withProcessHandle_ ph $ \p_ ->
-    case p_ of 
+    case p_ of
       ClosedHandle _ -> return p_
       OpenHandle h -> do
         throwErrnoIfMinus1Retry_ "terminateProcess" $ c_terminateProcess h
@@ -600,7 +622,7 @@ interruptProcessGroupOf ph = do
 -- ----------------------------------------------------------------------------
 -- getProcessExitCode
 
-{- | 
+{- |
 This is a non-blocking version of 'waitForProcess'.  If the process is
 still running, 'Nothing' is returned.  If the process has exited, then
 @'Just' e@ is returned where @e@ is the exit code of the process.
