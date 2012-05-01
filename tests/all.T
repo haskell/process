@@ -2,7 +2,7 @@ test('process001', extra_clean(['process001.out']), compile_and_run, [''])
 test('process002', extra_clean(['process002.out']), compile_and_run, [''])
 test('process003', omit_ways(['ghci']), compile_and_run, [''])
 
-if config.platform == "i386-unknown-mingw32":
+if config.os == "mingw32":
       proc004_config = exit_code(1)
 else:
       proc004_config = normal
