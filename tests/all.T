@@ -29,3 +29,4 @@ test('4198',
      [''])
 
 test('3994', only_ways(['threaded1','threaded2']), compile_and_run, [''])
+test('T4889', normal, compile_and_run, [''])

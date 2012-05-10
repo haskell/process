@@ -91,7 +91,7 @@ import System.Exit      ( ExitCode(..) )
 
 #ifdef __GLASGOW_HASKELL__
 #if __GLASGOW_HASKELL__ >= 611
-import GHC.IO.Exception ( ioException, IOErrorType(..) )
+import GHC.IO.Exception ( ioException, IOErrorType(..), IOException(..) )
 #else
 import GHC.IOBase       ( ioException, IOErrorType(..) )
 #endif
@@ -449,8 +449,21 @@ readProcessWithExitCode cmd args input =
         waitErr <- forkWait $ C.evaluate $ rnf err
 
         -- now write and flush any input
-        when (not (null input)) $ do hPutStr inh input; hFlush inh
-        hClose inh -- done with stdin
+        let writeInput = do
+              unless (null input) $ do
+                hPutStr inh input
+                hFlush inh
+              hClose inh
+
+#if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 611
+        C.catch writeInput $ \e -> case e of
+          IOError { ioe_type = ResourceVanished
+                  , ioe_errno = Just ioe }
+            | Errno ioe == ePIPE -> return ()
+          _ -> throwIO e
+#else
+        writeInput
+#endif
 
         -- wait on the output
         waitOut
