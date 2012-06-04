@@ -199,7 +199,9 @@ data CmdSpec
   = ShellCommand String            
       -- ^ a command line to execute using the shell
   | RawCommand FilePath [String]
-      -- ^ the filename of an executable with a list of arguments
+      -- ^ the filename of an executable with a list of arguments.
+      -- see 'System.Process.proc' for the precise interpretation of
+      -- the @FilePath@ field.
 
 data StdStream
   = Inherit                  -- ^ Inherit Handle from parent

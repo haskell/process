@@ -141,7 +141,7 @@ runCommand string = do
      'runProcess'.
 -}
 runProcess
-  :: FilePath                   -- ^ Filename of the executable
+  :: FilePath                   -- ^ Filename of the executable (see 'proc' for details)
   -> [String]                   -- ^ Arguments to pass to the executable
   -> Maybe FilePath             -- ^ Optional path to the working directory
   -> Maybe [(String,String)]    -- ^ Optional environment (otherwise inherit)
@@ -178,6 +178,23 @@ runProcess cmd args mb_cwd mb_env mb_stdin mb_stdout mb_stderr = do
 
 -- | Construct a 'CreateProcess' record for passing to 'createProcess',
 -- representing a raw command with arguments.
+--
+-- The @FilePath@ names the executable, and is interpreted according
+-- to the platform's standard policy for searching for
+-- executables. Specifically:
+--
+-- * on Unix systems the @execvp@ semantics is used, where if the
+--   filename does not contain a slash (@/@) then the @PATH@
+--   environment variable is searched for the executable.
+--
+-- * on Windows systems the Win32 @CreateProcess@ semantics is used.
+--   Briefly: if the filename does not contain a path, then the
+--   directory containing the parent executable is searched, followed
+--   by the current directory, then some some standard locations, and
+--   finally the current @PATH@.  An @.exe@ extension is added if the
+--   filename does not already have an extension.  For full details
+--   see the documentation for the Windows @SearchPath@ API.
+
 proc :: FilePath -> [String] -> CreateProcess
 proc cmd args = CreateProcess { cmdspec = RawCommand cmd args,
                                 cwd = Nothing,
@@ -285,7 +302,7 @@ runInteractiveCommand string =
     in text mode then use 'hSetBinaryMode'.
 -}
 runInteractiveProcess
-  :: FilePath                   -- ^ Filename of the executable
+  :: FilePath                   -- ^ Filename of the executable (see 'proc' for details)
   -> [String]                   -- ^ Arguments to pass to the executable
   -> Maybe FilePath             -- ^ Optional path to the working directory
   -> Maybe [(String,String)]    -- ^ Optional environment (otherwise inherit)
@@ -373,7 +390,7 @@ waitForProcess ph = do
 -- * A string to pass on the standard input to the program.
 --
 readProcess
-    :: FilePath                 -- ^ command to run
+    :: FilePath                 -- ^ Filename of the executable (see 'proc' for details)
     -> [String]                 -- ^ any arguments
     -> String                   -- ^ standard input
     -> IO String                -- ^ stdout
@@ -427,7 +444,7 @@ quite easy: follow the link to the source code to see how
 -}
 
 readProcessWithExitCode
-    :: FilePath                 -- ^ command to run
+    :: FilePath                 -- ^ Filename of the executable (see 'proc' for details)
     -> [String]                 -- ^ any arguments
     -> String                   -- ^ standard input
     -> IO (ExitCode,String,String) -- ^ exitcode, stdout, stderr
