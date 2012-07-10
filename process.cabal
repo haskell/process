@@ -58,7 +58,7 @@ Library {
   }
 
   build-depends: directory >= 1.0 && < 1.2,
-                 filepath  >= 1.1 && < 1.3,
+                 filepath  >= 1.1 && < 1.4,
                  deepseq   >= 1.1 && < 1.4
 
   extensions: CPP
