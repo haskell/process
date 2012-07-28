@@ -46,6 +46,7 @@ module System.Process.Internals (
 
 #ifndef __HUGS__
 #if !defined(mingw32_HOST_OS) && !defined(__MINGW32__)
+import Data.Char
 import System.Posix.Types
 import System.Posix.Process.Internals ( pPrPr_disableITimers, c_execvpe )
 import System.IO        ( IOMode(..) )
@@ -588,9 +589,16 @@ translate str = '"' : snd (foldr escape (True,"\"") str)
         -- rest of the string is a sequence of backslashes followed by
         -- a double quote.
 #else
-translate str = '\'' : foldr escape "'" str
+translate "" = "''"
+translate str
+   -- goodChar is a pessimistic predicate, such that if an argument is
+   -- non-empty and only contains goodChars, then there is no need to
+   -- do any quoting or escaping
+ | all goodChar str = str
+ | otherwise        = '\'' : foldr escape "'" str
   where escape '\'' = showString "'\\''"
         escape c    = showChar c
+        goodChar c = isAlphaNum c || c == '-' || c == '_'
 #endif
 
 -- ----------------------------------------------------------------------------
