@@ -333,6 +333,13 @@ runInteractiveProcess1 fun cmd = do
      GHC Note: in order to call @waitForProcess@ without blocking all the
      other threads in the system, you must compile the program with
      @-threaded@.
+
+     On Unix systems, if the process died as the result of a signal,
+     then the exit code returned is @ExitFailure (128 + signal)@ where
+     @signal@ is the signal number.  The signal numbers are
+     platform-specific, so to test for a specific signal use the
+     constants provided by @System.Posix.Signals@ in the @unix@
+     package.
 -}
 waitForProcess
   :: ProcessHandle
@@ -441,6 +448,9 @@ terminated.
 around 'createProcess'.  Constructing variants of these functions is
 quite easy: follow the link to the source code to see how
 'readProcess' is implemented.
+
+On Unix systems, see 'waitForProcess' for the meaning of exit codes
+when the process died as the result of a signal.
 -}
 
 readProcessWithExitCode
@@ -523,6 +533,9 @@ This computation may fail with
 On Windows, 'system' passes the command to the Windows command
 interpreter (@CMD.EXE@ or @COMMAND.COM@), hence Unixy shell tricks
 will not work.
+
+On Unix systems, see 'waitForProcess' for the meaning of exit codes
+when the process died as the result of a signal.
 -}
 #ifdef __GLASGOW_HASKELL__
 system :: String -> IO ExitCode
@@ -656,7 +669,11 @@ interruptProcessGroupOf ph = do
 This is a non-blocking version of 'waitForProcess'.  If the process is
 still running, 'Nothing' is returned.  If the process has exited, then
 @'Just' e@ is returned where @e@ is the exit code of the process.
+
+On Unix systems, see 'waitForProcess' for the meaning of exit codes
+when the process died as the result of a signal.
 -}
+
 getProcessExitCode :: ProcessHandle -> IO (Maybe ExitCode)
 getProcessExitCode ph = do
   withProcessHandle ph $ \p_ ->
