@@ -22,6 +22,13 @@
    UNIX versions
    ------------------------------------------------------------------------- */
 
+//
+// If a process terminates with a signal, the exit status we return to
+// via the System.Process API follows the Unix shell convention of
+// (128 + signal).
+//
+#define TERMSIG_STATUS(r) ((r) | 0x80)
+
 static long max_fd = 0;
 
 // Rts internal API, not exposed in a public header file:
@@ -245,8 +252,8 @@ getProcessExitCode (ProcHandle handle, int *pExitCode)
 	else
 	    if (WIFSIGNALED(wstat))
 	    {
-		errno = EINTR;
-		return -1;
+                *pExitCode = TERMSIG_STATUS(WTERMSIG(wstat));
+                return 1;
 	    }
 	    else
 	    {
@@ -281,7 +288,7 @@ int waitForProcess (ProcHandle handle, int *pret)
     else
 	if (WIFSIGNALED(wstat))
 	{
-            *pret = wstat;
+            *pret = TERMSIG_STATUS(WTERMSIG(wstat));
 	    return 0;
 	}
 	else
