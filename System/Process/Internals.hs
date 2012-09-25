@@ -598,7 +598,7 @@ translate str
  | otherwise        = '\'' : foldr escape "'" str
   where escape '\'' = showString "'\\''"
         escape c    = showChar c
-        goodChar c = isAlphaNum c || c == '-' || c == '_'
+        goodChar c = isAlphaNum c || c `elem` "-_.,/"
 #endif
 
 -- ----------------------------------------------------------------------------
