@@ -1,5 +1,5 @@
 {-# LANGUAGE CPP, ForeignFunctionInterface #-}
-#if __GLASGOW_HASKELL__ >= 701
+#ifdef __GLASGOW_HASKELL__
 {-# LANGUAGE Trustworthy #-}
 {-# LANGUAGE InterruptibleFFI #-}
 #endif
@@ -90,11 +90,7 @@ import Data.Maybe
 import System.Exit      ( ExitCode(..) )
 
 #ifdef __GLASGOW_HASKELL__
-#if __GLASGOW_HASKELL__ >= 611
 import GHC.IO.Exception ( ioException, IOErrorType(..), IOException(..) )
-#else
-import GHC.IOBase       ( ioException, IOErrorType(..) )
-#endif
 #if defined(mingw32_HOST_OS)
 import System.Win32.Process (getProcessId)
 import System.Win32.Console (generateConsoleCtrlEvent, cTRL_BREAK_EVENT)
@@ -482,7 +478,7 @@ readProcessWithExitCode cmd args input =
                 hFlush inh
               hClose inh
 
-#if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 611
+#if defined(__GLASGOW_HASKELL__)
         C.catch writeInput $ \e -> case e of
           IOError { ioe_type = ResourceVanished
                   , ioe_errno = Just ioe }
@@ -705,11 +701,6 @@ foreign import ccall unsafe "getProcessExitCode"
         :: PHANDLE
         -> Ptr CInt
         -> IO CInt
-
-#if __GLASGOW_HASKELL__ < 701
--- not available prior to 7.1
-#define interruptible safe
-#endif
 
 foreign import ccall interruptible "waitForProcess" -- NB. safe - can block
   c_waitForProcess

@@ -2,7 +2,7 @@
 {-# OPTIONS_HADDOCK hide #-}
 {-# OPTIONS_GHC -w #-}
 -- XXX We get some warnings on Windows
-#if __GLASGOW_HASKELL__ >= 701
+#ifdef __GLASGOW_HASKELL__
 {-# LANGUAGE Trustworthy #-}
 #endif
 
@@ -66,7 +66,6 @@ import Foreign
 # ifdef __GLASGOW_HASKELL__
 
 import System.Posix.Internals
-#if __GLASGOW_HASKELL__ >= 611
 import GHC.IO.Exception
 import GHC.IO.Encoding
 import qualified GHC.IO.FD as FD
@@ -81,10 +80,6 @@ import Data.Typeable
 import GHC.IO.IOMode
 import System.Win32.DebugApi (PHANDLE)
 #endif
-#else
-import GHC.IOBase       ( haFD, FD, IOException(..) )
-import GHC.Handle
-#endif
 
 # elif __HUGS__
 
@@ -92,9 +87,7 @@ import Hugs.Exception   ( IOException(..) )
 
 # endif
 
-#ifdef base4
 import System.IO.Error          ( ioeSetFileName )
-#endif
 #if defined(mingw32_HOST_OS)
 import Control.Monad            ( when )
 import System.Directory         ( doesFileExist )
@@ -388,10 +381,7 @@ fd_stderr = 2
 mbFd :: String -> FD -> StdStream -> IO FD
 mbFd _   _std CreatePipe      = return (-1)
 mbFd _fun std Inherit         = return std
-mbFd fun _std (UseHandle hdl) = 
-#if __GLASGOW_HASKELL__ < 611
-  withHandle_ fun hdl $ return . haFD
-#else
+mbFd fun _std (UseHandle hdl) =
   withHandle fun hdl $ \h@Handle__{haDevice=dev,..} ->
     case cast dev of
       Just fd -> do
@@ -403,7 +393,6 @@ mbFd fun _std (UseHandle hdl) =
           ioError (mkIOError illegalOperationErrorType
                       "createProcess" (Just hdl) Nothing
                    `ioeSetErrorString` "handle is not a file descriptor")
-#endif
 
 mbPipe :: StdStream -> Ptr FD -> IOMode -> IO (Maybe Handle)
 mbPipe CreatePipe pfd  mode = fmap Just (pfdToHandle pfd mode)
@@ -413,7 +402,6 @@ pfdToHandle :: Ptr FD -> IOMode -> IO Handle
 pfdToHandle pfd mode = do
   fd <- peek pfd
   let filepath = "fd:" ++ show fd
-#if __GLASGOW_HASKELL__ >= 611
   (fD,fd_type) <- FD.mkFD (fromIntegral fd) mode 
                        (Just (Stream,0,0)) -- avoid calling fstat()
                        False {-is_socket-}
@@ -421,16 +409,6 @@ pfdToHandle pfd mode = do
   fD <- FD.setNonBlockingMode fD True -- see #3316
   enc <- getLocaleEncoding
   mkHandleFromFD fD fd_type filepath mode False {-is_socket-} (Just enc)
-#else
-  fdToHandle' fd (Just Stream)
-     False {-Windows: not a socket,  Unix: don't set non-blocking-}
-     filepath mode True {-binary-}
-#endif
-
-#if __GLASGOW_HASKELL__ < 703
-getLocaleEncoding :: IO TextEncoding
-getLocaleEncoding = return localeEncoding
-#endif
 
 #ifndef __HUGS__
 -- ----------------------------------------------------------------------------
@@ -478,13 +456,7 @@ commandToProcess (RawCommand cmd args) = do
 findCommandInterpreter :: IO FilePath
 findCommandInterpreter = do
   -- try COMSPEC first
-#ifdef base3
-  catchJust (\e -> case e of 
-                     IOException e | isDoesNotExistError e -> Just e
-                     _otherwise -> Nothing)
-#else
   catchJust (\e -> if isDoesNotExistError e then Just e else Nothing)
-#endif
             (getEnv "COMSPEC") $ \e -> do
 
     -- try to find CMD.EXE or COMMAND.COM
@@ -607,11 +579,7 @@ translate str
 withFilePathException :: FilePath -> IO a -> IO a
 withFilePathException fpath act = handle mapEx act
   where
-#ifdef base4
     mapEx ex = ioError (ioeSetFileName ex fpath)
-#else
-    mapEx (IOException (IOError h iot fun str _)) = ioError (IOError h iot fun str (Just fpath))
-#endif
 
 #if !defined(mingw32_HOST_OS) && !defined(__MINGW32__)
 withCEnvironment :: [(String,String)] -> (Ptr CString  -> IO a) -> IO a

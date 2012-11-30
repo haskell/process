@@ -89,9 +89,7 @@ runInteractiveProcess (char *const args[],
     {
     case -1:
         unblockUserSignals();
-#if __GLASGOW_HASKELL__ > 612
         startTimer();
-#endif
         if (fdStdIn == -1) {
             close(fdStdInput[0]);
             close(fdStdInput[1]);
