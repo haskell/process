@@ -103,10 +103,6 @@ import System.Posix.Signals
 import Hugs.System
 #endif
 
-#ifdef __NHC__
-import System (system)
-#endif
-
 
 #ifndef __HUGS__
 -- ----------------------------------------------------------------------------
