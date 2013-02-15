@@ -21,8 +21,7 @@
 --
 -----------------------------------------------------------------------------
 
--- later: {-# DEPRECATED "Use System.Process instead" #-}
-module System.Cmd
+module System.Cmd {-# DEPRECATED "Use System.Process instead" #-}
     ( system,        -- :: String -> IO ExitCode
       rawSystem,     -- :: FilePath -> [String] -> IO ExitCode
     ) where
