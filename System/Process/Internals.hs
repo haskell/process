@@ -57,6 +57,7 @@ import Data.IORef
 #endif
 
 import System.IO        ( Handle )
+import System.IO.Unsafe
 import System.Exit      ( ExitCode )
 import Control.Concurrent
 import Control.Exception
