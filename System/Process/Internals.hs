@@ -54,9 +54,6 @@ import System.IO
 #endif
 
 import System.IO.Unsafe
-#if !defined(mingw32_HOST_OS)
-import System.Exit      ( ExitCode )
-#endif
 import Control.Concurrent
 import Control.Exception
 import Foreign.C
@@ -69,7 +66,6 @@ import GHC.IO.Exception
 import GHC.IO.Encoding
 import qualified GHC.IO.FD as FD
 import GHC.IO.Device
-import GHC.IO.Handle
 import GHC.IO.Handle.FD
 import GHC.IO.Handle.Internals
 import GHC.IO.Handle.Types
@@ -128,9 +124,6 @@ withProcessHandle_ (ProcessHandle m) io = modifyMVar_ m io
 #if !defined(mingw32_HOST_OS) && !defined(__MINGW32__)
 
 type PHANDLE = CPid
-
-throwErrnoIfBadPHandle :: String -> IO PHANDLE -> IO PHANDLE  
-throwErrnoIfBadPHandle = throwErrnoIfMinus1
 
 mkProcessHandle :: PHANDLE -> IO ProcessHandle
 mkProcessHandle p = do
