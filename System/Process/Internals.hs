@@ -1,7 +1,7 @@
 {-# LANGUAGE CPP, ForeignFunctionInterface, RecordWildCards #-}
 {-# OPTIONS_HADDOCK hide #-}
-{-# OPTIONS_GHC -w #-}
--- XXX We get some warnings on Windows
+-- TODO: Remove this pragma:
+{-# OPTIONS -fno-warn-deprecations #-}
 #ifdef __GLASGOW_HASKELL__
 {-# LANGUAGE Trustworthy #-}
 #endif
@@ -49,16 +49,14 @@ module System.Process.Internals (
 import Data.Char
 import System.Posix.Types
 import System.Posix.Process.Internals ( pPrPr_disableITimers, c_execvpe )
-import System.IO        ( IOMode(..) )
-#else
-import Data.Word ( Word32 )
-import Data.IORef
+import System.IO
 #endif
 #endif
 
-import System.IO        ( Handle )
 import System.IO.Unsafe
+#if !defined(mingw32_HOST_OS)
 import System.Exit      ( ExitCode )
+#endif
 import Control.Concurrent
 import Control.Exception
 import Foreign.C
@@ -88,12 +86,8 @@ import Hugs.Exception   ( IOException(..) )
 
 # endif
 
-import System.IO.Error          ( ioeSetFileName )
 #if defined(mingw32_HOST_OS)
-import Control.Monad            ( when )
 import System.Directory         ( doesFileExist )
-import System.IO.Error          ( isDoesNotExistError, doesNotExistErrorType,
-                                  mkIOError )
 import System.Environment       ( getEnv )
 import System.FilePath
 #endif
@@ -160,6 +154,7 @@ mkProcessHandle h = do
    addMVarFinalizer m (processHandleFinaliser m)
    return (ProcessHandle m)
 
+processHandleFinaliser :: MVar ProcessHandle__ -> IO ()
 processHandleFinaliser m =
    modifyMVar_ m $ \p_ -> do 
         case p_ of
@@ -383,13 +378,13 @@ mbFd :: String -> FD -> StdStream -> IO FD
 mbFd _   _std CreatePipe      = return (-1)
 mbFd _fun std Inherit         = return std
 mbFd fun _std (UseHandle hdl) =
-  withHandle fun hdl $ \h@Handle__{haDevice=dev,..} ->
+  withHandle fun hdl $ \Handle__{haDevice=dev,..} ->
     case cast dev of
       Just fd -> do
          -- clear the O_NONBLOCK flag on this FD, if it is set, since
          -- we're exposing it externally (see #3316)
-         fd <- FD.setNonBlockingMode fd False
-         return (Handle__{haDevice=fd,..}, FD.fdFD fd)
+         fd' <- FD.setNonBlockingMode fd False
+         return (Handle__{haDevice=fd',..}, FD.fdFD fd')
       Nothing ->
           ioError (mkIOError illegalOperationErrorType
                       "createProcess" (Just hdl) Nothing
@@ -407,9 +402,9 @@ pfdToHandle pfd mode = do
                        (Just (Stream,0,0)) -- avoid calling fstat()
                        False {-is_socket-}
                        False {-non-blocking-}
-  fD <- FD.setNonBlockingMode fD True -- see #3316
+  fD' <- FD.setNonBlockingMode fD True -- see #3316
   enc <- getLocaleEncoding
-  mkHandleFromFD fD fd_type filepath mode False {-is_socket-} (Just enc)
+  mkHandleFromFD fD' fd_type filepath mode False {-is_socket-} (Just enc)
 
 #ifndef __HUGS__
 -- ----------------------------------------------------------------------------
@@ -458,7 +453,7 @@ findCommandInterpreter :: IO FilePath
 findCommandInterpreter = do
   -- try COMSPEC first
   catchJust (\e -> if isDoesNotExistError e then Just e else Nothing)
-            (getEnv "COMSPEC") $ \e -> do
+            (getEnv "COMSPEC") $ \_ -> do
 
     -- try to find CMD.EXE or COMMAND.COM
     {-
@@ -551,11 +546,11 @@ use lpCommandLine alone, which CreateProcess supports.
 
 translate :: String -> String
 #if mingw32_HOST_OS
-translate str = '"' : snd (foldr escape (True,"\"") str)
-  where escape '"'  (b,     str) = (True,  '\\' : '"'  : str)
+translate xs = '"' : snd (foldr escape (True,"\"") xs)
+  where escape '"'  (_,     str) = (True,  '\\' : '"'  : str)
         escape '\\' (True,  str) = (True,  '\\' : '\\' : str)
         escape '\\' (False, str) = (False, '\\' : str)
-        escape c    (b,     str) = (False, c : str)
+        escape c    (_,     str) = (False, c : str)
         -- See long comment above for what this function is trying to do.
         --
         -- The Bool passed back along the string is True iff the
