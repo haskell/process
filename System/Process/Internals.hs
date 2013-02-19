@@ -1,7 +1,5 @@
 {-# LANGUAGE CPP, ForeignFunctionInterface, RecordWildCards #-}
 {-# OPTIONS_HADDOCK hide #-}
--- TODO: Remove this pragma:
-{-# OPTIONS -fno-warn-deprecations #-}
 #ifdef __GLASGOW_HASKELL__
 {-# LANGUAGE Trustworthy #-}
 #endif
@@ -139,12 +137,11 @@ throwErrnoIfBadPHandle :: String -> IO PHANDLE -> IO PHANDLE
 throwErrnoIfBadPHandle = throwErrnoIfNull
 
 -- On Windows, we have to close this HANDLE when it is no longer required,
--- hence we add a finalizer to it, using an IORef as the box on which to
--- attach the finalizer.
+-- hence we add a finalizer to it
 mkProcessHandle :: PHANDLE -> IO ProcessHandle
 mkProcessHandle h = do
    m <- newMVar (OpenHandle h)
-   addMVarFinalizer m (processHandleFinaliser m)
+   _ <- mkWeakMVar m (processHandleFinaliser m)
    return (ProcessHandle m)
 
 processHandleFinaliser :: MVar ProcessHandle__ -> IO ()
