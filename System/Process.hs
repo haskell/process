@@ -573,12 +573,10 @@ rawSystem cmd args = syncProcess "rawSystem" (proc cmd args)
 #elif !mingw32_HOST_OS
 -- crude fallback implementation: could do much better than this under Unix
 rawSystem cmd args = system (showCommandForUser cmd args)
-#else /* mingw32_HOST_OS &&  ! __GLASGOW_HASKELL__ */
-# if __HUGS__
+#elif __HUGS__
 rawSystem cmd args = system (cmd ++ showCommandForUser "" args)
-# else
+#else
 rawSystem cmd args = system (showCommandForUser cmd args)
-#endif
 #endif
 
 -- | Given a program @p@ and arguments @args@,
@@ -631,20 +629,14 @@ interruptProcessGroupOf
     :: ProcessHandle    -- ^ A process in the process group
     -> IO ()
 interruptProcessGroupOf ph = do
-#if mingw32_HOST_OS
     withProcessHandle ph $ \p_ -> do
         case p_ of
             ClosedHandle _ -> return ()
             OpenHandle h -> do
+#if mingw32_HOST_OS
                 pid <- getProcessId h
                 generateConsoleCtrlEvent cTRL_BREAK_EVENT pid
-                return ()
-#else
-    withProcessHandle ph $ \p_ -> do
-        case p_ of
-            ClosedHandle _ -> return ()
-            OpenHandle h -> do
-#if MIN_VERSION_unix(2,5,0)
+#elif MIN_VERSION_unix(2,5,0)
                 -- getProcessGroupIDOf was added in unix-2.5.0.0
                 pgid <- getProcessGroupIDOf h
                 signalProcessGroup sigINT pgid
@@ -652,7 +644,6 @@ interruptProcessGroupOf ph = do
                 signalProcessGroup sigINT h
 #endif
                 return ()
-#endif
 
 -- ----------------------------------------------------------------------------
 -- getProcessExitCode
