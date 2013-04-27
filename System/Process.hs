@@ -636,12 +636,17 @@ interruptProcessGroupOf ph = do
 #if mingw32_HOST_OS
                 pid <- getProcessId h
                 generateConsoleCtrlEvent cTRL_BREAK_EVENT pid
-#elif MIN_VERSION_unix(2,5,0)
+-- We can't use an #elif here, because MIN_VERSION_unix isn't defined
+-- on Windows, so on Windows cpp fails:
+-- error: missing binary operator before token "("
+#else
+#if MIN_VERSION_unix(2,5,0)
                 -- getProcessGroupIDOf was added in unix-2.5.0.0
                 pgid <- getProcessGroupIDOf h
                 signalProcessGroup sigINT pgid
 #else
                 signalProcessGroup sigINT h
+#endif
 #endif
                 return ()
 
