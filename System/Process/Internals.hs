@@ -23,7 +23,7 @@ module System.Process.Internals (
 #ifndef __HUGS__
         ProcessHandle(..), ProcessHandle__(..), 
         PHANDLE, closePHANDLE, mkProcessHandle, 
-        withProcessHandle, withProcessHandle_,
+        modifyProcessHandle, withProcessHandle,
 #ifdef __GLASGOW_HASKELL__
         CreateProcess(..),
         CmdSpec(..), StdStream(..),
@@ -107,17 +107,17 @@ import System.FilePath
 data ProcessHandle__ = OpenHandle PHANDLE | ClosedHandle ExitCode
 newtype ProcessHandle = ProcessHandle (MVar ProcessHandle__)
 
-withProcessHandle
+modifyProcessHandle
         :: ProcessHandle 
         -> (ProcessHandle__ -> IO (ProcessHandle__, a))
         -> IO a
-withProcessHandle (ProcessHandle m) io = modifyMVar m io
+modifyProcessHandle (ProcessHandle m) io = modifyMVar m io
 
-withProcessHandle_
+withProcessHandle
         :: ProcessHandle 
-        -> (ProcessHandle__ -> IO ProcessHandle__)
-        -> IO ()
-withProcessHandle_ (ProcessHandle m) io = modifyMVar_ m io
+        -> (ProcessHandle__ -> IO a)
+        -> IO a
+withProcessHandle (ProcessHandle m) io = withMVar m io
 
 #if !defined(mingw32_HOST_OS) && !defined(__MINGW32__)
 

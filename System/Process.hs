@@ -337,7 +337,7 @@ waitForProcess
   :: ProcessHandle
   -> IO ExitCode
 waitForProcess ph = do
-  p_ <- withProcessHandle ph $ \p_ -> return (p_,p_)
+  p_ <- modifyProcessHandle ph $ \p_ -> return (p_,p_)
   case p_ of
     ClosedHandle e -> return e
     OpenHandle h  -> do
@@ -346,7 +346,7 @@ waitForProcess ph = do
         -- thread could close the handle or call waitForProcess)
         alloca $ \pret -> do
           throwErrnoIfMinus1Retry_ "waitForProcess" (c_waitForProcess h pret)
-          withProcessHandle ph $ \p_' ->
+          modifyProcessHandle ph $ \p_' ->
             case p_' of
               ClosedHandle e -> return (p_',e)
               OpenHandle ph' -> do
@@ -608,12 +608,12 @@ showCommandForUser cmd args = unwords (map translate (cmd : args))
 
 terminateProcess :: ProcessHandle -> IO ()
 terminateProcess ph = do
-  withProcessHandle_ ph $ \p_ ->
+  withProcessHandle ph $ \p_ ->
     case p_ of
-      ClosedHandle _ -> return p_
+      ClosedHandle _ -> return ()
       OpenHandle h -> do
         throwErrnoIfMinus1Retry_ "terminateProcess" $ c_terminateProcess h
-        return p_
+        return ()
         -- does not close the handle, we might want to try terminating it
         -- again, or get its exit code.
 
@@ -632,17 +632,17 @@ interruptProcessGroupOf
     -> IO ()
 interruptProcessGroupOf ph = do
 #if mingw32_HOST_OS
-    withProcessHandle_ ph $ \p_ -> do
+    withProcessHandle ph $ \p_ -> do
         case p_ of
-            ClosedHandle _ -> return p_
+            ClosedHandle _ -> return ()
             OpenHandle h -> do
                 pid <- getProcessId h
                 generateConsoleCtrlEvent cTRL_BREAK_EVENT pid
-                return p_
+                return ()
 #else
-    withProcessHandle_ ph $ \p_ -> do
+    withProcessHandle ph $ \p_ -> do
         case p_ of
-            ClosedHandle _ -> return p_
+            ClosedHandle _ -> return ()
             OpenHandle h -> do
 #if MIN_VERSION_unix(2,5,0)
                 -- getProcessGroupIDOf was added in unix-2.5.0.0
@@ -651,7 +651,7 @@ interruptProcessGroupOf ph = do
 #else
                 signalProcessGroup sigINT h
 #endif
-                return p_
+                return ()
 #endif
 
 -- ----------------------------------------------------------------------------
@@ -668,7 +668,7 @@ when the process died as the result of a signal.
 
 getProcessExitCode :: ProcessHandle -> IO (Maybe ExitCode)
 getProcessExitCode ph = do
-  withProcessHandle ph $ \p_ ->
+  modifyProcessHandle ph $ \p_ ->
     case p_ of
       ClosedHandle e -> return (p_, Just e)
       OpenHandle h ->
