@@ -85,7 +85,7 @@ runInteractiveProcess (char *const args[],
     // signal and keeps restarting indefinitely.
     stopTimer();
 
-    switch(pid = fork())
+    switch(pid = myfork())
     {
     case -1:
         unblockUserSignals();

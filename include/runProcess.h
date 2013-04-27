@@ -29,8 +29,12 @@
 #include <vfork.h>
 #endif
 
-#ifdef HAVE_VFORK
-#define fork vfork
+#if defined(HAVE_WORKING_VFORK)
+#define myfork vfork
+#elif defined(HAVE_WORKING_FORK)
+#define myfork fork
+#else
+#error Cannot find a working fork command
 #endif
 
 #ifdef HAVE_SIGNAL_H
