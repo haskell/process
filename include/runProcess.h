@@ -33,7 +33,8 @@
 #define myfork vfork
 #elif defined(HAVE_WORKING_FORK)
 #define myfork fork
-#else
+// We don't need a fork command on Windows
+#elif !(defined(_MSC_VER) || defined(__MINGW32__) || defined(_WIN32))
 #error Cannot find a working fork command
 #endif
 
