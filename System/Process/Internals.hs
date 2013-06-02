@@ -44,6 +44,7 @@ module System.Process.Internals (
 
 #ifndef __HUGS__
 #if !defined(mingw32_HOST_OS) && !defined(__MINGW32__)
+import Control.Monad
 import Data.Char
 import System.Posix.Types
 import System.Posix.Process.Internals ( pPrPr_disableITimers, c_execvpe )
@@ -54,7 +55,6 @@ import System.IO
 import System.IO.Unsafe
 import Control.Concurrent
 import Control.Exception
-import Control.Monad
 import Foreign.C
 import Foreign
 
