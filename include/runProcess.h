@@ -54,12 +54,14 @@ typedef PHANDLE ProcHandle;
 #if !(defined(_MSC_VER) || defined(__MINGW32__) || defined(_WIN32))
 
 extern ProcHandle runInteractiveProcess( char *const args[], 
-					 char *workingDirectory, 
-					 char **environment, 
-                                         int fdStdIn, int fdStdOut, int fdStdErr,
-					 int *pfdStdInput, 
-					 int *pfdStdOutput, 
-					 int *pfdStdError,
+                                         char *workingDirectory, 
+                                         char **environment, 
+                                         int fdStdIn,
+                                         int fdStdOut,
+                                         int fdStdErr,
+                                         int *pfdStdInput, 
+                                         int *pfdStdOutput, 
+                                         int *pfdStdError,
                                          int set_inthandler, long inthandler, 
                                          int set_quithandler, long quithandler,
                                          int flags);
@@ -67,12 +69,14 @@ extern ProcHandle runInteractiveProcess( char *const args[],
 #else
 
 extern ProcHandle runInteractiveProcess( wchar_t *cmd,
-					 wchar_t *workingDirectory,
-					 wchar_t *environment,
-                                         int fdStdIn, int fdStdOut, int fdStdErr,
-					 int *pfdStdInput,
-					 int *pfdStdOutput,
-					 int *pfdStdError,
+                                         wchar_t *workingDirectory,
+                                         wchar_t *environment,
+                                         int fdStdIn,
+                                         int fdStdOut,
+                                         int fdStdErr,
+                                         int *pfdStdInput,
+                                         int *pfdStdOutput,
+                                         int *pfdStdError,
                                          int flags);
 
 #endif
