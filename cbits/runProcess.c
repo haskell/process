@@ -1,6 +1,6 @@
 /* ----------------------------------------------------------------------------
    (c) The University of Glasgow 2004
-   
+
    Support for System.Process
    ------------------------------------------------------------------------- */
 
@@ -36,11 +36,11 @@ extern void blockUserSignals(void);
 extern void unblockUserSignals(void);
 
 ProcHandle
-runInteractiveProcess (char *const args[], 
+runInteractiveProcess (char *const args[],
                        char *workingDirectory, char **environment,
                        int fdStdIn, int fdStdOut, int fdStdErr,
                        int *pfdStdInput, int *pfdStdOutput, int *pfdStdError,
-                       int set_inthandler, long inthandler, 
+                       int set_inthandler, long inthandler,
                        int set_quithandler, long quithandler,
                        int flags)
 {
@@ -53,22 +53,21 @@ runInteractiveProcess (char *const args[],
     // Ordering matters here, see below [Note #431].
     if (fdStdIn == -1) {
         r = pipe(fdStdInput);
-        if (r == -1) { 
+        if (r == -1) {
             sysErrorBelch("runInteractiveProcess: pipe");
             return -1;
         }
-        
     }
     if (fdStdOut == -1) {
         r = pipe(fdStdOutput);
-        if (r == -1) { 
+        if (r == -1) {
             sysErrorBelch("runInteractiveProcess: pipe");
             return -1;
         }
     }
     if (fdStdErr == -1) {
         r = pipe(fdStdError);
-        if (r == -1) { 
+        if (r == -1) {
             sysErrorBelch("runInteractiveProcess: pipe");
             return -1;
         }
@@ -160,7 +159,7 @@ runInteractiveProcess (char *const args[],
         } else {
             dup2(fdStdErr,  STDERR_FILENO);
         }
-            
+
         if (close_fds) {
             int i;
             if (max_fd == 0) {
@@ -178,7 +177,7 @@ runInteractiveProcess (char *const args[],
             }
         }
 
-        /* Set the SIGINT/SIGQUIT signal handlers in the child, if requested 
+        /* Set the SIGINT/SIGQUIT signal handlers in the child, if requested
          */
         (void)sigemptyset(&dfl.sa_mask);
         dfl.sa_flags = 0;
@@ -199,7 +198,7 @@ runInteractiveProcess (char *const args[],
         }
     }
     _exit(127);
-    
+
     default:
         if ((flags & RUN_PROCESS_IN_NEW_GROUP) != 0) {
             setpgid(pid, pid);
@@ -223,7 +222,7 @@ runInteractiveProcess (char *const args[],
     }
     unblockUserSignals();
     startTimer();
-    
+
     return pid;
 }
 
@@ -237,9 +236,9 @@ int
 getProcessExitCode (ProcHandle handle, int *pExitCode)
 {
     int wstat, res;
-    
+
     *pExitCode = 0;
-    
+
     if ((res = waitpid(handle, &wstat, WNOHANG)) > 0)
     {
         if (WIFEXITED(wstat))
@@ -258,10 +257,10 @@ getProcessExitCode (ProcHandle handle, int *pExitCode)
                 /* This should never happen */
             }
     }
-    
+
     if (res == 0) return 0;
 
-    if (errno == ECHILD) 
+    if (errno == ECHILD)
     {
         *pExitCode = 0;
         return 1;
@@ -273,12 +272,12 @@ getProcessExitCode (ProcHandle handle, int *pExitCode)
 int waitForProcess (ProcHandle handle, int *pret)
 {
     int wstat;
-    
+
     if (waitpid(handle, &wstat, 0) < 0)
     {
         return -1;
     }
-    
+
     if (WIFEXITED(wstat)) {
         *pret = WEXITSTATUS(wstat);
         return 0;
@@ -312,7 +311,7 @@ int waitForProcess (ProcHandle handle, int *pret)
  *           optionally (non-)inheritable.
  */
 static BOOL
-mkAnonPipe (HANDLE* pHandleIn, BOOL isInheritableIn, 
+mkAnonPipe (HANDLE* pHandleIn, BOOL isInheritableIn,
             HANDLE* pHandleOut, BOOL isInheritableOut)
 {
     HANDLE hTemporaryIn  = NULL;
@@ -330,7 +329,7 @@ mkAnonPipe (HANDLE* pHandleIn, BOOL isInheritableIn,
     if (isInheritableIn) {
         // SetHandleInformation requires at least Win2k
         if (!SetHandleInformation(hTemporaryIn,
-                                  HANDLE_FLAG_INHERIT, 
+                                  HANDLE_FLAG_INHERIT,
                                   HANDLE_FLAG_INHERIT))
         {
             maperrno();
@@ -345,7 +344,7 @@ mkAnonPipe (HANDLE* pHandleIn, BOOL isInheritableIn,
 
     if (isInheritableOut) {
         if (!SetHandleInformation(hTemporaryOut,
-                                  HANDLE_FLAG_INHERIT, 
+                                  HANDLE_FLAG_INHERIT,
                                   HANDLE_FLAG_INHERIT))
         {
             maperrno();
@@ -357,12 +356,12 @@ mkAnonPipe (HANDLE* pHandleIn, BOOL isInheritableIn,
         }
     }
     *pHandleOut = hTemporaryOut;
-    
+
     return TRUE;
 }
 
 ProcHandle
-runInteractiveProcess (wchar_t *cmd, wchar_t *workingDirectory, 
+runInteractiveProcess (wchar_t *cmd, wchar_t *workingDirectory,
                        wchar_t *environment,
                        int fdStdIn, int fdStdOut, int fdStdErr,
                        int *pfdStdInput, int *pfdStdOutput, int *pfdStdError,
@@ -377,7 +376,7 @@ runInteractiveProcess (wchar_t *cmd, wchar_t *workingDirectory,
     HANDLE hStdErrorRead   = INVALID_HANDLE_VALUE;
     HANDLE hStdErrorWrite  = INVALID_HANDLE_VALUE;
     BOOL close_fds = ((flags & RUN_PROCESS_IN_CLOSE_FDS) != 0);
-    // We always pass a wide environment block, so we MUST set this flag 
+    // We always pass a wide environment block, so we MUST set this flag
     DWORD dwFlags = CREATE_UNICODE_ENVIRONMENT;
     BOOL status;
     BOOL inherit;
@@ -396,7 +395,7 @@ runInteractiveProcess (wchar_t *cmd, wchar_t *workingDirectory,
         sInfo.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
     } else {
         // The handle might not be inheritable, so duplicate it
-        status = DuplicateHandle(GetCurrentProcess(), 
+        status = DuplicateHandle(GetCurrentProcess(),
                                  (HANDLE) _get_osfhandle(fdStdIn),
                                  GetCurrentProcess(), &hStdInputRead,
                                  0,
@@ -416,7 +415,7 @@ runInteractiveProcess (wchar_t *cmd, wchar_t *workingDirectory,
         sInfo.hStdOutput = GetStdHandle(STD_OUTPUT_HANDLE);
     } else {
         // The handle might not be inheritable, so duplicate it
-        status = DuplicateHandle(GetCurrentProcess(), 
+        status = DuplicateHandle(GetCurrentProcess(),
                                  (HANDLE) _get_osfhandle(fdStdOut),
                                  GetCurrentProcess(), &hStdOutputWrite,
                                  0,
@@ -436,7 +435,7 @@ runInteractiveProcess (wchar_t *cmd, wchar_t *workingDirectory,
         sInfo.hStdError = GetStdHandle(STD_ERROR_HANDLE);
     } else {
         /* The handle might not be inheritable, so duplicate it */
-        status = DuplicateHandle(GetCurrentProcess(), 
+        status = DuplicateHandle(GetCurrentProcess(),
                                  (HANDLE) _get_osfhandle(fdStdErr),
                                  GetCurrentProcess(), &hStdErrorWrite,
                                  0,
@@ -458,7 +457,7 @@ runInteractiveProcess (wchar_t *cmd, wchar_t *workingDirectory,
     } else {
         inherit = TRUE;
     }
- 
+
     if ((flags & RUN_PROCESS_IN_NEW_GROUP) != 0) {
         dwFlags |= CREATE_NEW_PROCESS_GROUP;
     }
@@ -517,7 +516,7 @@ getProcessExitCode (ProcHandle handle, int *pExitCode)
         }
         return 1;
     }
-    
+
     return 0;
 }
 
@@ -536,7 +535,7 @@ waitForProcess (ProcHandle handle, int *pret)
         *pret = retCode;
         return 0;
     }
-    
+
     maperrno();
     return -1;
 }
