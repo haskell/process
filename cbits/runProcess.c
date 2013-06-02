@@ -283,7 +283,7 @@ int waitForProcess (ProcHandle handle, int *pret)
         *pret = WEXITSTATUS(wstat);
         return 0;
     }
-    else
+    else {
         if (WIFSIGNALED(wstat))
         {
             *pret = TERMSIG_STATUS(WTERMSIG(wstat));
@@ -293,7 +293,8 @@ int waitForProcess (ProcHandle handle, int *pret)
         {
             /* This should never happen */
         }
-    
+    }
+
     return -1;
 }
 
