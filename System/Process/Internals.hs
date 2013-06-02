@@ -54,6 +54,7 @@ import System.IO
 import System.IO.Unsafe
 import Control.Concurrent
 import Control.Exception
+import Control.Monad
 import Foreign.C
 import Foreign
 
@@ -220,6 +221,7 @@ runGenProcess_ fun CreateProcess{ cmdspec = cmdsp,
    alloca $ \ pfdStdInput  ->
    alloca $ \ pfdStdOutput ->
    alloca $ \ pfdStdError  ->
+   alloca $ \ pFailedDoing ->
    maybeWith withCEnvironment mb_env $ \pEnv ->
    maybeWith withFilePath mb_cwd $ \pWorkDir ->
    withMany withFilePath (cmd:args) $ \cstrs ->
@@ -243,13 +245,18 @@ runGenProcess_ fun CreateProcess{ cmdspec = cmdsp,
      -- operation, we better ensure mutual exclusion of calls to
      -- runInteractiveProcess().
      proc_handle <- withMVar runInteractiveProcess_lock $ \_ ->
-                    throwErrnoIfMinus1 fun $
-                         c_runInteractiveProcess pargs pWorkDir pEnv 
+                         c_runInteractiveProcess pargs pWorkDir pEnv
                                 fdin fdout fderr
                                 pfdStdInput pfdStdOutput pfdStdError
                                 set_int inthand set_quit quithand
                                 ((if mb_close_fds then RUN_PROCESS_IN_CLOSE_FDS else 0)
                                 .|.(if mb_create_group then RUN_PROCESS_IN_NEW_GROUP else 0))
+                                pFailedDoing
+
+     when (proc_handle == -1) $ do
+         cFailedDoing <- peek pFailedDoing
+         failedDoing <- peekCString cFailedDoing
+         throwErrno (fun ++ ": " ++ failedDoing)
 
      hndStdInput  <- mbPipe mb_stdin  pfdStdInput  WriteMode
      hndStdOutput <- mbPipe mb_stdout pfdStdOutput ReadMode
@@ -278,6 +285,7 @@ foreign import ccall unsafe "runInteractiveProcess"
         -> CInt                         -- non-zero: set child's SIGQUIT handler
         -> CLong                        -- SIGQUIT handler
         -> CInt                         -- flags
+        -> Ptr CString
         -> IO PHANDLE
 
 #endif /* __GLASGOW_HASKELL__ */

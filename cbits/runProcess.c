@@ -35,6 +35,24 @@ static long max_fd = 0;
 extern void blockUserSignals(void);
 extern void unblockUserSignals(void);
 
+// See #1593.  The convention for the exit code when
+// exec() fails seems to be 127 (gleened from C's
+// system()), but there's no equivalent convention for
+// chdir(), so I'm picking 126 --SimonM.
+#define forkChdirFailed 126
+#define forkExecFailed  127
+
+__attribute__((__noreturn__))
+static void childFailed(int pipe, int failCode) {
+    int err;
+
+    err = errno;
+    write(pipe, &failCode, sizeof(failCode));
+    write(pipe, &err,      sizeof(err));
+    // As a fallback, exit with the failCode
+    _exit(failCode);
+}
+
 ProcHandle
 runInteractiveProcess (char *const args[],
                        char *workingDirectory, char **environment,
@@ -42,35 +60,43 @@ runInteractiveProcess (char *const args[],
                        int *pfdStdInput, int *pfdStdOutput, int *pfdStdError,
                        int set_inthandler, long inthandler,
                        int set_quithandler, long quithandler,
-                       int flags)
+                       int flags,
+                       char **failed_doing)
 {
     int close_fds = ((flags & RUN_PROCESS_IN_CLOSE_FDS) != 0);
     int pid;
     int fdStdInput[2], fdStdOutput[2], fdStdError[2];
+    int forkCommunicationFds[2];
     int r;
-    struct sigaction dfl;
+    int failCode, err;
 
     // Ordering matters here, see below [Note #431].
     if (fdStdIn == -1) {
         r = pipe(fdStdInput);
         if (r == -1) {
-            sysErrorBelch("runInteractiveProcess: pipe");
+            *failed_doing = "runInteractiveProcess: pipe";
             return -1;
         }
     }
     if (fdStdOut == -1) {
         r = pipe(fdStdOutput);
         if (r == -1) {
-            sysErrorBelch("runInteractiveProcess: pipe");
+            *failed_doing = "runInteractiveProcess: pipe";
             return -1;
         }
     }
     if (fdStdErr == -1) {
         r = pipe(fdStdError);
         if (r == -1) {
-            sysErrorBelch("runInteractiveProcess: pipe");
+            *failed_doing = "runInteractiveProcess: pipe";
             return -1;
         }
+    }
+
+    r = pipe(forkCommunicationFds);
+    if (r == -1) {
+        *failed_doing = "runInteractiveProcess: pipe";
+        return -1;
     }
 
     // Block signals with Haskell handlers.  The danger here is that
@@ -101,12 +127,18 @@ runInteractiveProcess (char *const args[],
             close(fdStdError[0]);
             close(fdStdError[1]);
         }
+        close(forkCommunicationFds[0]);
+        close(forkCommunicationFds[1]);
+        *failed_doing = "fork";
         return -1;
 
     case 0:
-    {
-        // WARNING!  we are now in the child of vfork(), so any memory
-        // we modify below will also be seen in the parent process.
+        // WARNING! We may now be in the child of vfork(), and any
+        // memory we modify below may also be seen in the parent
+        // process.
+
+        close(forkCommunicationFds[0]);
+        fcntl(forkCommunicationFds[1], F_SETFD, FD_CLOEXEC);
 
         if ((flags & RUN_PROCESS_IN_NEW_GROUP) != 0) {
             setpgid(0, 0);
@@ -116,11 +148,7 @@ runInteractiveProcess (char *const args[],
 
         if (workingDirectory) {
             if (chdir (workingDirectory) < 0) {
-                // See #1593.  The convention for the exit code when
-                // exec() fails seems to be 127 (gleened from C's
-                // system()), but there's no equivalent convention for
-                // chdir(), so I'm picking 126 --SimonM.
-                _exit(126);
+                childFailed(forkCommunicationFds[1], forkChdirFailed);
             }
         }
 
@@ -172,6 +200,7 @@ runInteractiveProcess (char *const args[],
                 max_fd = 256;
 #endif
             }
+            // XXX Not the pipe
             for (i = 3; i < max_fd; i++) {
                 close(i);
             }
@@ -179,25 +208,30 @@ runInteractiveProcess (char *const args[],
 
         /* Set the SIGINT/SIGQUIT signal handlers in the child, if requested
          */
-        (void)sigemptyset(&dfl.sa_mask);
-        dfl.sa_flags = 0;
-        if (set_inthandler) {
-            dfl.sa_handler = (void *)inthandler;
-            (void)sigaction(SIGINT, &dfl, NULL);
-        }
-        if (set_quithandler) {
-            dfl.sa_handler = (void *)quithandler;
-            (void)sigaction(SIGQUIT,  &dfl, NULL);
+        {
+            struct sigaction dfl;
+            (void)sigemptyset(&dfl.sa_mask);
+            dfl.sa_flags = 0;
+            if (set_inthandler) {
+                dfl.sa_handler = (void *)inthandler;
+                (void)sigaction(SIGINT, &dfl, NULL);
+            }
+            if (set_quithandler) {
+                dfl.sa_handler = (void *)quithandler;
+                (void)sigaction(SIGQUIT,  &dfl, NULL);
+            }
         }
 
         /* the child */
         if (environment) {
+            // XXX Check result
             execvpe(args[0], args, environment);
         } else {
+            // XXX Check result
             execvp(args[0], args);
         }
-    }
-    _exit(127);
+
+        childFailed(forkCommunicationFds[1], forkExecFailed);
 
     default:
         if ((flags & RUN_PROCESS_IN_NEW_GROUP) != 0) {
@@ -218,10 +252,68 @@ runInteractiveProcess (char *const args[],
             fcntl(fdStdError[0], F_SETFD, FD_CLOEXEC);
             *pfdStdError  = fdStdError[0];
         }
+        close(forkCommunicationFds[1]);
+        fcntl(forkCommunicationFds[0], F_SETFD, FD_CLOEXEC);
+
         break;
     }
+
+    // If the child process had a problem, then it will tell us via the
+    // forkCommunicationFds pipe. First we try to read what the problem
+    // was. Note that if none of these conditionals match then we fall
+    // through and just return pid.
+    r = read(forkCommunicationFds[0], &failCode, sizeof(failCode));
+    if (r == -1) {
+        *failed_doing = "runInteractiveProcess: read pipe";
+        pid = -1;
+    }
+    else if (r == sizeof(failCode)) {
+        // This is the case where we successfully managed to read
+        // the problem
+        switch (failCode) {
+        case forkChdirFailed:
+            *failed_doing = "runInteractiveProcess: chdir";
+            break;
+        case forkExecFailed:
+            *failed_doing = "runInteractiveProcess: exec";
+            break;
+        default:
+            *failed_doing = "runInteractiveProcess: unknown";
+            break;
+        }
+        // Now we try to get the errno from the child
+        r = read(forkCommunicationFds[0], &err, sizeof(err));
+        if (r == -1) {
+            *failed_doing = "runInteractiveProcess: read pipe";
+        }
+        else if (r != sizeof(failCode)) {
+            *failed_doing = "runInteractiveProcess: read pipe bad length";
+        }
+        else {
+            // If we succeed then we set errno. It'll be saved and
+            // restored again below. Note that in any other case we'll
+            // get the errno of whatever else went wrong instead.
+            errno = err;
+        }
+        pid = -1;
+    }
+    else if (r != 0) {
+        *failed_doing = "runInteractiveProcess: read pipe bad length";
+        pid = -1;
+    }
+
+    if (pid == -1) {
+        err = errno;
+    }
+
+    close(forkCommunicationFds[0]);
+
     unblockUserSignals();
     startTimer();
+
+    if (pid == -1) {
+        errno = err;
+    }
 
     return pid;
 }

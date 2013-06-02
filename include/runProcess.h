@@ -64,7 +64,8 @@ extern ProcHandle runInteractiveProcess( char *const args[],
                                          int *pfdStdError,
                                          int set_inthandler, long inthandler, 
                                          int set_quithandler, long quithandler,
-                                         int flags);
+                                         int flags,
+                                         char **failed_doing);
 
 #else
 
