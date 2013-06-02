@@ -3,8 +3,8 @@ import System.IO.Error
 import System.Process
 
 main :: IO ()
-main = do run "/bin/true"
-          run "/bin/false"
+main = do run "true"
+          run "false"
           run "/non/existent"
           putStrLn "Done"
 
