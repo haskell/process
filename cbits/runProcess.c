@@ -45,10 +45,11 @@ extern void unblockUserSignals(void);
 __attribute__((__noreturn__))
 static void childFailed(int pipe, int failCode) {
     int err;
+    ssize_t unused __attribute__((unused));
 
     err = errno;
-    write(pipe, &failCode, sizeof(failCode));
-    write(pipe, &err,      sizeof(err));
+    unused = write(pipe, &failCode, sizeof(failCode));
+    unused = write(pipe, &err,      sizeof(err));
     // As a fallback, exit with the failCode
     _exit(failCode);
 }
