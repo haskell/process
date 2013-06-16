@@ -9,9 +9,7 @@ tmpfile = "process007.tmp"
 main = do
   writeFile tmpfile "You bad pie-rats!\n"
   fd <- handleToFd =<< openFile tmpfile ReadMode
-  system ("cat 0<&" ++ show fd)
-  -- or this, but maybe less portable?
-  --    rawSystem "cat" ["/dev/fd/" ++ show fd]
+  rawSystem "./process007_fd" [show fd]
   closeFd fd
 
   fd <- handleToFd =<< openFile tmpfile ReadMode

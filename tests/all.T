@@ -6,7 +6,12 @@ test('T1780', normal, compile_and_run, [''])
 test('process005', normal, compile_and_run, [''])
 test('process006', normal, compile_and_run, [''])
 
-test('process007', [extra_clean(['process007.tmp']), reqlib('unix')], compile_and_run, [''])
+test('process007',
+     [extra_clean(['process007.tmp',
+                   'process007_fd.o', 'process007_fd', 'process007_fd.exe']),
+      reqlib('unix'),
+      pre_cmd('$MAKE -s --no-print-directory process007_fd')],
+     compile_and_run, [''])
 test('process008', normal, compile_and_run, [''])
 
 # not the normal way: this test runs processes from multiple threads, and

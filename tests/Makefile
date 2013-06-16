@@ -5,3 +5,8 @@
 TOP=../../../testsuite
 include $(TOP)/mk/boilerplate.mk
 include $(TOP)/mk/test.mk
+
+.PHONY: process007_fd
+process007_fd:
+	'$(TEST_HC)' -no-hs-main -no-auto-link-packages process007_fd.c -o process007_fd
+
