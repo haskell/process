@@ -94,6 +94,16 @@ import System.FilePath
 #include "HsProcessConfig.h"
 #include "processFlags.h"
 
+#ifdef mingw32_HOST_OS
+# if defined(i386_HOST_ARCH)
+#  define WINDOWS_CCONV stdcall
+# elif defined(x86_64_HOST_ARCH)
+#  define WINDOWS_CCONV ccall
+# else
+#  error Unknown mingw32 arch
+# endif
+#endif
+
 #ifndef __HUGS__
 -- ----------------------------------------------------------------------------
 -- ProcessHandle type
@@ -156,7 +166,7 @@ processHandleFinaliser m =
 closePHANDLE :: PHANDLE -> IO ()
 closePHANDLE ph = c_CloseHandle ph
 
-foreign import stdcall unsafe "CloseHandle"
+foreign import WINDOWS_CCONV unsafe "CloseHandle"
   c_CloseHandle
         :: PHANDLE
         -> IO ()
