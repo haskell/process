@@ -14,7 +14,7 @@ main = do
 
   fd <- handleToFd =<< openFile tmpfile ReadMode
   nul <- openFile "/dev/null" WriteMode
-  (_,_,_,p) <- createProcess (shell ("cat 0<&" ++ show fd))
+  (_,_,_,p) <- createProcess (shell ("./process007_fd " ++ show fd))
                                { close_fds = True,
                                  std_err = UseHandle nul }
   e <- waitForProcess p

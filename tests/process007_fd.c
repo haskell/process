@@ -18,12 +18,16 @@ int main(int argc, char **argv) {
 
     fd = atoi(argv[1]);
 
-    while (nRead = read(fd, buf, SIZE) != 0) {
+    while ((nRead = read(fd, buf, SIZE)) != 0) {
         if (nRead > 0) {
-            nWrite = printf("%s", buf);
-            if (nWrite < 0) {
-                perror("printf failed");
-                exit(1);
+            ssize_t nWritten = 0;
+            while (nWritten < nRead) {
+                nWrite = write(STDOUT_FILENO, buf + nWritten, nRead - nWritten);
+                if (nWrite < 0) {
+                    perror("printf failed");
+                    exit(1);
+                }
+                nWritten += nWrite;
             }
         }
         else if (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) {
