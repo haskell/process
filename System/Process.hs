@@ -400,8 +400,8 @@ readProcess cmd args input =
                                        std_out = CreatePipe,
                                        std_err = Inherit }
       flip onException
-        (do hClose inh; hClose outh;
-            terminateProcess pid; waitForProcess pid) $ restore $ do
+        (do terminateProcess pid; hClose inh; hClose outh;
+            waitForProcess pid) $ restore $ do
         -- fork off a thread to start consuming the output
         output  <- hGetContents outh
         waitOut <- forkWait $ C.evaluate $ rnf output
@@ -457,8 +457,8 @@ readProcessWithExitCode cmd args input =
                                                      std_out = CreatePipe,
                                                      std_err = CreatePipe }
       flip onException
-        (do hClose inh; hClose outh; hClose errh;
-            terminateProcess pid; waitForProcess pid) $ restore $ do
+        (do terminateProcess pid; hClose inh; hClose outh; hClose errh;
+            waitForProcess pid) $ restore $ do
         -- fork off a thread to start consuming stdout
         out <- hGetContents outh
         waitOut <- forkWait $ C.evaluate $ rnf out

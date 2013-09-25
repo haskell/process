@@ -32,3 +32,5 @@ test('T4889', normal, compile_and_run, [''])
 
 test('process009', when(opsys('mingw32'), skip), compile_and_run, [''])
 test('process010', normal, compile_and_run, [''])
+
+test('T8343', normal, compile_and_run, [''])
