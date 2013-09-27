@@ -52,11 +52,14 @@ import System.IO
 #endif
 #endif
 
-import System.IO.Unsafe
 import Control.Concurrent
 import Control.Exception
+import Data.Bits
 import Foreign.C
-import Foreign
+import Foreign.Marshal
+import Foreign.Ptr
+import Foreign.Storable
+import System.IO.Unsafe
 
 # ifdef __GLASGOW_HASKELL__
 
@@ -411,7 +414,11 @@ pfdToHandle pfd mode = do
                        False {-is_socket-}
                        False {-non-blocking-}
   fD' <- FD.setNonBlockingMode fD True -- see #3316
+#if __GLASGOW_HASKELL__ >= 704
   enc <- getLocaleEncoding
+#else
+  let enc = localeEncoding
+#endif
   mkHandleFromFD fD' fd_type filepath mode False {-is_socket-} (Just enc)
 
 #ifndef __HUGS__
