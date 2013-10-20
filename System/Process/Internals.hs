@@ -9,7 +9,7 @@
 -- Module      :  System.Process.Internals
 -- Copyright   :  (c) The University of Glasgow 2004
 -- License     :  BSD-style (see the file libraries/base/LICENSE)
--- 
+--
 -- Maintainer  :  libraries@haskell.org
 -- Stability   :  experimental
 -- Portability :  portable
@@ -19,8 +19,8 @@
 -----------------------------------------------------------------------------
 
 module System.Process.Internals (
-        ProcessHandle(..), ProcessHandle__(..), 
-        PHANDLE, closePHANDLE, mkProcessHandle, 
+        ProcessHandle(..), ProcessHandle__(..),
+        PHANDLE, closePHANDLE, mkProcessHandle,
         modifyProcessHandle, withProcessHandle,
 #ifdef __GLASGOW_HASKELL__
         CreateProcess(..),
@@ -103,13 +103,13 @@ data ProcessHandle__ = OpenHandle PHANDLE | ClosedHandle ExitCode
 newtype ProcessHandle = ProcessHandle (MVar ProcessHandle__)
 
 modifyProcessHandle
-        :: ProcessHandle 
+        :: ProcessHandle
         -> (ProcessHandle__ -> IO (ProcessHandle__, a))
         -> IO a
 modifyProcessHandle (ProcessHandle m) io = modifyMVar m io
 
 withProcessHandle
-        :: ProcessHandle 
+        :: ProcessHandle
         -> (ProcessHandle__ -> IO a)
         -> IO a
 withProcessHandle (ProcessHandle m) io = withMVar m io
@@ -128,7 +128,7 @@ closePHANDLE _ = return ()
 
 #else
 
-throwErrnoIfBadPHandle :: String -> IO PHANDLE -> IO PHANDLE  
+throwErrnoIfBadPHandle :: String -> IO PHANDLE -> IO PHANDLE
 throwErrnoIfBadPHandle = throwErrnoIfNull
 
 -- On Windows, we have to close this HANDLE when it is no longer required,
@@ -141,7 +141,7 @@ mkProcessHandle h = do
 
 processHandleFinaliser :: MVar ProcessHandle__ -> IO ()
 processHandleFinaliser m =
-   modifyMVar_ m $ \p_ -> do 
+   modifyMVar_ m $ \p_ -> do
         case p_ of
           OpenHandle ph -> closePHANDLE ph
           _ -> return ()
@@ -169,8 +169,8 @@ data CreateProcess = CreateProcess{
   create_group :: Bool                     -- ^ Create a new process group
  }
 
-data CmdSpec 
-  = ShellCommand String            
+data CmdSpec
+  = ShellCommand String
       -- ^ a command line to execute using the shell
   | RawCommand FilePath [String]
       -- ^ the filename of an executable with a list of arguments.
@@ -219,16 +219,16 @@ runGenProcess_ fun CreateProcess{ cmdspec = cmdsp,
    maybeWith withFilePath mb_cwd $ \pWorkDir ->
    withMany withFilePath (cmd:args) $ \cstrs ->
    withArray0 nullPtr cstrs $ \pargs -> do
-     
+
      fdin  <- mbFd fun fd_stdin  mb_stdin
      fdout <- mbFd fun fd_stdout mb_stdout
      fderr <- mbFd fun fd_stderr mb_stderr
 
-     let (set_int, inthand) 
+     let (set_int, inthand)
                 = case mb_sigint of
                         Nothing   -> (0, 0)
                         Just hand -> (1, hand)
-         (set_quit, quithand) 
+         (set_quit, quithand)
                 = case mb_sigquit of
                         Nothing   -> (0, 0)
                         Just hand -> (1, hand)
@@ -262,7 +262,7 @@ runGenProcess_ fun CreateProcess{ cmdspec = cmdsp,
 runInteractiveProcess_lock :: MVar ()
 runInteractiveProcess_lock = unsafePerformIO $ newMVar ()
 
-foreign import ccall unsafe "runInteractiveProcess" 
+foreign import ccall unsafe "runInteractiveProcess"
   c_runInteractiveProcess
         ::  Ptr CString
         -> CString
@@ -309,7 +309,7 @@ runGenProcess_ fun CreateProcess{ cmdspec = cmdsp,
    maybeWith withCEnvironment mb_env $ \pEnv ->
    maybeWith withCWString mb_cwd $ \pWorkDir -> do
    withCWString cmdline $ \pcmdline -> do
-     
+
      fdin  <- mbFd fun fd_stdin  mb_stdin
      fdout <- mbFd fun fd_stdout mb_stdout
      fderr <- mbFd fun fd_stderr mb_stderr
@@ -319,14 +319,14 @@ runGenProcess_ fun CreateProcess{ cmdspec = cmdsp,
      -- has created some pipes, and another thread spawns a process which
      -- accidentally inherits some of the pipe handles that the first
      -- thread has created.
-     -- 
+     --
      -- An MVar in Haskell is the best way to do this, because there
      -- is no way to do one-time thread-safe initialisation of a mutex
      -- the C code.  Also the MVar will be cheaper when not running
      -- the threaded RTS.
      proc_handle <- withMVar runInteractiveProcess_lock $ \_ ->
                     throwErrnoIfBadPHandle fun $
-                         c_runInteractiveProcess pcmdline pWorkDir pEnv 
+                         c_runInteractiveProcess pcmdline pWorkDir pEnv
                                 fdin fdout fderr
                                 pfdStdInput pfdStdOutput pfdStdError
                                 ((if mb_close_fds then RUN_PROCESS_IN_CLOSE_FDS else 0)
@@ -389,7 +389,7 @@ pfdToHandle :: Ptr FD -> IOMode -> IO Handle
 pfdToHandle pfd mode = do
   fd <- peek pfd
   let filepath = "fd:" ++ show fd
-  (fD,fd_type) <- FD.mkFD (fromIntegral fd) mode 
+  (fD,fd_type) <- FD.mkFD (fromIntegral fd) mode
                        (Just (Stream,0,0)) -- avoid calling fstat()
                        False {-is_socket-}
                        False {-non-blocking-}
@@ -409,7 +409,7 @@ pfdToHandle pfd mode = do
 
    There's a difference in the signature of commandToProcess between
    the Windows and Unix versions.  On Unix, exec takes a list of strings,
-   and we want to pass our command to /bin/sh as a single argument.  
+   and we want to pass our command to /bin/sh as a single argument.
 
    On Windows, CreateProcess takes a single string for the command,
    which is later decomposed by cmd.exe.  In this case, we just want
@@ -476,7 +476,7 @@ findCommandInterpreter = do
     mb_path <- search (splitSearchPath path)
 
     case mb_path of
-      Nothing -> ioError (mkIOError doesNotExistErrorType 
+      Nothing -> ioError (mkIOError doesNotExistErrorType
                                 "findCommandInterpreter" Nothing Nothing)
       Just cmd -> return cmd
 #endif
@@ -572,7 +572,7 @@ withFilePathException fpath act = handle mapEx act
 #if !defined(mingw32_HOST_OS) && !defined(__MINGW32__)
 withCEnvironment :: [(String,String)] -> (Ptr CString  -> IO a) -> IO a
 withCEnvironment envir act =
-  let env' = map (\(name, val) -> name ++ ('=':val)) envir 
+  let env' = map (\(name, val) -> name ++ ('=':val)) envir
   in withMany withCString env' (\pEnv -> withArray0 nullPtr pEnv act)
 #else
 withCEnvironment :: [(String,String)] -> (Ptr CWString -> IO a) -> IO a
@@ -580,4 +580,3 @@ withCEnvironment envir act =
   let env' = foldr (\(name, val) env -> name ++ ('=':val)++'\0':env) "\0" envir
   in withCWString env' (act . castPtr)
 #endif
-
