@@ -18,9 +18,7 @@
 --
 -----------------------------------------------------------------------------
 
--- #hide
 module System.Process.Internals (
-#ifndef __HUGS__
         ProcessHandle(..), ProcessHandle__(..), 
         PHANDLE, closePHANDLE, mkProcessHandle, 
         modifyProcessHandle, withProcessHandle,
@@ -30,26 +28,20 @@ module System.Process.Internals (
         runGenProcess_,
 #endif
 #if !defined(mingw32_HOST_OS) && !defined(__MINGW32__)
-         pPrPr_disableITimers, c_execvpe,
+        pPrPr_disableITimers, c_execvpe,
         ignoreSignal, defaultSignal,
-#endif
 #endif
         withFilePathException, withCEnvironment,
         translate,
-
-#ifndef __HUGS__
         fdToHandle,
-#endif
   ) where
 
-#ifndef __HUGS__
 #if !defined(mingw32_HOST_OS) && !defined(__MINGW32__)
 import Control.Monad
 import Data.Char
 import System.Posix.Types
 import System.Posix.Process.Internals ( pPrPr_disableITimers, c_execvpe )
 import System.IO
-#endif
 #endif
 
 import Control.Concurrent
@@ -61,8 +53,7 @@ import Foreign.Ptr
 import Foreign.Storable
 import System.IO.Unsafe
 
-# ifdef __GLASGOW_HASKELL__
-
+#ifdef __GLASGOW_HASKELL__
 import System.Posix.Internals
 import GHC.IO.Exception
 import GHC.IO.Encoding
@@ -77,21 +68,12 @@ import Data.Typeable
 import GHC.IO.IOMode
 import System.Win32.DebugApi (PHANDLE)
 #endif
-
-# elif __HUGS__
-
-import Hugs.Exception   ( IOException(..) )
-
-# endif
+#endif
 
 #if defined(mingw32_HOST_OS)
 import System.Directory         ( doesFileExist )
 import System.Environment       ( getEnv )
 import System.FilePath
-#endif
-
-#ifdef __HUGS__
-{-# CFILES cbits/execvpe.c  #-}
 #endif
 
 #include "HsProcessConfig.h"
@@ -107,7 +89,6 @@ import System.FilePath
 # endif
 #endif
 
-#ifndef __HUGS__
 -- ----------------------------------------------------------------------------
 -- ProcessHandle type
 
@@ -174,7 +155,6 @@ foreign import WINDOWS_CCONV unsafe "CloseHandle"
         :: PHANDLE
         -> IO ()
 #endif
-#endif /* !__HUGS__ */
 
 -- ----------------------------------------------------------------------------
 
@@ -421,7 +401,6 @@ pfdToHandle pfd mode = do
 #endif
   mkHandleFromFD fD' fd_type filepath mode False {-is_socket-} (Just enc)
 
-#ifndef __HUGS__
 -- ----------------------------------------------------------------------------
 -- commandToProcess
 
@@ -501,8 +480,6 @@ findCommandInterpreter = do
                                 "findCommandInterpreter" Nothing Nothing)
       Just cmd -> return cmd
 #endif
-
-#endif /* __HUGS__ */
 
 -- ------------------------------------------------------------------------
 -- Escaping commands for shells
