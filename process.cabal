@@ -13,42 +13,51 @@ description:
     This package contains libraries for dealing with system processes.
 
 extra-source-files:
-    aclocal.m4 configure.ac configure
+    aclocal.m4
+    configure
+    configure.ac
     include/HsProcessConfig.h.in
 
 extra-tmp-files:
-    config.log config.status autom4te.cache
+    autom4te.cache
+    config.log
+    config.status
     include/HsProcessConfig.h
 
 source-repository head
     type:     git
     location: http://git.haskell.org/packages/process.git
 
+source-repository this
+    type:     git
+    location: http://git.haskell.org/packages/process.git
+    tag:      process-1.2.0.0-release
+
 library
     default-language: Haskell2010
-    other-extensions: CPP, ForeignFunctionInterface, InterruptibleFFI, RecordWildCards, Trustworthy
+    other-extensions:
+        CPP
+        ForeignFunctionInterface
+        InterruptibleFFI
+        RecordWildCards
+        Trustworthy
 
-    exposed-modules: System.Cmd
-    if !impl(nhc98)
+    exposed-modules:
+        System.Cmd
+        System.Process
+    if impl(ghc)
         exposed-modules:
-            System.Process
-        if impl(ghc)
-            exposed-modules:
-                System.Process.Internals
-        c-sources:
-            cbits/runProcess.c
-        include-dirs: include
-        includes:
-            runProcess.h
-        install-includes:
-            runProcess.h
-            processFlags.h
-            HsProcessConfig.h
-        if os(windows)
-            build-depends: Win32 >=2.2.0.0
-            extra-libraries: kernel32
-        else
-            build-depends: unix >= 2.5 && < 2.8
+            System.Process.Internals
+
+    c-sources:
+        cbits/runProcess.c
+    include-dirs: include
+    includes:
+        runProcess.h
+    install-includes:
+        runProcess.h
+        processFlags.h
+        HsProcessConfig.h
 
     ghc-options: -Wall
 
@@ -56,3 +65,8 @@ library
                    directory >= 1.1 && < 1.3,
                    filepath  >= 1.2 && < 1.4,
                    deepseq   >= 1.1 && < 1.4
+    if os(windows)
+        build-depends: Win32 >=2.2 && < 2.4
+        extra-libraries: kernel32
+    else
+        build-depends: unix >= 2.5 && < 2.8
