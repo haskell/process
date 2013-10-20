@@ -75,9 +75,7 @@ import Control.DeepSeq (rnf)
 import System.IO.Error (mkIOError, ioeSetErrorString)
 #if !defined(mingw32_HOST_OS)
 import System.Posix.Types
-#if MIN_VERSION_unix(2,5,0)
 import System.Posix.Process (getProcessGroupIDOf)
-#endif
 #endif
 import qualified Control.Exception as C
 import Control.Concurrent
@@ -640,13 +638,8 @@ interruptProcessGroupOf ph = do
 -- on Windows, so on Windows cpp fails:
 -- error: missing binary operator before token "("
 #else
-#if MIN_VERSION_unix(2,5,0)
-                -- getProcessGroupIDOf was added in unix-2.5.0.0
                 pgid <- getProcessGroupIDOf h
                 signalProcessGroup sigINT pgid
-#else
-                signalProcessGroup sigINT h
-#endif
 #endif
                 return ()
 
