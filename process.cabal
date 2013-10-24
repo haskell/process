@@ -17,6 +17,7 @@ extra-source-files:
     configure
     configure.ac
     include/HsProcessConfig.h.in
+    process.buildinfo
 
 extra-tmp-files:
     autom4te.cache
@@ -57,7 +58,6 @@ library
     install-includes:
         runProcess.h
         processFlags.h
-        HsProcessConfig.h
 
     ghc-options: -Wall
 
