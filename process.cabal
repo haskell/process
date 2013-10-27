@@ -4,7 +4,7 @@ version:       1.2.0.0
 license:       BSD3
 license-file:  LICENSE
 maintainer:    libraries@haskell.org
-bug-reports:   http://hackage.haskell.org/trac/ghc/newticket?component=libraries/process
+bug-reports:   http://ghc.haskell.org/trac/ghc/newticket?component=libraries/process
 synopsis:      Process libraries
 category:      System
 build-type:    Configure
