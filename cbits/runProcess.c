@@ -22,12 +22,18 @@
    UNIX versions
    ------------------------------------------------------------------------- */
 
-//
-// If a process terminates with a signal, the exit status we return to
-// via the System.Process API follows the Unix shell convention of
-// (128 + signal).
-//
-#define TERMSIG_STATUS(r) ((r) | 0x80)
+// If a process was terminated by a signal, the exit status we return
+// via the System.Process API is (signum << 8), and if a core-file has
+// been generated (and reported by the OS) the 16th bit (i.e. 0x8000)
+// is additionally set; this encoding avoids collision with normal
+// process termination status codes, as according to
+// http://pubs.opengroup.org/onlinepubs/9699919799/functions/wait.html
+// WEXITSTATUS(s) returns an 8-bit value. See also #7229.
+#if defined(WCOREDUMP)
+#define TERMSIG_EXITSTATUS(s) ((WCOREDUMP(s) ? 0x8000 : 0) | (WTERMSIG(s) << 8))
+#else
+#define TERMSIG_EXITSTATUS(s) (WTERMSIG(s) << 8)
+#endif
 
 static long max_fd = 0;
 
@@ -342,7 +348,7 @@ getProcessExitCode (ProcHandle handle, int *pExitCode)
         else
             if (WIFSIGNALED(wstat))
             {
-                *pExitCode = TERMSIG_STATUS(WTERMSIG(wstat));
+                *pExitCode = TERMSIG_EXITSTATUS(wstat);
                 return 1;
             }
             else
@@ -378,7 +384,7 @@ int waitForProcess (ProcHandle handle, int *pret)
     else {
         if (WIFSIGNALED(wstat))
         {
-            *pret = TERMSIG_STATUS(WTERMSIG(wstat));
+            *pret = TERMSIG_EXITSTATUS(wstat);
             return 0;
         }
         else

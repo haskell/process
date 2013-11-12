@@ -320,16 +320,25 @@ runInteractiveProcess1 fun cmd = do
 
 {- | Waits for the specified process to terminate, and returns its exit code.
 
-     GHC Note: in order to call @waitForProcess@ without blocking all the
-     other threads in the system, you must compile the program with
-     @-threaded@.
+GHC Note: in order to call @waitForProcess@ without blocking all the
+other threads in the system, you must compile the program with
+@-threaded@.
 
-     On Unix systems, if the process died as the result of a signal,
-     then the exit code returned is @ExitFailure (128 + signal)@ where
-     @signal@ is the signal number.  The signal numbers are
-     platform-specific, so to test for a specific signal use the
-     constants provided by @System.Posix.Signals@ in the @unix@
-     package.
+(/Since: 1.2.0.0/) On Unix systems, if the process died as the result
+of a signal, then the exit code returned is
+
+@
+'ExitFailure' ((if /coredump/ then 0x8000 else 0) .|. /signum/ `shiftL` 8)
+@
+
+where @/coredump/@ is @True@ if a core file was created and @/signum/@
+is the signal number.  The signal numbers are platform-specific, so to
+test for a specific signal use the constants provided by
+@System.Posix.Signals@ in the @unix@ package.  This encoding avoids to
+overlap with non-signal exit codes, as the exit codes reported for
+normal (other than 'ExitSuccess') process termination are in the range
+@1-255@.
+
 -}
 waitForProcess
   :: ProcessHandle

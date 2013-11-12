@@ -4,7 +4,8 @@
         * Remove NHC specific code
         * Add support for `base-4.7.0.0`
         * Improve `showCommandForUser` to reduce redundant quoting
-        * Use `ExitFailure (128+signal)` on Unix when a proc terminates due to a signal
+        * Use `ExitFailure (shiftL signum 8)` on Unix when a proc is terminated due to a signal;
+          sets also `bit 15` if a core file was generated.
         * Deprecate `module System.Cmd`
         * On non-Windows, the child thread now comunicates any errors back
         to the parent thread via pipes.

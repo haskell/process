@@ -1,3 +1,3 @@
-ExitFailure 129
-Just (ExitFailure 129)
-Just (ExitFailure 129)
+ExitFailure 256
+Just (ExitFailure 256)
+Just (ExitFailure 256)
