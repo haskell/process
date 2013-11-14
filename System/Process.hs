@@ -56,6 +56,9 @@ module System.Process (
         rawSystem,
         showCommandForUser,
 
+        -- ** Control-C handling on Unix
+        -- $ctlc-handling
+
 #ifndef __HUGS__
         -- * Process completion
         waitForProcess,
@@ -113,7 +116,7 @@ runCommand
   -> IO ProcessHandle
 
 runCommand string = do
-  (_,_,_,ph) <- runGenProcess_ "runCommand" (shell string) Nothing Nothing
+  (_,_,_,ph) <- runGenProcess_ "runCommand" (shell string)
   return ph
 
 -- ----------------------------------------------------------------------------
@@ -148,7 +151,6 @@ runProcess cmd args mb_cwd mb_env mb_stdin mb_stdout mb_stderr = do
                           std_in  = mbToStd mb_stdin,
                           std_out = mbToStd mb_stdout,
                           std_err = mbToStd mb_stderr }
-          Nothing Nothing
   maybeClose mb_stdin
   maybeClose mb_stdout
   maybeClose mb_stderr
@@ -193,7 +195,8 @@ proc cmd args = CreateProcess { cmdspec = RawCommand cmd args,
                                 std_out = Inherit,
                                 std_err = Inherit,
                                 close_fds = False,
-                                create_group = False}
+                                create_group = False,
+                                delegate_ctlc = False}
 
 -- | Construct a 'CreateProcess' record for passing to 'createProcess',
 -- representing a command to be passed to the shell.
@@ -205,7 +208,8 @@ shell str = CreateProcess { cmdspec = ShellCommand str,
                             std_out = Inherit,
                             std_err = Inherit,
                             close_fds = False,
-                            create_group = False}
+                            create_group = False,
+                            delegate_ctlc = False}
 
 {- |
 This is the most general way to spawn an external process.  The
@@ -251,7 +255,7 @@ createProcess
   :: CreateProcess
   -> IO (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)
 createProcess cp = do
-  r <- runGenProcess_ "createProcess" cp Nothing Nothing
+  r <- runGenProcess_ "createProcess" cp
   maybeCloseStd (std_in  cp)
   maybeCloseStd (std_out cp)
   maybeCloseStd (std_err cp)
@@ -261,6 +265,50 @@ createProcess cp = do
   maybeCloseStd (UseHandle hdl)
     | hdl /= stdin && hdl /= stdout && hdl /= stderr = hClose hdl
   maybeCloseStd _ = return ()
+
+
+-- $ctlc-handling
+--
+-- When running an interactive console process (such as a shell, console-based
+-- text editor or ghci), we typically want that process to be allowed to handle
+-- Ctl-C keyboard interrupts how it sees fit. For example, while most programs
+-- simply quit on a Ctl-C, some handle it specially. To allow this to happen,
+-- use the @'delegate_ctlc' = True@ option in the 'CreateProcess' options.
+--
+-- The gory details:
+--
+-- By default Ctl-C will generate a @SIGINT@ signal, causing a 'UserInterrupt'
+-- exception to be sent to the main Haskell thread of your program, which if
+-- not specially handled will terminate the program. Normally, this is exactly
+-- what is wanted: an orderly shutdown of the program in response to Ctl-C.
+--
+-- Of course when running another interactive program in the console then we
+-- want to let that program handle Ctl-C. Under Unix however, Ctl-C sends
+-- @SIGINT@ to every process using the console. The standard solution is that
+-- while running an interactive program, ignore @SIGINT@ in the parent, and let
+-- it be handled in the child process. If that process then terminates due to
+-- the @SIGINT@ signal, then at that point treat it as if we had recieved the
+-- @SIGINT@ ourselves and begin an orderly shutdown.
+--
+-- This behaviour is implemented by 'createProcess' (and
+-- 'waitForProcess' \/ 'getProcessExitCode') when the @'delegate_ctlc' = True@
+-- option is set. In particular, the @SIGINT@ signal will be ignored until
+-- 'waitForProcess' returns (or 'getProcessExitCode' returns a non-Nothing
+-- result), so it becomes especially important to use 'waitForProcess' for every
+-- processes created.
+--
+-- In addition, in 'delegate_ctlc' mode, 'waitForProcess' and
+-- 'getProcessExitCode' will throw a 'UserInterrupt' exception if the process
+-- terminated with @ExitFailure (-SIGINT)@. Typically you will not want to
+-- catch this exception, but let it propagate, giving a normal orderly shutdown.
+-- One detail to be aware of is that the 'UserInterrupt' exception is thrown
+-- /synchronously/ in the thread that calls 'waitForProcess', whereas normally
+-- @SIGINT@ causes the exception to be thrown /asynchronously/ to the main
+-- thread.
+--
+-- For even more detail on this topic, see
+-- <http://www.cons.org/cracauer/sigint.html>.
+
 
 -- ----------------------------------------------------------------------------
 -- runInteractiveCommand
@@ -312,7 +360,6 @@ runInteractiveProcess1 fun cmd = do
            cmd{ std_in  = CreatePipe,
                 std_out = CreatePipe,
                 std_err = CreatePipe }
-           Nothing Nothing
   return (fromJust mb_in, fromJust mb_out, fromJust mb_err, p)
 
 -- ----------------------------------------------------------------------------
@@ -335,7 +382,7 @@ detail.
 waitForProcess
   :: ProcessHandle
   -> IO ExitCode
-waitForProcess ph = do
+waitForProcess ph@(ProcessHandle _ delegating_ctlc) = do
   p_ <- modifyProcessHandle ph $ \p_ -> return (p_,p_)
   case p_ of
     ClosedHandle e -> return e
@@ -343,7 +390,7 @@ waitForProcess ph = do
         -- don't hold the MVar while we call c_waitForProcess...
         -- (XXX but there's a small race window here during which another
         -- thread could close the handle or call waitForProcess)
-        alloca $ \pret -> do
+        e <- alloca $ \pret -> do
           throwErrnoIfMinus1Retry_ "waitForProcess" (c_waitForProcess h pret)
           modifyProcessHandle ph $ \p_' ->
             case p_' of
@@ -355,6 +402,9 @@ waitForProcess ph = do
                        then ExitSuccess
                        else (ExitFailure (fromIntegral code))
                 return (ClosedHandle e, e)
+        when delegating_ctlc $
+          endDelegateControlC e
+        return e
 
 -- -----------------------------------------------------------------------------
 --
@@ -531,31 +581,9 @@ when the process died as the result of a signal.
 #ifdef __GLASGOW_HASKELL__
 system :: String -> IO ExitCode
 system "" = ioException (ioeSetErrorString (mkIOError InvalidArgument "system" Nothing Nothing) "null command")
-system str = syncProcess "system" (shell str)
-
-
-syncProcess :: String -> CreateProcess -> IO ExitCode
-#if mingw32_HOST_OS
-syncProcess _fun c = do
-  (_,_,_,p) <- createProcess c
+system str = do
+  (_,_,_,p) <- runGenProcess_ "system" (shell str) { delegate_ctlc = True }
   waitForProcess p
-#else
-syncProcess fun c = do
-  -- The POSIX version of system needs to do some manipulation of signal
-  -- handlers.  Since we're going to be synchronously waiting for the child,
-  -- we want to ignore ^C in the parent, but handle it the default way
-  -- in the child (using SIG_DFL isn't really correct, it should be the
-  -- original signal handler, but the GHC RTS will have already set up
-  -- its own handler and we don't want to use that).
-  old_int  <- installHandler sigINT  Ignore Nothing
-  old_quit <- installHandler sigQUIT Ignore Nothing
-  (_,_,_,p) <- runGenProcess_ fun c
-                (Just defaultSignal) (Just defaultSignal)
-  r <- waitForProcess p
-  _ <- installHandler sigINT  old_int Nothing
-  _ <- installHandler sigQUIT old_quit Nothing
-  return r
-#endif  /* mingw32_HOST_OS */
 #endif  /* __GLASGOW_HASKELL__ */
 
 {-|
@@ -568,7 +596,9 @@ The return codes and possible failures are the same as for 'system'.
 -}
 rawSystem :: String -> [String] -> IO ExitCode
 #ifdef __GLASGOW_HASKELL__
-rawSystem cmd args = syncProcess "rawSystem" (proc cmd args)
+rawSystem cmd args = do
+  (_,_,_,p) <- runGenProcess_ "rawSystem" (proc cmd args) { delegate_ctlc = True }
+  waitForProcess p
 #elif !mingw32_HOST_OS
 -- crude fallback implementation: could do much better than this under Unix
 rawSystem cmd args = system (showCommandForUser cmd args)
@@ -657,22 +687,26 @@ when the process died as the result of a signal.
 -}
 
 getProcessExitCode :: ProcessHandle -> IO (Maybe ExitCode)
-getProcessExitCode ph = do
-  modifyProcessHandle ph $ \p_ ->
+getProcessExitCode ph@(ProcessHandle _ delegating_ctlc) = do
+  (m_e, was_open) <- modifyProcessHandle ph $ \p_ ->
     case p_ of
-      ClosedHandle e -> return (p_, Just e)
+      ClosedHandle e -> return (p_, (Just e, False))
       OpenHandle h ->
         alloca $ \pExitCode -> do
             res <- throwErrnoIfMinus1Retry "getProcessExitCode" $
                         c_getProcessExitCode h pExitCode
             code <- peek pExitCode
             if res == 0
-              then return (p_, Nothing)
+              then return (p_, (Nothing, False))
               else do
                    closePHANDLE h
                    let e  | code == 0 = ExitSuccess
                           | otherwise = ExitFailure (fromIntegral code)
-                   return (ClosedHandle e, Just e)
+                   return (ClosedHandle e, (Just e, True))
+  case m_e of
+    Just e | was_open && delegating_ctlc -> endDelegateControlC e
+    _                                    -> return ()
+  return m_e
 
 -- ----------------------------------------------------------------------------
 -- Interface to C bits

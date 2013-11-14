@@ -1,7 +1,8 @@
-{-# LANGUAGE CPP, ForeignFunctionInterface, RecordWildCards #-}
+{-# LANGUAGE CPP, ForeignFunctionInterface, RecordWildCards, BangPatterns #-}
 {-# OPTIONS_HADDOCK hide #-}
 #ifdef __GLASGOW_HASKELL__
 {-# LANGUAGE Trustworthy #-}
+{-# LANGUAGE InterruptibleFFI #-}
 #endif
 
 -----------------------------------------------------------------------------
@@ -27,6 +28,8 @@ module System.Process.Internals (
         CmdSpec(..), StdStream(..),
         runGenProcess_,
 #endif
+        startDelegateControlC,
+        endDelegateControlC,
 #if !defined(mingw32_HOST_OS) && !defined(__MINGW32__)
         pPrPr_disableITimers, c_execvpe,
         ignoreSignal, defaultSignal,
@@ -61,12 +64,14 @@ import qualified GHC.IO.FD as FD
 import GHC.IO.Device
 import GHC.IO.Handle.FD
 import GHC.IO.Handle.Internals
-import GHC.IO.Handle.Types
+import GHC.IO.Handle.Types hiding (ClosedHandle)
 import System.IO.Error
 import Data.Typeable
 #if defined(mingw32_HOST_OS)
 import GHC.IO.IOMode
 import System.Win32.DebugApi (PHANDLE)
+#else
+import System.Posix.Signals as Sig
 #endif
 #endif
 
@@ -100,28 +105,28 @@ import System.FilePath
      to wait for the process later.
 -}
 data ProcessHandle__ = OpenHandle PHANDLE | ClosedHandle ExitCode
-newtype ProcessHandle = ProcessHandle (MVar ProcessHandle__)
+data ProcessHandle = ProcessHandle !(MVar ProcessHandle__) !Bool
 
 modifyProcessHandle
         :: ProcessHandle
         -> (ProcessHandle__ -> IO (ProcessHandle__, a))
         -> IO a
-modifyProcessHandle (ProcessHandle m) io = modifyMVar m io
+modifyProcessHandle (ProcessHandle m _) io = modifyMVar m io
 
 withProcessHandle
         :: ProcessHandle
         -> (ProcessHandle__ -> IO a)
         -> IO a
-withProcessHandle (ProcessHandle m) io = withMVar m io
+withProcessHandle (ProcessHandle m _) io = withMVar m io
 
 #if !defined(mingw32_HOST_OS) && !defined(__MINGW32__)
 
 type PHANDLE = CPid
 
-mkProcessHandle :: PHANDLE -> IO ProcessHandle
-mkProcessHandle p = do
+mkProcessHandle :: PHANDLE -> Bool -> IO ProcessHandle
+mkProcessHandle p mb_delegate_ctlc = do
   m <- newMVar (OpenHandle p)
-  return (ProcessHandle m)
+  return (ProcessHandle m mb_delegate_ctlc)
 
 closePHANDLE :: PHANDLE -> IO ()
 closePHANDLE _ = return ()
@@ -137,7 +142,7 @@ mkProcessHandle :: PHANDLE -> IO ProcessHandle
 mkProcessHandle h = do
    m <- newMVar (OpenHandle h)
    _ <- mkWeakMVar m (processHandleFinaliser m)
-   return (ProcessHandle m)
+   return (ProcessHandle m False)
 
 processHandleFinaliser :: MVar ProcessHandle__ -> IO ()
 processHandleFinaliser m =
@@ -166,7 +171,10 @@ data CreateProcess = CreateProcess{
   std_out      :: StdStream,               -- ^ How to determine stdout
   std_err      :: StdStream,               -- ^ How to determine stderr
   close_fds    :: Bool,                    -- ^ Close all file descriptors except stdin, stdout and stderr in the new process (on Windows, only works if std_in, std_out, and std_err are all Inherit)
-  create_group :: Bool                     -- ^ Create a new process group
+  create_group :: Bool,                    -- ^ Create a new process group
+  delegate_ctlc:: Bool                     -- ^ Delegate control-C handling. Use this for interactive console processes to let them handle control-C themselves (see below for details).
+                                           --
+                                           --   On Windows this has no effect.
  }
 
 data CmdSpec
@@ -188,8 +196,6 @@ data StdStream
 runGenProcess_
   :: String                     -- ^ function name (for error messages)
   -> CreateProcess
-  -> Maybe CLong                -- ^ handler for SIGINT
-  -> Maybe CLong                -- ^ handler for SIGQUIT
   -> IO (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)
 
 #if !defined(mingw32_HOST_OS) && !defined(__MINGW32__)
@@ -206,8 +212,8 @@ runGenProcess_ fun CreateProcess{ cmdspec = cmdsp,
                                   std_out = mb_stdout,
                                   std_err = mb_stderr,
                                   close_fds = mb_close_fds,
-                                  create_group = mb_create_group }
-               mb_sigint mb_sigquit
+                                  create_group = mb_create_group,
+                                  delegate_ctlc = mb_delegate_ctlc }
  = do
   let (cmd,args) = commandToProcess cmdsp
   withFilePathException cmd $
@@ -224,14 +230,8 @@ runGenProcess_ fun CreateProcess{ cmdspec = cmdsp,
      fdout <- mbFd fun fd_stdout mb_stdout
      fderr <- mbFd fun fd_stderr mb_stderr
 
-     let (set_int, inthand)
-                = case mb_sigint of
-                        Nothing   -> (0, 0)
-                        Just hand -> (1, hand)
-         (set_quit, quithand)
-                = case mb_sigquit of
-                        Nothing   -> (0, 0)
-                        Just hand -> (1, hand)
+     when mb_delegate_ctlc
+       startDelegateControlC
 
      -- runInteractiveProcess() blocks signals around the fork().
      -- Since blocking/unblocking of signals is a global state
@@ -241,7 +241,7 @@ runGenProcess_ fun CreateProcess{ cmdspec = cmdsp,
                          c_runInteractiveProcess pargs pWorkDir pEnv
                                 fdin fdout fderr
                                 pfdStdInput pfdStdOutput pfdStdError
-                                set_int inthand set_quit quithand
+                                (if mb_delegate_ctlc then 1 else 0)
                                 ((if mb_close_fds then RUN_PROCESS_IN_CLOSE_FDS else 0)
                                 .|.(if mb_create_group then RUN_PROCESS_IN_NEW_GROUP else 0))
                                 pFailedDoing
@@ -255,12 +255,88 @@ runGenProcess_ fun CreateProcess{ cmdspec = cmdsp,
      hndStdOutput <- mbPipe mb_stdout pfdStdOutput ReadMode
      hndStdError  <- mbPipe mb_stderr pfdStdError  ReadMode
 
-     ph <- mkProcessHandle proc_handle
+     ph <- mkProcessHandle proc_handle mb_delegate_ctlc
      return (hndStdInput, hndStdOutput, hndStdError, ph)
 
 {-# NOINLINE runInteractiveProcess_lock #-}
 runInteractiveProcess_lock :: MVar ()
 runInteractiveProcess_lock = unsafePerformIO $ newMVar ()
+
+-- ----------------------------------------------------------------------------
+-- Delegated control-C handling on Unix
+
+-- See ticket https://ghc.haskell.org/trac/ghc/ticket/2301
+-- and http://www.cons.org/cracauer/sigint.html
+--
+-- While running an interactive console process like ghci or a shell, we want
+-- to let that process handle Ctl-C keyboard interrupts how it sees fit.
+-- So that means we need to ignore the SIGINT/SIGQUIT Unix signals while we're
+-- running such programs. And then if/when they do terminate, we need to check
+-- if they terminated due to SIGINT/SIGQUIT and if so then we behave as if we
+-- got the Ctl-C then, by throwing the UserInterrupt exception.
+--
+-- If we run multiple programs like this concurrently then we have to be
+-- careful to avoid messing up the signal handlers. We keep a count and only
+-- restore when the last one has finished.
+
+{-# NOINLINE runInteractiveProcess_delegate_ctlc #-}
+runInteractiveProcess_delegate_ctlc :: MVar (Maybe (Int, Sig.Handler, Sig.Handler))
+runInteractiveProcess_delegate_ctlc = unsafePerformIO $ newMVar Nothing
+
+startDelegateControlC :: IO ()
+startDelegateControlC =
+    modifyMVar_ runInteractiveProcess_delegate_ctlc $ \delegating -> do
+      case delegating of
+        Nothing -> do
+--          print ("startDelegateControlC", "Nothing")
+          -- We're going to ignore ^C in the parent while there are any
+          -- processes using ^C delegation.
+          --
+          -- If another thread runs another process without using
+          -- delegation while we're doing this then it will inherit the
+          -- ignore ^C status.
+          old_int  <- installHandler sigINT  Ignore Nothing
+          old_quit <- installHandler sigQUIT Ignore Nothing
+          return (Just (1, old_int, old_quit))
+
+        Just (count, old_int, old_quit) -> do
+--          print ("startDelegateControlC", count)
+          -- If we're already doing it, just increment the count
+          let !count' = count + 1
+          return (Just (count', old_int, old_quit))
+
+endDelegateControlC :: ExitCode -> IO ()
+endDelegateControlC exitCode = do
+    modifyMVar_ runInteractiveProcess_delegate_ctlc $ \delegating -> do
+      case delegating of
+        Just (1, old_int, old_quit) -> do
+--          print ("endDelegateControlC", exitCode, 1 :: Int)
+          -- Last process, so restore the old signal handlers
+          _ <- installHandler sigINT  old_int  Nothing
+          _ <- installHandler sigQUIT old_quit Nothing
+          return Nothing
+
+        Just (count, old_int, old_quit) -> do
+--          print ("endDelegateControlC", exitCode, count)
+          -- Not the last, just decrement the count
+          let !count' = count - 1
+          return (Just (count', old_int, old_quit))
+
+        Nothing -> return Nothing -- should be impossible
+
+    -- And if the process did die due to SIGINT or SIGQUIT then
+    -- we throw our equivalent exception here (synchronously).
+    --
+    -- An alternative design would be to throw to the main thread, as the
+    -- normal signal handler does. But since we can be sync here, we do so.
+    -- It allows the code locally to catch it and do something.
+    case exitCode of
+      ExitFailure n | isSigIntQuit n -> throwIO UserInterrupt
+      _                              -> return ()
+  where
+    isSigIntQuit n = sig == sigINT || sig == sigQUIT
+      where
+        sig = fromIntegral (-n)
 
 foreign import ccall unsafe "runInteractiveProcess"
   c_runInteractiveProcess
@@ -273,10 +349,7 @@ foreign import ccall unsafe "runInteractiveProcess"
         -> Ptr FD
         -> Ptr FD
         -> Ptr FD
-        -> CInt                         -- non-zero: set child's SIGINT handler
-        -> CLong                        -- SIGINT handler
-        -> CInt                         -- non-zero: set child's SIGQUIT handler
-        -> CLong                        -- SIGQUIT handler
+        -> CInt                         -- reset child's SIGINT & SIGQUIT handlers
         -> CInt                         -- flags
         -> Ptr CString
         -> IO PHANDLE
@@ -298,8 +371,8 @@ runGenProcess_ fun CreateProcess{ cmdspec = cmdsp,
                                   std_out = mb_stdout,
                                   std_err = mb_stderr,
                                   close_fds = mb_close_fds,
-                                  create_group = mb_create_group }
-               _ignored_mb_sigint _ignored_mb_sigquit
+                                  create_group = mb_create_group,
+                                  delegate_ctlc = _ignored }
  = do
   (cmd, cmdline) <- commandToProcess cmdsp
   withFilePathException cmd $
@@ -342,6 +415,12 @@ runGenProcess_ fun CreateProcess{ cmdspec = cmdsp,
 {-# NOINLINE runInteractiveProcess_lock #-}
 runInteractiveProcess_lock :: MVar ()
 runInteractiveProcess_lock = unsafePerformIO $ newMVar ()
+
+startDelegateControlC :: IO ()
+startDelegateControlC = return ()
+
+endDelegateControlC :: ExitCode -> IO ()
+endDelegateControlC _ = return ()
 
 foreign import ccall unsafe "runInteractiveProcess"
   c_runInteractiveProcess

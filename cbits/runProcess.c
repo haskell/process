@@ -57,8 +57,7 @@ runInteractiveProcess (char *const args[],
                        char *workingDirectory, char **environment,
                        int fdStdIn, int fdStdOut, int fdStdErr,
                        int *pfdStdInput, int *pfdStdOutput, int *pfdStdError,
-                       int set_inthandler, long inthandler,
-                       int set_quithandler, long quithandler,
+                       int reset_int_quit_handlers,
                        int flags,
                        char **failed_doing)
 {
@@ -205,20 +204,15 @@ runInteractiveProcess (char *const args[],
             }
         }
 
-        /* Set the SIGINT/SIGQUIT signal handlers in the child, if requested
+        /* Reset the SIGINT/SIGQUIT signal handlers in the child, if requested
          */
-        {
+        if (reset_int_quit_handlers) {
             struct sigaction dfl;
             (void)sigemptyset(&dfl.sa_mask);
             dfl.sa_flags = 0;
-            if (set_inthandler) {
-                dfl.sa_handler = (void *)inthandler;
-                (void)sigaction(SIGINT, &dfl, NULL);
-            }
-            if (set_quithandler) {
-                dfl.sa_handler = (void *)quithandler;
-                (void)sigaction(SIGQUIT,  &dfl, NULL);
-            }
+            dfl.sa_handler = SIG_DFL;
+            (void)sigaction(SIGINT,  &dfl, NULL);
+            (void)sigaction(SIGQUIT, &dfl, NULL);
         }
 
         /* the child */
