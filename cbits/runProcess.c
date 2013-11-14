@@ -23,17 +23,9 @@
    ------------------------------------------------------------------------- */
 
 // If a process was terminated by a signal, the exit status we return
-// via the System.Process API is (signum << 8), and if a core-file has
-// been generated (and reported by the OS) the 16th bit (i.e. 0x8000)
-// is additionally set; this encoding avoids collision with normal
-// process termination status codes, as according to
-// http://pubs.opengroup.org/onlinepubs/9699919799/functions/wait.html
-// WEXITSTATUS(s) returns an 8-bit value. See also #7229.
-#if defined(WCOREDUMP)
-#define TERMSIG_EXITSTATUS(s) ((WCOREDUMP(s) ? 0x8000 : 0) | (WTERMSIG(s) << 8))
-#else
-#define TERMSIG_EXITSTATUS(s) (WTERMSIG(s) << 8)
-#endif
+// via the System.Process API is (-signum). This encoding avoids collision with
+// normal process termination status codes. See also #7229.
+#define TERMSIG_EXITSTATUS(s) (-(WTERMSIG(s)))
 
 static long max_fd = 0;
 
