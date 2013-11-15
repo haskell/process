@@ -628,9 +628,16 @@ foreign import ccall interruptible "waitForProcess" -- NB. safe - can block
 -- Old deprecated variants
 -- ----------------------------------------------------------------------------
 
+-- TODO: We're not going to mark these functions as DEPRECATED immediately in
+-- process-1.2.0.0. That's because some of their replacements have not been
+-- around for all that long. But they should eventually be marked with a
+-- suitable DEPRECATED pragma after a release or two.
+
 
 -- ----------------------------------------------------------------------------
 -- runCommand
+
+--TODO: in a later release {-# DEPRECATED runCommand "Use 'spawnCommand' instead" #-}
 
 {- | Runs a command using the shell.
  -}
@@ -645,6 +652,8 @@ runCommand string = do
 
 -- ----------------------------------------------------------------------------
 -- runProcess
+
+--TODO: in a later release {-# DEPRECATED runProcess "Use 'spawnProcess' or 'createProcess' instead" #-}
 
 {- | Runs a raw command, optionally specifying 'Handle's from which to
      take the @stdin@, @stdout@ and @stderr@ channels for the new
@@ -693,6 +702,8 @@ runProcess cmd args mb_cwd mb_env mb_stdin mb_stdout mb_stderr = do
 -- ----------------------------------------------------------------------------
 -- runInteractiveCommand
 
+--TODO: in a later release {-# DEPRECATED runInteractiveCommand "Use 'createProcess' instead" #-}
+
 {- | Runs a command using the shell, and returns 'Handle's that may
      be used to communicate with the process via its @stdin@, @stdout@,
      and @stderr@ respectively. The 'Handle's are initially in binary
@@ -708,6 +719,8 @@ runInteractiveCommand string =
 
 -- ----------------------------------------------------------------------------
 -- runInteractiveProcess
+
+--TODO: in a later release {-# DEPRECATED runInteractiveCommand "Use 'createProcess' instead" #-}
 
 {- | Runs a raw command, and returns 'Handle's that may be used to communicate
      with the process via its @stdin@, @stdout@ and @stderr@ respectively.
@@ -748,6 +761,8 @@ runInteractiveProcess1 fun cmd = do
 -- ---------------------------------------------------------------------------
 -- system & rawSystem
 
+--TODO: in a later release {-# DEPRECATED system "Use 'callCommand' (or 'spawnCommand' and 'waitForProcess') instead" #-}
+
 {-|
 Computation @system cmd@ returns the exit code produced when the
 operating system runs the shell command @cmd@.
@@ -778,6 +793,8 @@ system str = do
   waitForProcess p
 #endif  /* __GLASGOW_HASKELL__ */
 
+
+--TODO: in a later release {-# DEPRECATED rawSystem "Use 'callProcess' (or 'spawnProcess' and 'waitForProcess') instead" #-}
 
 {-|
 The computation @'rawSystem' cmd args@ runs the operating system command
