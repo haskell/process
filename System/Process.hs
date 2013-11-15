@@ -116,7 +116,7 @@ runCommand
   -> IO ProcessHandle
 
 runCommand string = do
-  (_,_,_,ph) <- runGenProcess_ "runCommand" (shell string)
+  (_,_,_,ph) <- createProcess_ "runCommand" (shell string)
   return ph
 
 -- ----------------------------------------------------------------------------
@@ -145,7 +145,7 @@ runProcess
 
 runProcess cmd args mb_cwd mb_env mb_stdin mb_stdout mb_stderr = do
   (_,_,_,ph) <-
-      runGenProcess_ "runProcess"
+      createProcess_ "runProcess"
          (proc cmd args){ cwd = mb_cwd,
                           env = mb_env,
                           std_in  = mbToStd mb_stdin,
@@ -255,7 +255,7 @@ createProcess
   :: CreateProcess
   -> IO (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)
 createProcess cp = do
-  r <- runGenProcess_ "createProcess" cp
+  r <- createProcess_ "createProcess" cp
   maybeCloseStd (std_in  cp)
   maybeCloseStd (std_out cp)
   maybeCloseStd (std_err cp)
@@ -356,7 +356,7 @@ runInteractiveProcess1
   -> IO (Handle,Handle,Handle,ProcessHandle)
 runInteractiveProcess1 fun cmd = do
   (mb_in, mb_out, mb_err, p) <-
-      runGenProcess_ fun
+      createProcess_ fun
            cmd{ std_in  = CreatePipe,
                 std_out = CreatePipe,
                 std_err = CreatePipe }
@@ -582,7 +582,7 @@ when the process died as the result of a signal.
 system :: String -> IO ExitCode
 system "" = ioException (ioeSetErrorString (mkIOError InvalidArgument "system" Nothing Nothing) "null command")
 system str = do
-  (_,_,_,p) <- runGenProcess_ "system" (shell str) { delegate_ctlc = True }
+  (_,_,_,p) <- createProcess_ "system" (shell str) { delegate_ctlc = True }
   waitForProcess p
 #endif  /* __GLASGOW_HASKELL__ */
 
@@ -597,7 +597,7 @@ The return codes and possible failures are the same as for 'system'.
 rawSystem :: String -> [String] -> IO ExitCode
 #ifdef __GLASGOW_HASKELL__
 rawSystem cmd args = do
-  (_,_,_,p) <- runGenProcess_ "rawSystem" (proc cmd args) { delegate_ctlc = True }
+  (_,_,_,p) <- createProcess_ "rawSystem" (proc cmd args) { delegate_ctlc = True }
   waitForProcess p
 #elif !mingw32_HOST_OS
 -- crude fallback implementation: could do much better than this under Unix

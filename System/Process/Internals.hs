@@ -26,7 +26,8 @@ module System.Process.Internals (
 #ifdef __GLASGOW_HASKELL__
         CreateProcess(..),
         CmdSpec(..), StdStream(..),
-        runGenProcess_,
+        createProcess_,
+        runGenProcess_, --deprecated
 #endif
         startDelegateControlC,
         endDelegateControlC,
@@ -193,7 +194,7 @@ data StdStream
                              -- and newline translation mode (just
                              -- like @Handle@s created by @openFile@).
 
-runGenProcess_
+createProcess_
   :: String                     -- ^ function name (for error messages)
   -> CreateProcess
   -> IO (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)
@@ -205,7 +206,7 @@ runGenProcess_
 -- -----------------------------------------------------------------------------
 -- POSIX runProcess with signal handling in the child
 
-runGenProcess_ fun CreateProcess{ cmdspec = cmdsp,
+createProcess_ fun CreateProcess{ cmdspec = cmdsp,
                                   cwd = mb_cwd,
                                   env = mb_env,
                                   std_in = mb_stdin,
@@ -364,7 +365,7 @@ defaultSignal = CONST_SIG_DFL
 
 #ifdef __GLASGOW_HASKELL__
 
-runGenProcess_ fun CreateProcess{ cmdspec = cmdsp,
+createProcess_ fun CreateProcess{ cmdspec = cmdsp,
                                   cwd = mb_cwd,
                                   env = mb_env,
                                   std_in = mb_stdin,
@@ -658,4 +659,22 @@ withCEnvironment :: [(String,String)] -> (Ptr CWString -> IO a) -> IO a
 withCEnvironment envir act =
   let env' = foldr (\(name, val) env -> name ++ ('=':val)++'\0':env) "\0" envir
   in withCWString env' (act . castPtr)
+#endif
+
+
+-- ----------------------------------------------------------------------------
+-- Deprecated / compat
+
+#ifdef __GLASGOW_HASKELL__
+{-# DEPRECATED runGenProcess_
+      "Please do not use this anymore, use the ordinary 'System.Process.createProcess'. If you need the SIGINT handling, use delegate_ctlc = True (runGenProcess_ is now just an imperfectly emulated stub that probably duplicates or overrides your own signal handling)." #-}
+runGenProcess_
+ :: String                     -- ^ function name (for error messages)
+ -> CreateProcess
+ -> Maybe CLong                -- ^ handler for SIGINT
+ -> Maybe CLong                -- ^ handler for SIGQUIT
+ -> IO (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)
+runGenProcess_ fun c (Just sig) (Just sig') | sig == defaultSignal && sig == sig'
+                         = createProcess_ fun c { delegate_ctlc = True }
+runGenProcess_ fun c _ _ = createProcess_ fun c
 #endif
