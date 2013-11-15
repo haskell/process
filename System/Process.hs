@@ -220,11 +220,18 @@ createProcess cp = do
 -- ----------------------------------------------------------------------------
 -- spawnProcess/spawnCommand
 
+-- | Creates a new process to run the specified raw command with the given
+-- arguments. It does not wait for the program to finish, but returns the
+-- 'ProcessHandle'.
+--
 spawnProcess :: FilePath -> [String] -> IO ProcessHandle
 spawnProcess cmd args = do
     (_,_,_,p) <- createProcess_ "spawnProcess" (proc cmd args)
     return p
 
+-- | Creates a new process to run the specified shell command.
+-- It does not wait for the program to finish, but returns the 'ProcessHandle'.
+--
 spawnCommand :: String -> IO ProcessHandle
 spawnCommand cmd = do
     (_,_,_,p) <- createProcess_ "spawnCommand" (shell cmd)
