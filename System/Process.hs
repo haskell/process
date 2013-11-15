@@ -44,28 +44,36 @@ module System.Process (
         StdStream(..),
         ProcessHandle,
 
-        -- ** Specific variants of createProcess
-        runCommand,
-        runProcess,
-        runInteractiveCommand,
-        runInteractiveProcess,
+        -- ** Simpler functions for common tasks
+        callProcess,
+        callCommand,
+        spawnProcess,
+        spawnCommand,
         readProcess,
         readProcessWithExitCode,
-#endif
-        system,
-        rawSystem,
+
+        -- ** Related utilities
         showCommandForUser,
 
         -- ** Control-C handling on Unix
         -- $ctlc-handling
 
-#ifndef __HUGS__
         -- * Process completion
         waitForProcess,
         getProcessExitCode,
         terminateProcess,
         interruptProcessGroupOf,
+
+        -- * Old deprecated functions
+        -- | These functions pre-date 'createProcess' which is much more
+        -- flexible.
+        runProcess,
+        runCommand,
+        runInteractiveProcess,
+        runInteractiveCommand,
 #endif
+        system,
+        rawSystem,
  ) where
 
 import Prelude hiding (mapM)
@@ -266,6 +274,54 @@ createProcess cp = do
     | hdl /= stdin && hdl /= stdout && hdl /= stderr = hClose hdl
   maybeCloseStd _ = return ()
 
+-- ----------------------------------------------------------------------------
+-- spawnProcess/spawnCommand
+
+spawnProcess :: FilePath -> [String] -> IO ProcessHandle
+spawnProcess cmd args = do
+    (_,_,_,p) <- createProcess_ "spawnProcess" (proc cmd args)
+    return p
+
+spawnCommand :: String -> IO ProcessHandle
+spawnCommand cmd = do
+    (_,_,_,p) <- createProcess_ "spawnCommand" (shell cmd)
+    return p
+
+-- ----------------------------------------------------------------------------
+-- callProcess/callCommand
+
+-- | Creates a new process to run the specified command with the given
+-- arguments, and wait for it to finish.  If the command returns a non-zero
+-- exit code, an exception is raised.
+--
+callProcess :: FilePath -> [String] -> IO ()
+callProcess cmd args = do
+    (_,_,_,p) <- createProcess_ "callCommand" (proc cmd args) { delegate_ctlc = True }
+    exit_code <- waitForProcess p
+    case exit_code of
+      ExitSuccess   -> return ()
+      ExitFailure r -> processFailedException "callProcess" cmd args r
+
+-- | Creates a new process to run the specified shell command.  If the
+-- command returns a non-zero exit code, an exception is raised.
+--
+callCommand :: String -> IO ()
+callCommand cmd = do
+    (_,_,_,p) <- createProcess_ "callCommand" (shell cmd) { delegate_ctlc = True }
+    exit_code <- waitForProcess p
+    case exit_code of
+      ExitSuccess   -> return ()
+      ExitFailure r -> processFailedException "callCommand" cmd [] r
+
+processFailedException :: String -> String -> [String] -> Int -> IO a
+processFailedException fun cmd args exit_code =
+      ioError (mkIOError OtherError (fun ++ ": " ++ cmd ++
+                                     concatMap ((' ':) . show) args ++
+                                     " (exit " ++ show exit_code ++ ")")
+                                 Nothing Nothing)
+
+-- ----------------------------------------------------------------------------
+-- Control-C handling on Unix
 
 -- $ctlc-handling
 --
@@ -468,11 +524,7 @@ readProcess cmd args input =
 
         case ex of
          ExitSuccess   -> return output
-         ExitFailure r ->
-          ioError (mkIOError OtherError ("readProcess: " ++ cmd ++
-                                         ' ':unwords (map show args) ++
-                                         " (exit " ++ show r ++ ")")
-                                     Nothing Nothing)
+         ExitFailure r -> processFailedException "readProcess" cmd args r
 
 {- |
 @readProcessWithExitCode@ creates an external process, reads its
