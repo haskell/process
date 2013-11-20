@@ -224,6 +224,7 @@ createProcess cp = do
 -- arguments. It does not wait for the program to finish, but returns the
 -- 'ProcessHandle'.
 --
+-- /Since: 1.2.0.0/
 spawnProcess :: FilePath -> [String] -> IO ProcessHandle
 spawnProcess cmd args = do
     (_,_,_,p) <- createProcess_ "spawnProcess" (proc cmd args)
@@ -232,6 +233,7 @@ spawnProcess cmd args = do
 -- | Creates a new process to run the specified shell command.
 -- It does not wait for the program to finish, but returns the 'ProcessHandle'.
 --
+-- /Since: 1.2.0.0/
 spawnCommand :: String -> IO ProcessHandle
 spawnCommand cmd = do
     (_,_,_,p) <- createProcess_ "spawnCommand" (shell cmd)
@@ -245,6 +247,7 @@ spawnCommand cmd = do
 -- arguments, and wait for it to finish.  If the command returns a non-zero
 -- exit code, an exception is raised.
 --
+-- /Since: 1.2.0.0/
 callProcess :: FilePath -> [String] -> IO ()
 callProcess cmd args = do
     (_,_,_,p) <- createProcess_ "callCommand" (proc cmd args) { delegate_ctlc = True }
@@ -256,6 +259,7 @@ callProcess cmd args = do
 -- | Creates a new process to run the specified shell command.  If the
 -- command returns a non-zero exit code, an exception is raised.
 --
+-- /Since: 1.2.0.0/
 callCommand :: String -> IO ()
 callCommand cmd = do
     (_,_,_,p) <- createProcess_ "callCommand" (shell cmd) { delegate_ctlc = True }

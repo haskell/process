@@ -176,6 +176,8 @@ data CreateProcess = CreateProcess{
   delegate_ctlc:: Bool                     -- ^ Delegate control-C handling. Use this for interactive console processes to let them handle control-C themselves (see below for details).
                                            --
                                            --   On Windows this has no effect.
+                                           --
+                                           --   /Since: 1.2.0.0/
  }
 
 data CmdSpec
