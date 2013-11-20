@@ -38,8 +38,8 @@ source-repository this
 library
     default-language: Haskell2010
     other-extensions:
+        BangPatterns
         CPP
-        ForeignFunctionInterface
         InterruptibleFFI
         RecordWildCards
         Trustworthy

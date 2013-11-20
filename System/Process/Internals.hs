@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP, ForeignFunctionInterface, RecordWildCards, BangPatterns #-}
+{-# LANGUAGE CPP, RecordWildCards, BangPatterns #-}
 {-# OPTIONS_HADDOCK hide #-}
 #ifdef __GLASGOW_HASKELL__
 {-# LANGUAGE Trustworthy #-}
