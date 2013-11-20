@@ -485,8 +485,8 @@ other threads in the system, you must compile the program with
 (/Since: 1.2.0.0/) On Unix systems, a negative value @'ExitFailure' -/signum/@
 indicates that the child was terminated by signal @/signum/@.
 The signal numbers are platform-specific, so to test for a specific signal use
-the constants provided by @System.Posix.Signals@ in the @unix@ package.
-Note: core dumps are not reported, use @System.Posix.Process@ if you need this
+the constants provided by "System.Posix.Signals" in the @unix@ package.
+Note: core dumps are not reported, use "System.Posix.Process" if you need this
 detail.
 
 -}
