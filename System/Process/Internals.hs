@@ -676,7 +676,10 @@ runGenProcess_
  -> Maybe CLong                -- ^ handler for SIGINT
  -> Maybe CLong                -- ^ handler for SIGQUIT
  -> IO (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)
+#if !defined(mingw32_HOST_OS) && !defined(__MINGW32__)
 runGenProcess_ fun c (Just sig) (Just sig') | sig == defaultSignal && sig == sig'
                          = createProcess_ fun c { delegate_ctlc = True }
+runGenProcess_ fun c _ _ = createProcess_ fun c
+#else
 runGenProcess_ fun c _ _ = createProcess_ fun c
 #endif
