@@ -81,7 +81,7 @@ import Prelude hiding (mapM)
 #ifndef __HUGS__
 import System.Process.Internals
 
-import Control.Exception (SomeException, mask, try, onException, throwIO)
+import Control.Exception (SomeException, mask, try, throwIO)
 import Control.DeepSeq (rnf)
 import System.IO.Error (mkIOError, ioeSetErrorString)
 #if !defined(mingw32_HOST_OS)
@@ -216,6 +216,59 @@ createProcess cp = do
     | hdl /= stdin && hdl /= stdout && hdl /= stderr = hClose hdl
   maybeCloseStd _ = return ()
 
+{-
+-- TODO: decide if we want to expose this to users
+-- | A 'C.bracketOnError'-style resource handler for 'createProcess'.
+--
+-- In normal operation it adds nothing, you are still responsible for waiting
+-- for (or forcing) process termination and closing any 'Handle's. It only does
+-- automatic cleanup if there is an exception. If there is an exception in the
+-- body then it ensures that the process gets terminated and any 'CreatePipe'
+-- 'Handle's are closed. In particular this means that if the Haskell thread
+-- is killed (e.g. 'killThread'), that the external process is also terminated.
+--
+-- e.g.
+--
+-- > withCreateProcess (proc cmd args) { ... }  $ \_ _ _ ph -> do
+-- >   ...
+--
+withCreateProcess
+  :: CreateProcess
+  -> (Maybe Handle -> Maybe Handle -> Maybe Handle -> ProcessHandle -> IO a)
+  -> IO a
+withCreateProcess c action =
+    C.bracketOnError (createProcess c) cleanupProcess
+                     (\(m_in, m_out, m_err, ph) -> action m_in m_out m_err ph)
+-}
+
+-- wrapper so we can get exceptions with the appropriate function name.
+withCreateProcess_
+  :: String
+  -> CreateProcess
+  -> (Maybe Handle -> Maybe Handle -> Maybe Handle -> ProcessHandle -> IO a)
+  -> IO a
+withCreateProcess_ fun c action =
+    C.bracketOnError (createProcess_ fun c) cleanupProcess
+                     (\(m_in, m_out, m_err, ph) -> action m_in m_out m_err ph)
+
+
+cleanupProcess :: (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)
+               -> IO ()
+cleanupProcess (mb_stdin, mb_stdout, mb_stderr, ph) = do
+    terminateProcess ph
+    -- Note, it's important that other threads that might be reading/writing
+    -- these handles also get killed off, since otherwise they might be holding
+    -- the handle lock and prevent us from closing, leading to deadlock.
+    maybe (return ()) hClose mb_stdin
+    maybe (return ()) hClose mb_stdout
+    maybe (return ()) hClose mb_stderr
+    -- terminateProcess does not guarantee that it terminates the process.
+    -- Indeed on unix it's SIGTERM, which asks nicely but does not guarantee
+    -- that it stops. If it doesn't stop, we don't want to hang, so we wait
+    -- asynchronously using forkIO.
+    _ <- forkIO (waitForProcess ph >> return ())
+    return ()
+
 
 -- ----------------------------------------------------------------------------
 -- spawnProcess/spawnCommand
@@ -250,8 +303,9 @@ spawnCommand cmd = do
 -- /Since: 1.2.0.0/
 callProcess :: FilePath -> [String] -> IO ()
 callProcess cmd args = do
-    (_,_,_,p) <- createProcess_ "callCommand" (proc cmd args) { delegate_ctlc = True }
-    exit_code <- waitForProcess p
+    exit_code <- withCreateProcess_ "callCommand"
+                   (proc cmd args) { delegate_ctlc = True } $ \_ _ _ p ->
+                   waitForProcess p
     case exit_code of
       ExitSuccess   -> return ()
       ExitFailure r -> processFailedException "callProcess" cmd args r
@@ -262,8 +316,9 @@ callProcess cmd args = do
 -- /Since: 1.2.0.0/
 callCommand :: String -> IO ()
 callCommand cmd = do
-    (_,_,_,p) <- createProcess_ "callCommand" (shell cmd) { delegate_ctlc = True }
-    exit_code <- waitForProcess p
+    exit_code <- withCreateProcess_ "callCommand"
+                   (shell cmd) { delegate_ctlc = True } $ \_ _ _ p ->
+                   waitForProcess p
     case exit_code of
       ExitSuccess   -> return ()
       ExitFailure r -> processFailedException "callCommand" cmd [] r
@@ -357,15 +412,15 @@ readProcess
     -> [String]                 -- ^ any arguments
     -> String                   -- ^ standard input
     -> IO String                -- ^ stdout
-readProcess cmd args input =
-    mask $ \restore -> do
-      (Just inh, Just outh, _, pid) <-
-        createProcess (proc cmd args){ std_in  = CreatePipe,
-                                       std_out = CreatePipe,
-                                       std_err = Inherit }
-      flip onException
-        (do terminateProcess pid; hClose inh; hClose outh;
-            waitForProcess pid) $ restore $ do
+readProcess cmd args input = do
+    let cp_opts = (proc cmd args) {
+                    std_in  = CreatePipe,
+                    std_out = CreatePipe,
+                    std_err = Inherit
+                  }
+    (ex, output) <- withCreateProcess_ "readProcess" cp_opts $
+      \(Just inh) (Just outh) _ ph -> do
+
         -- fork off a thread to start consuming the output
         output  <- hGetContents outh
         waitOut <- forkWait $ C.evaluate $ rnf output
@@ -379,11 +434,12 @@ readProcess cmd args input =
         hClose outh
 
         -- wait on the process
-        ex <- waitForProcess pid
+        ex <- waitForProcess ph
+        return (ex, output)
 
-        case ex of
-         ExitSuccess   -> return output
-         ExitFailure r -> processFailedException "readProcess" cmd args r
+    case ex of
+     ExitSuccess   -> return output
+     ExitFailure r -> processFailedException "readProcess" cmd args r
 
 {- |
 @readProcessWithExitCode@ creates an external process, reads its
@@ -410,15 +466,15 @@ readProcessWithExitCode
     -> [String]                 -- ^ any arguments
     -> String                   -- ^ standard input
     -> IO (ExitCode,String,String) -- ^ exitcode, stdout, stderr
-readProcessWithExitCode cmd args input =
-    mask $ \restore -> do
-      (Just inh, Just outh, Just errh, pid) <- createProcess (proc cmd args)
-                                                   { std_in  = CreatePipe,
-                                                     std_out = CreatePipe,
-                                                     std_err = CreatePipe }
-      flip onException
-        (do terminateProcess pid; hClose inh; hClose outh; hClose errh;
-            waitForProcess pid) $ restore $ do
+readProcessWithExitCode cmd args input = do
+    let cp_opts = (proc cmd args) {
+                    std_in  = CreatePipe,
+                    std_out = CreatePipe,
+                    std_err = CreatePipe
+                  }
+    withCreateProcess_ "readProcessWithExitCode" cp_opts $
+      \(Just inh) (Just outh) (Just errh) ph -> do
+
         -- fork off a thread to start consuming stdout
         out <- hGetContents outh
         waitOut <- forkWait $ C.evaluate $ rnf out
@@ -452,7 +508,7 @@ readProcessWithExitCode cmd args input =
         hClose errh
 
         -- wait on the process
-        ex <- waitForProcess pid
+        ex <- waitForProcess ph
 
         return (ex, out, err)
 
