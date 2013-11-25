@@ -426,7 +426,9 @@ readProcess cmd args input = do
         waitOut <- forkWait $ C.evaluate $ rnf output
 
         -- now write and flush any input
-        when (not (null input)) $ do hPutStr inh input; hFlush inh
+        unless (null input) $ do
+          ignoreSigPipe $ hPutStr inh input
+          hFlush inh
         hClose inh -- done with stdin
 
         -- wait on the output
@@ -484,21 +486,10 @@ readProcessWithExitCode cmd args input = do
         waitErr <- forkWait $ C.evaluate $ rnf err
 
         -- now write and flush any input
-        let writeInput = do
-              unless (null input) $ do
-                hPutStr inh input
-                hFlush inh
-              hClose inh
-
-#if defined(__GLASGOW_HASKELL__)
-        C.catch writeInput $ \e -> case e of
-          IOError { ioe_type = ResourceVanished
-                  , ioe_errno = Just ioe }
-            | Errno ioe == ePIPE -> return ()
-          _ -> throwIO e
-#else
-        writeInput
-#endif
+        unless (null input) $ do
+          ignoreSigPipe $ hPutStr inh input
+          hFlush inh
+        hClose inh
 
         -- wait on the output
         waitOut
@@ -518,6 +509,16 @@ forkWait a = do
   _ <- mask $ \restore -> forkIO $ try (restore a) >>= putMVar res
   return (takeMVar res >>= either (\ex -> throwIO (ex :: SomeException)) return)
 
+ignoreSigPipe :: IO () -> IO ()
+#if defined(__GLASGOW_HASKELL__)
+ignoreSigPipe = C.handle $ \e -> case e of
+                                   IOError { ioe_type  = ResourceVanished
+                                           , ioe_errno = Just ioe }
+                                     | Errno ioe == ePIPE -> return ()
+                                   _ -> throwIO e
+#else
+ignoreSigPipe = id
+#endif
 
 -- ----------------------------------------------------------------------------
 -- showCommandForUser
