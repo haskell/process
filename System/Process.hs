@@ -423,17 +423,17 @@ readProcess cmd args input = do
 
         -- fork off a thread to start consuming the output
         output  <- hGetContents outh
-        waitOut <- forkWait $ C.evaluate $ rnf output
+        withForkWait (C.evaluate $ rnf output) $ \waitOut -> do
 
-        -- now write and flush any input
-        unless (null input) $ do
-          ignoreSigPipe $ hPutStr inh input
-          hFlush inh
-        hClose inh -- done with stdin
+          -- now write and flush any input
+          unless (null input) $ do
+            ignoreSigPipe $ hPutStr inh input
+            hFlush inh
+          hClose inh -- done with stdin
 
-        -- wait on the output
-        waitOut
-        hClose outh
+          -- wait on the output
+          waitOut
+          hClose outh
 
         -- wait on the process
         ex <- waitForProcess ph
@@ -477,37 +477,45 @@ readProcessWithExitCode cmd args input = do
     withCreateProcess_ "readProcessWithExitCode" cp_opts $
       \(Just inh) (Just outh) (Just errh) ph -> do
 
-        -- fork off a thread to start consuming stdout
         out <- hGetContents outh
-        waitOut <- forkWait $ C.evaluate $ rnf out
-
-        -- fork off a thread to start consuming stderr
         err <- hGetContents errh
-        waitErr <- forkWait $ C.evaluate $ rnf err
 
-        -- now write and flush any input
-        unless (null input) $ do
-          ignoreSigPipe $ hPutStr inh input
-          hFlush inh
-        hClose inh
+        -- fork off threads to start consuming stdout & stderr
+        withForkWait  (C.evaluate $ rnf out) $ \waitOut ->
+         withForkWait (C.evaluate $ rnf err) $ \waitErr -> do
 
-        -- wait on the output
-        waitOut
-        waitErr
+          -- now write and flush any input
+          unless (null input) $ do
+            ignoreSigPipe $ hPutStr inh input
+            hFlush inh
+          hClose inh
 
-        hClose outh
-        hClose errh
+          -- wait on the output
+          waitOut
+          waitErr
+
+          hClose outh
+          hClose errh
 
         -- wait on the process
         ex <- waitForProcess ph
 
         return (ex, out, err)
 
-forkWait :: IO a -> IO (IO a)
-forkWait a = do
-  res <- newEmptyMVar
-  _ <- mask $ \restore -> forkIO $ try (restore a) >>= putMVar res
-  return (takeMVar res >>= either (\ex -> throwIO (ex :: SomeException)) return)
+-- | Fork a thread while doing something else, but kill it if there's an
+-- exception.
+--
+-- This is important in the cases above because we want to kill the thread
+-- that is holding the Handle lock, because when we clean up the process we
+-- try to close that handle, which could otherwise deadlock.
+--
+withForkWait :: IO () -> (IO () ->  IO a) -> IO a
+withForkWait async body = do
+  waitVar <- newEmptyMVar :: IO (MVar (Either SomeException ()))
+  mask $ \restore -> do
+    tid <- forkIO $ try (restore async) >>= putMVar waitVar
+    let wait = takeMVar waitVar >>= either throwIO return
+    restore (body wait) `C.onException` killThread tid
 
 ignoreSigPipe :: IO () -> IO ()
 #if defined(__GLASGOW_HASKELL__)
