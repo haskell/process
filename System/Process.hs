@@ -425,11 +425,11 @@ readProcess cmd args input = do
         output  <- hGetContents outh
         withForkWait (C.evaluate $ rnf output) $ \waitOut -> do
 
-          -- now write and flush any input
-          unless (null input) $ do
+          -- now write any input
+          unless (null input) $
             ignoreSigPipe $ hPutStr inh input
-            hFlush inh
-          hClose inh -- done with stdin
+          -- hClose performs implicit hFlush, and thus may trigger a SIGPIPE
+          ignoreSigPipe $ hClose inh
 
           -- wait on the output
           waitOut
@@ -484,11 +484,11 @@ readProcessWithExitCode cmd args input = do
         withForkWait  (C.evaluate $ rnf out) $ \waitOut ->
          withForkWait (C.evaluate $ rnf err) $ \waitErr -> do
 
-          -- now write and flush any input
-          unless (null input) $ do
+          -- now write any input
+          unless (null input) $
             ignoreSigPipe $ hPutStr inh input
-            hFlush inh
-          hClose inh
+          -- hClose performs implicit hFlush, and thus may trigger a SIGPIPE
+          ignoreSigPipe $ hClose inh
 
           -- wait on the output
           waitOut
