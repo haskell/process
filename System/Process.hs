@@ -259,7 +259,7 @@ cleanupProcess (mb_stdin, mb_stdout, mb_stderr, ph) = do
     -- Note, it's important that other threads that might be reading/writing
     -- these handles also get killed off, since otherwise they might be holding
     -- the handle lock and prevent us from closing, leading to deadlock.
-    maybe (return ()) hClose mb_stdin
+    maybe (return ()) (ignoreSigPipe . hClose) mb_stdin
     maybe (return ()) hClose mb_stdout
     maybe (return ()) hClose mb_stderr
     -- terminateProcess does not guarantee that it terminates the process.
