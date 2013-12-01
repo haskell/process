@@ -121,21 +121,25 @@ import Hugs.System
 -- | Construct a 'CreateProcess' record for passing to 'createProcess',
 -- representing a raw command with arguments.
 --
--- The @FilePath@ names the executable, and is interpreted according
+-- The 'FilePath' argument names the executable, and is interpreted according
 -- to the platform's standard policy for searching for
 -- executables. Specifically:
 --
--- * on Unix systems the @execvp@ semantics is used, where if the
---   filename does not contain a slash (@/@) then the @PATH@
---   environment variable is searched for the executable.
+-- * on Unix systems the
+--   <http://pubs.opengroup.org/onlinepubs/9699919799/functions/execvp.html execvp(3)>
+--   semantics is used, where if the executable filename does not
+--   contain a slash (@/@) then the @PATH@ environment variable is
+--   searched for the executable.
 --
 -- * on Windows systems the Win32 @CreateProcess@ semantics is used.
 --   Briefly: if the filename does not contain a path, then the
 --   directory containing the parent executable is searched, followed
---   by the current directory, then some some standard locations, and
+--   by the current directory, then some standard locations, and
 --   finally the current @PATH@.  An @.exe@ extension is added if the
 --   filename does not already have an extension.  For full details
---   see the documentation for the Windows @SearchPath@ API.
+--   see the
+--   <http://msdn.microsoft.com/en-us/library/windows/desktop/aa365527%28v=vs.85%29.aspx documentation>
+--   for the Windows @SearchPath@ API.
 
 proc :: FilePath -> [String] -> CreateProcess
 proc cmd args = CreateProcess { cmdspec = RawCommand cmd args,
@@ -174,16 +178,16 @@ The details of how to create the process are passed in the
 fill in the fields with default values which can be overriden as
 needed.
 
-'createProcess' returns @(mb_stdin_hdl, mb_stdout_hdl, mb_stderr_hdl, p)@,
+'createProcess' returns @(/mb_stdin_hdl/, /mb_stdout_hdl/, /mb_stderr_hdl/, /ph/)@,
 where
 
- * if @std_in == CreatePipe@, then @mb_stdin_hdl@ will be @Just h@,
-   where @h@ is the write end of the pipe connected to the child
+ * if @'std_in' == 'CreatePipe'@, then @/mb_stdin_hdl/@ will be @Just /h/@,
+   where @/h/@ is the write end of the pipe connected to the child
    process's @stdin@.
 
- * otherwise, @mb_stdin_hdl == Nothing@
+ * otherwise, @/mb_stdin_hdl/ == Nothing@
 
-Similarly for @mb_stdout_hdl@ and @mb_stderr_hdl@.
+Similarly for @/mb_stdout_hdl/@ and @/mb_stderr_hdl/@.
 
 For example, to execute a simple @ls@ command:
 
@@ -263,7 +267,7 @@ cleanupProcess (mb_stdin, mb_stdout, mb_stderr, ph) = do
     maybe (return ()) hClose mb_stdout
     maybe (return ()) hClose mb_stderr
     -- terminateProcess does not guarantee that it terminates the process.
-    -- Indeed on unix it's SIGTERM, which asks nicely but does not guarantee
+    -- Indeed on Unix it's SIGTERM, which asks nicely but does not guarantee
     -- that it stops. If it doesn't stop, we don't want to hang, so we wait
     -- asynchronously using forkIO.
     _ <- forkIO (waitForProcess ph >> return ())
@@ -300,6 +304,11 @@ spawnCommand cmd = do
 -- arguments, and wait for it to finish.  If the command returns a non-zero
 -- exit code, an exception is raised.
 --
+-- If an asynchronous exception is thrown to the thread executing
+-- @callProcess@. The forked process will be terminated and
+-- @callProcess@ will wait (block) until the process has been
+-- terminated.
+--
 -- /Since: 1.2.0.0/
 callProcess :: FilePath -> [String] -> IO ()
 callProcess cmd args = do
@@ -312,6 +321,11 @@ callProcess cmd args = do
 
 -- | Creates a new process to run the specified shell command.  If the
 -- command returns a non-zero exit code, an exception is raised.
+--
+-- If an asynchronous exception is thrown to the thread executing
+-- @callCommand@. The forked process will be terminated and
+-- @callCommand@ will wait (block) until the process has been
+-- terminated.
 --
 -- /Since: 1.2.0.0/
 callCommand :: String -> IO ()
@@ -366,7 +380,7 @@ processFailedException fun cmd args exit_code =
 --
 -- In addition, in 'delegate_ctlc' mode, 'waitForProcess' and
 -- 'getProcessExitCode' will throw a 'UserInterrupt' exception if the process
--- terminated with @ExitFailure (-SIGINT)@. Typically you will not want to
+-- terminated with @'ExitFailure' (-SIGINT)@. Typically you will not want to
 -- catch this exception, but let it propagate, giving a normal orderly shutdown.
 -- One detail to be aware of is that the 'UserInterrupt' exception is thrown
 -- /synchronously/ in the thread that calls 'waitForProcess', whereas normally
@@ -374,10 +388,10 @@ processFailedException fun cmd args exit_code =
 -- thread.
 --
 -- For even more detail on this topic, see
--- <http://www.cons.org/cracauer/sigint.html>.
+-- <http://www.cons.org/cracauer/sigint.html "Proper handling of SIGINT/SIGQUIT">.
 
 -- -----------------------------------------------------------------------------
---
+
 -- | @readProcess@ forks an external process, reads its standard output
 -- strictly, blocking until the process terminates, and returns the output
 -- string.
@@ -531,9 +545,9 @@ ignoreSigPipe = id
 -- ----------------------------------------------------------------------------
 -- showCommandForUser
 
--- | Given a program @p@ and arguments @args@,
---   @showCommandForUser p args@ returns a string suitable for pasting
---   into sh (on POSIX OSs) or cmd.exe (on Windows).
+-- | Given a program @/p/@ and arguments @/args/@,
+--   @showCommandForUser /p/ /args/@ returns a string suitable for pasting
+--   into @\/bin\/sh@ (on Unix systems) or @CMD.EXE@ (on Windows).
 showCommandForUser :: FilePath -> [String] -> String
 showCommandForUser cmd args = unwords (map translate (cmd : args))
 
@@ -843,16 +857,17 @@ runInteractiveProcess1 fun cmd = do
 Computation @system cmd@ returns the exit code produced when the
 operating system runs the shell command @cmd@.
 
-This computation may fail with
+This computation may fail with one of the following
+'System.IO.Error.IOErrorType' exceptions:
 
-   * @PermissionDenied@: The process has insufficient privileges to
-     perform the operation.
+[@PermissionDenied@]
+The process has insufficient privileges to perform the operation.
 
-   * @ResourceExhausted@: Insufficient resources are available to
-     perform the operation.
+[@ResourceExhausted@]
+Insufficient resources are available to perform the operation.
 
-   * @UnsupportedOperation@: The implementation does not support
-     system calls.
+[@UnsupportedOperation@]
+The implementation does not support system calls.
 
 On Windows, 'system' passes the command to the Windows command
 interpreter (@CMD.EXE@ or @COMMAND.COM@), hence Unixy shell tricks
@@ -873,8 +888,8 @@ system str = do
 --TODO: in a later release {-# DEPRECATED rawSystem "Use 'callProcess' (or 'spawnProcess' and 'waitForProcess') instead" #-}
 
 {-|
-The computation @'rawSystem' cmd args@ runs the operating system command
-@cmd@ in such a way that it receives as arguments the @args@ strings
+The computation @'rawSystem' /cmd/ /args/@ runs the operating system command
+@/cmd/@ in such a way that it receives as arguments the @/args/@ strings
 exactly as given, with no funny escaping or shell meta-syntax expansion.
 It will therefore behave more portably between operating systems than 'system'.
 
