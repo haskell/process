@@ -20,33 +20,25 @@
 -----------------------------------------------------------------------------
 
 module System.Process.Internals (
-        ProcessHandle(..), ProcessHandle__(..),
-        PHANDLE, closePHANDLE, mkProcessHandle,
-        modifyProcessHandle, withProcessHandle,
+    ProcessHandle(..), ProcessHandle__(..),
+    PHANDLE, closePHANDLE, mkProcessHandle,
+    modifyProcessHandle, withProcessHandle,
 #ifdef __GLASGOW_HASKELL__
-        CreateProcess(..),
-        CmdSpec(..), StdStream(..),
-        createProcess_,
-        runGenProcess_, --deprecated
+    CreateProcess(..),
+    CmdSpec(..), StdStream(..),
+    createProcess_,
+    runGenProcess_, --deprecated
 #endif
-        startDelegateControlC,
-        endDelegateControlC,
+    startDelegateControlC,
+    endDelegateControlC,
 #if !defined(mingw32_HOST_OS) && !defined(__MINGW32__)
-        pPrPr_disableITimers, c_execvpe,
-        ignoreSignal, defaultSignal,
+    pPrPr_disableITimers, c_execvpe,
+    ignoreSignal, defaultSignal,
 #endif
-        withFilePathException, withCEnvironment,
-        translate,
-        fdToHandle,
-  ) where
-
-#if !defined(mingw32_HOST_OS) && !defined(__MINGW32__)
-import Control.Monad
-import Data.Char
-import System.Posix.Types
-import System.Posix.Process.Internals ( pPrPr_disableITimers, c_execvpe )
-import System.IO
-#endif
+    withFilePathException, withCEnvironment,
+    translate,
+    fdToHandle,
+    ) where
 
 import Control.Concurrent
 import Control.Exception
@@ -56,6 +48,14 @@ import Foreign.Marshal
 import Foreign.Ptr
 import Foreign.Storable
 import System.IO.Unsafe
+
+#if !defined(mingw32_HOST_OS) && !defined(__MINGW32__)
+import Control.Monad
+import Data.Char
+import System.IO
+import System.Posix.Process.Internals ( pPrPr_disableITimers, c_execvpe )
+import System.Posix.Types
+#endif
 
 #ifdef __GLASGOW_HASKELL__
 import System.Posix.Internals
@@ -68,12 +68,12 @@ import GHC.IO.Handle.Internals
 import GHC.IO.Handle.Types hiding (ClosedHandle)
 import System.IO.Error
 import Data.Typeable
-#if defined(mingw32_HOST_OS)
+# if defined(mingw32_HOST_OS)
 import GHC.IO.IOMode
 import System.Win32.DebugApi (PHANDLE)
-#else
+# else
 import System.Posix.Signals as Sig
-#endif
+# endif
 #endif
 
 #if defined(mingw32_HOST_OS)

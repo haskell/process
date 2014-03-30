@@ -35,73 +35,74 @@
 -}
 
 module System.Process (
-        -- * Running sub-processes
-        createProcess,
-        shell, proc,
-        CreateProcess(..),
-        CmdSpec(..),
-        StdStream(..),
-        ProcessHandle,
+    -- * Running sub-processes
+    createProcess,
+    shell, proc,
+    CreateProcess(..),
+    CmdSpec(..),
+    StdStream(..),
+    ProcessHandle,
 
-        -- ** Simpler functions for common tasks
-        callProcess,
-        callCommand,
-        spawnProcess,
-        spawnCommand,
-        readProcess,
-        readProcessWithExitCode,
+    -- ** Simpler functions for common tasks
+    callProcess,
+    callCommand,
+    spawnProcess,
+    spawnCommand,
+    readProcess,
+    readProcessWithExitCode,
 
-        -- ** Related utilities
-        showCommandForUser,
+    -- ** Related utilities
+    showCommandForUser,
 
-        -- ** Control-C handling on Unix
-        -- $ctlc-handling
+    -- ** Control-C handling on Unix
+    -- $ctlc-handling
 
-        -- * Process completion
-        waitForProcess,
-        getProcessExitCode,
-        terminateProcess,
-        interruptProcessGroupOf,
+    -- * Process completion
+    waitForProcess,
+    getProcessExitCode,
+    terminateProcess,
+    interruptProcessGroupOf,
 
-        -- * Old deprecated functions
-        -- | These functions pre-date 'createProcess' which is much more
-        -- flexible.
-        runProcess,
-        runCommand,
-        runInteractiveProcess,
-        runInteractiveCommand,
-        system,
-        rawSystem,
- ) where
+    -- * Old deprecated functions
+    -- | These functions pre-date 'createProcess' which is much more
+    -- flexible.
+    runProcess,
+    runCommand,
+    runInteractiveProcess,
+    runInteractiveCommand,
+    system,
+    rawSystem,
+    ) where
 
 import Prelude hiding (mapM)
 
 import System.Process.Internals
 
-import Control.Exception (SomeException, mask, try, throwIO)
-import Control.DeepSeq (rnf)
-import System.IO.Error (mkIOError, ioeSetErrorString)
-#if !defined(mingw32_HOST_OS)
-import System.Posix.Types
-import System.Posix.Process (getProcessGroupIDOf)
-#endif
-import qualified Control.Exception as C
 import Control.Concurrent
+import Control.DeepSeq (rnf)
+import Control.Exception (SomeException, mask, try, throwIO)
+import qualified Control.Exception as C
 import Control.Monad
+import Data.Maybe
 import Foreign
 import Foreign.C
-import System.IO
-import Data.Maybe
 import System.Exit      ( ExitCode(..) )
+import System.IO
+import System.IO.Error (mkIOError, ioeSetErrorString)
+
+#if !defined(mingw32_HOST_OS)
+import System.Posix.Process (getProcessGroupIDOf)
+import System.Posix.Types
+#endif
 
 #ifdef __GLASGOW_HASKELL__
 import GHC.IO.Exception ( ioException, IOErrorType(..), IOException(..) )
-#if defined(mingw32_HOST_OS)
-import System.Win32.Process (getProcessId)
+# if defined(mingw32_HOST_OS)
 import System.Win32.Console (generateConsoleCtrlEvent, cTRL_BREAK_EVENT)
-#else
+import System.Win32.Process (getProcessId)
+# else
 import System.Posix.Signals
-#endif
+# endif
 #endif
 
 -- ----------------------------------------------------------------------------
