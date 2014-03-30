@@ -35,7 +35,6 @@
 -}
 
 module System.Process (
-#ifndef __HUGS__
         -- * Running sub-processes
         createProcess,
         shell, proc,
@@ -71,14 +70,12 @@ module System.Process (
         runCommand,
         runInteractiveProcess,
         runInteractiveCommand,
-#endif
         system,
         rawSystem,
  ) where
 
 import Prelude hiding (mapM)
 
-#ifndef __HUGS__
 import System.Process.Internals
 
 import Control.Exception (SomeException, mask, try, throwIO)
@@ -95,7 +92,6 @@ import Foreign
 import Foreign.C
 import System.IO
 import Data.Maybe
-#endif
 import System.Exit      ( ExitCode(..) )
 
 #ifdef __GLASGOW_HASKELL__
@@ -107,13 +103,6 @@ import System.Win32.Console (generateConsoleCtrlEvent, cTRL_BREAK_EVENT)
 import System.Posix.Signals
 #endif
 #endif
-
-#ifdef __HUGS__
-import Hugs.System
-#endif
-
-
-#ifndef __HUGS__
 
 -- ----------------------------------------------------------------------------
 -- createProcess
@@ -845,7 +834,6 @@ runInteractiveProcess1 fun cmd = do
                 std_out = CreatePipe,
                 std_err = CreatePipe }
   return (fromJust mb_in, fromJust mb_out, fromJust mb_err, p)
-#endif /* !__HUGS__ */
 
 
 -- ---------------------------------------------------------------------------
@@ -903,8 +891,6 @@ rawSystem cmd args = do
 #elif !mingw32_HOST_OS
 -- crude fallback implementation: could do much better than this under Unix
 rawSystem cmd args = system (showCommandForUser cmd args)
-#elif __HUGS__
-rawSystem cmd args = system (cmd ++ showCommandForUser "" args)
 #else
 rawSystem cmd args = system (showCommandForUser cmd args)
 #endif
