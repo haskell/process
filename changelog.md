@@ -14,6 +14,8 @@
   * Expose `createProcess_` function, and document behavior of `UseHandle` for
     `createProcess`. See [issue #2](https://github.com/haskell/process/issues/2).
 
+  * New `System.Process.createPipe` operation
+
 ## 1.2.0.0  *Dec 2013*
 
   * Update to Cabal 1.10 format

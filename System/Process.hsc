@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP #-}
+{-# LANGUAGE CPP, ForeignFunctionInterface #-}
 #ifdef __GLASGOW_HASKELL__
 #if __GLASGOW_HASKELL__ >= 709
 {-# LANGUAGE Safe #-}
@@ -24,19 +24,6 @@
 
 -- ToDo:
 --      * Flag to control whether exiting the parent also kills the child.
-
-{- NOTES on createPipe:
-
-   createPipe is no longer exported, because of the following problems:
-
-        - it wasn't used to implement runInteractiveProcess on Unix, because
-          the file descriptors for the unused ends of the pipe need to be closed
-          in the child process.
-
-        - on Windows, a special version of createPipe is needed that sets
-          the inheritance flags correctly on the ends of the pipe (see
-          mkAnonPipe below).
--}
 
 module System.Process (
     -- * Running sub-processes
@@ -68,6 +55,9 @@ module System.Process (
     terminateProcess,
     interruptProcessGroupOf,
 
+    -- Interprocess communication
+    createPipe,
+
     -- * Old deprecated functions
     -- | These functions pre-date 'createProcess' which is much more
     -- flexible.
@@ -95,8 +85,14 @@ import System.Exit      ( ExitCode(..) )
 import System.IO
 import System.IO.Error (mkIOError, ioeSetErrorString)
 
-#if !defined(mingw32_HOST_OS)
+#if defined(mingw32_HOST_OS)
+# include <io.h>        /* for _close and _pipe */
+# include <fcntl.h>     /* for _O_BINARY */
+import Control.Exception (onException)
+import Foreign.C.Types (CInt(..), CUInt(..))
+#else
 import System.Posix.Process (getProcessGroupIDOf)
+import qualified System.Posix.IO as Posix
 import System.Posix.Types
 #endif
 
@@ -886,4 +882,39 @@ rawSystem cmd args = do
 rawSystem cmd args = system (showCommandForUser cmd args)
 #else
 rawSystem cmd args = system (showCommandForUser cmd args)
+#endif
+
+-- ---------------------------------------------------------------------------
+-- createPipe
+
+-- | Create a pipe for interprocess communication and return a
+-- @(readEnd, writeEnd)@ `Handle` pair.
+--
+-- /Since: 1.2.1.0/
+createPipe :: IO (Handle, Handle)
+#if !mingw32_HOST_OS
+createPipe = do
+    (readfd, writefd) <- Posix.createPipe
+    readh <- Posix.fdToHandle readfd
+    writeh <- Posix.fdToHandle writefd
+    return (readh, writeh)
+#else
+createPipe = do
+    (readfd, writefd) <- allocaArray 2 $ \ pfds -> do
+        throwErrnoIfMinus1_ "_pipe" $ c__pipe pfds 2 (#const _O_BINARY)
+        readfd <- peek pfds
+        writefd <- peekElemOff pfds 1
+        return (readfd, writefd)
+    (do readh <- fdToHandle readfd
+        writeh <- fdToHandle writefd
+        return (readh, writeh)) `onException` (close readfd >> close writefd)
+
+close :: CInt -> IO ()
+close = throwErrnoIfMinus1_ "_close" . c__close
+
+foreign import ccall "io.h _pipe" c__pipe ::
+    Ptr CInt -> CUInt -> CInt -> IO CInt
+
+foreign import ccall "io.h _close" c__close ::
+    CInt -> IO CInt
 #endif
