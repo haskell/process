@@ -182,11 +182,30 @@ data CreateProcess = CreateProcess{
 
 data CmdSpec
   = ShellCommand String
-      -- ^ a command line to execute using the shell
+      -- ^ A command line to execute using the shell
   | RawCommand FilePath [String]
-      -- ^ the filename of an executable with a list of arguments.
-      -- see 'System.Process.proc' for the precise interpretation of
-      -- the @FilePath@ field.
+      -- ^ The name of an executable with a list of arguments
+      --
+      -- The 'FilePath' argument names the executable, and is interpreted
+      -- according to the platform's standard policy for searching for
+      -- executables. Specifically:
+      --
+      -- * on Unix systems the
+      --   <http://pubs.opengroup.org/onlinepubs/9699919799/functions/execvp.html execvp(3)>
+      --   semantics is used, where if the executable filename does not
+      --   contain a slash (@/@) then the @PATH@ environment variable is
+      --   searched for the executable.
+      --
+      -- * on Windows systems the Win32 @CreateProcess@ semantics is used.
+      --   Briefly: if the filename does not contain a path, then the
+      --   directory containing the parent executable is searched, followed
+      --   by the current directory, then some standard locations, and
+      --   finally the current @PATH@.  An @.exe@ extension is added if the
+      --   filename does not already have an extension.  For full details
+      --   see the
+      --   <http://msdn.microsoft.com/en-us/library/windows/desktop/aa365527%28v=vs.85%29.aspx documentation>
+      --   for the Windows @SearchPath@ API.
+
 
 data StdStream
   = Inherit                  -- ^ Inherit Handle from parent

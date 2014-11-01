@@ -111,26 +111,7 @@ import System.Posix.Signals
 -- | Construct a 'CreateProcess' record for passing to 'createProcess',
 -- representing a raw command with arguments.
 --
--- The 'FilePath' argument names the executable, and is interpreted according
--- to the platform's standard policy for searching for
--- executables. Specifically:
---
--- * on Unix systems the
---   <http://pubs.opengroup.org/onlinepubs/9699919799/functions/execvp.html execvp(3)>
---   semantics is used, where if the executable filename does not
---   contain a slash (@/@) then the @PATH@ environment variable is
---   searched for the executable.
---
--- * on Windows systems the Win32 @CreateProcess@ semantics is used.
---   Briefly: if the filename does not contain a path, then the
---   directory containing the parent executable is searched, followed
---   by the current directory, then some standard locations, and
---   finally the current @PATH@.  An @.exe@ extension is added if the
---   filename does not already have an extension.  For full details
---   see the
---   <http://msdn.microsoft.com/en-us/library/windows/desktop/aa365527%28v=vs.85%29.aspx documentation>
---   for the Windows @SearchPath@ API.
-
+-- See 'RawCommand' for precise semantics of the specified @FilePath@.
 proc :: FilePath -> [String] -> CreateProcess
 proc cmd args = CreateProcess { cmdspec = RawCommand cmd args,
                                 cwd = Nothing,
@@ -412,7 +393,7 @@ processFailedException fun cmd args exit_code =
 -- * A string to pass on standard input to the forked process.
 --
 readProcess
-    :: FilePath                 -- ^ Filename of the executable (see 'proc' for details)
+    :: FilePath                 -- ^ Filename of the executable (see 'RawCommand' for details)
     -> [String]                 -- ^ any arguments
     -> String                   -- ^ standard input
     -> IO String                -- ^ stdout
@@ -468,7 +449,7 @@ when the process died as the result of a signal.
 -}
 
 readProcessWithExitCode
-    :: FilePath                 -- ^ Filename of the executable (see 'proc' for details)
+    :: FilePath                 -- ^ Filename of the executable (see 'RawCommand' for details)
     -> [String]                 -- ^ any arguments
     -> String                   -- ^ standard input
     -> IO (ExitCode,String,String) -- ^ exitcode, stdout, stderr
@@ -747,7 +728,7 @@ runCommand string = do
      'runProcess'.
 -}
 runProcess
-  :: FilePath                   -- ^ Filename of the executable (see 'proc' for details)
+  :: FilePath                   -- ^ Filename of the executable (see 'RawCommand' for details)
   -> [String]                   -- ^ Arguments to pass to the executable
   -> Maybe FilePath             -- ^ Optional path to the working directory
   -> Maybe [(String,String)]    -- ^ Optional environment (otherwise inherit)
@@ -814,7 +795,7 @@ runInteractiveCommand string =
     in text mode then use 'hSetBinaryMode'.
 -}
 runInteractiveProcess
-  :: FilePath                   -- ^ Filename of the executable (see 'proc' for details)
+  :: FilePath                   -- ^ Filename of the executable (see 'RawCommand' for details)
   -> [String]                   -- ^ Arguments to pass to the executable
   -> Maybe FilePath             -- ^ Optional path to the working directory
   -> Maybe [(String,String)]    -- ^ Optional environment (otherwise inherit)
