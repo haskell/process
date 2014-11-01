@@ -45,6 +45,7 @@ module System.Process.Internals (
 import Control.Concurrent
 import Control.Exception
 import Data.Bits
+import Data.String
 import Foreign.C
 import Foreign.Marshal
 import Foreign.Ptr
@@ -208,6 +209,10 @@ data CmdSpec
       --   <http://msdn.microsoft.com/en-us/library/windows/desktop/aa365527%28v=vs.85%29.aspx documentation>
       --   for the Windows @SearchPath@ API.
 
+
+-- | construct a `ShellCommand` from a string literal
+instance IsString CmdSpec where
+  fromString = ShellCommand
 
 data StdStream
   = Inherit                  -- ^ Inherit Handle from parent
