@@ -14,7 +14,7 @@ description:
 
 extra-source-files:
     aclocal.m4
-    changelog
+    changelog.md
     configure
     configure.ac
     include/HsProcessConfig.h.in
