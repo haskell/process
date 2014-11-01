@@ -409,7 +409,7 @@ processFailedException fun cmd args exit_code =
 --
 -- * A list of separate command line arguments to the program
 --
--- * A string to pass on the standard input to the program.
+-- * A string to pass on standard input to the forked process.
 --
 readProcess
     :: FilePath                 -- ^ Filename of the executable (see 'proc' for details)
