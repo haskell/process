@@ -4,6 +4,8 @@
 
   * Add support for `base-4.8.0.0`
 
+  * Expose documentation for `System.Process.Internals`
+
 ## 1.2.0.0  *Dec 2013*
 
   * Update to Cabal 1.10 format
