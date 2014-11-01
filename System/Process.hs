@@ -405,7 +405,7 @@ processFailedException fun cmd args exit_code =
 --
 -- The arguments are:
 --
--- * The command to run, which must be in the $PATH, or an absolute path
+-- * The command to run, which must be in the $PATH, or an absolute or relative path
 --
 -- * A list of separate command line arguments to the program
 --
