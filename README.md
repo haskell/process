@@ -1,4 +1,4 @@
-The `process` Package  [![Build Status](https://travis-ci.org/ghc/packages-process.png?branch=master)](https://travis-ci.org/ghc/packages-process)
+The `process` Package  [![Hackage](https://img.shields.io/hackage/v/process.svg)](https://hackage.haskell.org/package/process) [![Build Status](https://travis-ci.org/haskell/process.svg)](https://travis-ci.org/haskell/process)
 =====================
 
 See [`process` on Hackage](http://hackage.haskell.org/package/process) for
