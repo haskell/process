@@ -1,5 +1,4 @@
 {-# LANGUAGE CPP, RecordWildCards, BangPatterns #-}
-{-# OPTIONS_HADDOCK hide #-}
 #ifdef __GLASGOW_HASKELL__
 {-# LANGUAGE Trustworthy #-}
 {-# LANGUAGE InterruptibleFFI #-}
@@ -15,7 +14,8 @@
 -- Stability   :  experimental
 -- Portability :  portable
 --
--- Operations for creating and interacting with sub-processes.
+-- /Note:/ This module exports internal implementation details that may change
+-- anytime.  If you want a more stable API, use "System.Process" instead.
 --
 -----------------------------------------------------------------------------
 
