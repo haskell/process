@@ -1,6 +1,10 @@
 {-# LANGUAGE CPP #-}
 #ifdef __GLASGOW_HASKELL__
+#if __GLASGOW_HASKELL__ >= 709
+{-# LANGUAGE Safe #-}
+#else
 {-# LANGUAGE Trustworthy #-}
+#endif
 {-# LANGUAGE InterruptibleFFI #-}
 #endif
 
