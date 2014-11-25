@@ -38,6 +38,8 @@ library
         InterruptibleFFI
         RecordWildCards
         Trustworthy
+    if impl(ghc>=7.9)
+        other-extensions: Safe
 
     exposed-modules:
         System.Cmd

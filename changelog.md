@@ -6,6 +6,9 @@
 
   * Expose documentation for `System.Process.Internals`
 
+  * With GHC 7.10, `System.Cmd` and `System.Process` are now `Safe`
+    (when compiled with older GHC versions they are just `Trustworthy`)
+
 ## 1.2.0.0  *Dec 2013*
 
   * Update to Cabal 1.10 format
