@@ -1,8 +1,10 @@
 # Changelog for [`process` package](http://hackage.haskell.org/package/process)
 
-## 1.2.0.1  *TBA*
+## 1.2.1.0  *TBA*
 
   * Add support for `base-4.8.0.0`
+
+  * New `IsString CmdSpec` instance
 
   * Expose documentation for `System.Process.Internals`
 
