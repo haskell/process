@@ -222,6 +222,17 @@ data StdStream
                              -- and newline translation mode (just
                              -- like @Handle@s created by @openFile@).
 
+-- | This function is almost identical to @createProcess@. The only differences
+-- are:
+--
+-- * @Handle@s provided via @UseHandle@ are not closed automatically.
+--
+-- * This function takes an extra @String@ argument to be used in creating
+--   error messages.
+--
+-- This function has been available from the @System.Process.Internals@ module
+-- for some time, and is part of the @System.Process@ module since version
+-- 1.2.1.0.
 createProcess_
   :: String                     -- ^ function name (for error messages)
   -> CreateProcess

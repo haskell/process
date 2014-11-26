@@ -41,6 +41,7 @@
 module System.Process (
     -- * Running sub-processes
     createProcess,
+    createProcess_,
     shell, proc,
     CreateProcess(..),
     CmdSpec(..),
@@ -178,6 +179,12 @@ To also set the directory in which to run @ls@:
 >   (_, Just hout, _, _) <-
 >       createProcess (proc "ls" []){ cwd = Just "\home\bob",
 >                                     std_out = CreatePipe }
+
+Note that @Handle@s provided for @std_in@, @std_out@, or @std_err@ via the
+@UseHandle@ constructor will be closed by calling this function. This is not
+always the desired behavior. In cases where you would like to leave the
+@Handle@ open after spawning the child process, please use 'createProcess_'
+instead.
 
 -}
 createProcess
