@@ -11,6 +11,9 @@
   * With GHC 7.10, `System.Cmd` and `System.Process` are now `Safe`
     (when compiled with older GHC versions they are just `Trustworthy`)
 
+  * Expose `createProcess_` function, and document behavior of `UseHandle` for
+    `createProcess`. See [issue #2](https://github.com/haskell/process/issues/2).
+
 ## 1.2.0.0  *Dec 2013*
 
   * Update to Cabal 1.10 format
