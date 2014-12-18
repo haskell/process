@@ -102,7 +102,7 @@ import System.FilePath
 -- ProcessHandle type
 
 {- | A handle to a process, which can be used to wait for termination
-     of the process using 'waitForProcess'.
+     of the process using 'System.Process.waitForProcess'.
 
      None of the process-creation functions in this library wait for
      termination: they all return a 'ProcessHandle' which may be used
@@ -211,6 +211,8 @@ data CmdSpec
 
 
 -- | construct a `ShellCommand` from a string literal
+--
+-- /Since: 1.2.1.0/
 instance IsString CmdSpec where
   fromString = ShellCommand
 
@@ -222,17 +224,19 @@ data StdStream
                              -- and newline translation mode (just
                              -- like @Handle@s created by @openFile@).
 
--- | This function is almost identical to @createProcess@. The only differences
--- are:
+-- | This function is almost identical to
+-- 'System.Process.createProcess'. The only differences are:
 --
--- * @Handle@s provided via @UseHandle@ are not closed automatically.
+-- * 'Handle's provided via 'UseHandle' are not closed automatically.
 --
 -- * This function takes an extra @String@ argument to be used in creating
 --   error messages.
 --
--- This function has been available from the @System.Process.Internals@ module
--- for some time, and is part of the @System.Process@ module since version
+-- This function has been available from the "System.Process.Internals" module
+-- for some time, and is part of the "System.Process" module since version
 -- 1.2.1.0.
+--
+-- /Since: 1.2.1.0/
 createProcess_
   :: String                     -- ^ function name (for error messages)
   -> CreateProcess
