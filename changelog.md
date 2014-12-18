@@ -1,8 +1,10 @@
 # Changelog for [`process` package](http://hackage.haskell.org/package/process)
 
-## 1.2.1.0  *TBA*
+## 1.2.1.0  *Dec 2014*
 
   * Add support for `base-4.8.0.0`
+
+  * Remove Hugs98 specific code
 
   * New `IsString CmdSpec` instance
 
@@ -14,7 +16,8 @@
   * Expose `createProcess_` function, and document behavior of `UseHandle` for
     `createProcess`. See [issue #2](https://github.com/haskell/process/issues/2).
 
-  * New `System.Process.createPipe` operation
+  * New `System.Process.createPipe` operation.
+    See also [GHC #8943](https://ghc.haskell.org/trac/ghc/ticket/8943)
 
 ## 1.2.0.0  *Dec 2013*
 
