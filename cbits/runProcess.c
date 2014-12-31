@@ -162,6 +162,8 @@ runInteractiveProcess (char *const args[],
                 close(fdStdInput[0]);
             }
             close(fdStdInput[1]);
+        } else if (fdStdIn == -2) {
+            close(STDIN_FILENO);
         } else {
             dup2(fdStdIn,  STDIN_FILENO);
         }
@@ -172,6 +174,8 @@ runInteractiveProcess (char *const args[],
                 close(fdStdOutput[1]);
             }
             close(fdStdOutput[0]);
+        } else if (fdStdOut == -2) {
+            close(STDOUT_FILENO);
         } else {
             dup2(fdStdOut,  STDOUT_FILENO);
         }
@@ -182,6 +186,8 @@ runInteractiveProcess (char *const args[],
                 close(fdStdError[1]);
             }
             close(fdStdError[0]);
+        } else if (fdStdErr == -2) {
+            close(STDERR_FILENO);
         } else {
             dup2(fdStdErr,  STDERR_FILENO);
         }
@@ -474,6 +480,8 @@ runInteractiveProcess (wchar_t *cmd, wchar_t *workingDirectory,
         if (!mkAnonPipe(&hStdInputRead,  TRUE, &hStdInputWrite,  FALSE))
             goto cleanup_err;
         sInfo.hStdInput = hStdInputRead;
+    } else if (fdStdIn == -2) {
+        sInfo.hStdInput = NULL;
     } else if (fdStdIn == 0) {
         // Don't duplicate stdin, as console handles cannot be
         // duplicated and inherited. urg.
@@ -494,6 +502,8 @@ runInteractiveProcess (wchar_t *cmd, wchar_t *workingDirectory,
         if (!mkAnonPipe(&hStdOutputRead,  FALSE, &hStdOutputWrite,  TRUE))
             goto cleanup_err;
         sInfo.hStdOutput = hStdOutputWrite;
+    } else if (fdStdOut == -2) {
+        sInfo.hStdOutput = NULL;
     } else if (fdStdOut == 1) {
         // Don't duplicate stdout, as console handles cannot be
         // duplicated and inherited. urg.
@@ -514,6 +524,8 @@ runInteractiveProcess (wchar_t *cmd, wchar_t *workingDirectory,
         if (!mkAnonPipe(&hStdErrorRead,  TRUE, &hStdErrorWrite,  TRUE))
             goto cleanup_err;
         sInfo.hStdError = hStdErrorWrite;
+    } else if (fdStdErr == -2) {
+        sInfo.hStdError = NULL;
     } else if (fdStdErr == 2) {
         // Don't duplicate stderr, as console handles cannot be
         // duplicated and inherited. urg.
