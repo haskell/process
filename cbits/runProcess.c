@@ -288,6 +288,11 @@ runInteractiveProcess (char *const args[],
             // get the errno of whatever else went wrong instead.
             errno = err;
         }
+
+        // We forked the child, but the child had a problem and stopped so it's
+        // our responsibility to reap here as nobody else can.
+        waitpid(pid, NULL, 0);
+
         pid = -1;
     }
     else if (r != 0) {
