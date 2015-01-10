@@ -293,6 +293,8 @@ createProcess_ fun CreateProcess{ cmdspec = cmdsp,
      when (proc_handle == -1) $ do
          cFailedDoing <- peek pFailedDoing
          failedDoing <- peekCString cFailedDoing
+         when mb_delegate_ctlc
+           stopDelegateControlC
          throwErrno (fun ++ ": " ++ failedDoing)
 
      hndStdInput  <- mbPipe mb_stdin  pfdStdInput  WriteMode
@@ -349,8 +351,8 @@ startDelegateControlC =
           let !count' = count + 1
           return (Just (count', old_int, old_quit))
 
-endDelegateControlC :: ExitCode -> IO ()
-endDelegateControlC exitCode = do
+stopDelegateControlC :: IO ()
+stopDelegateControlC =
     modifyMVar_ runInteractiveProcess_delegate_ctlc $ \delegating -> do
       case delegating of
         Just (1, old_int, old_quit) -> do
@@ -367,6 +369,10 @@ endDelegateControlC exitCode = do
           return (Just (count', old_int, old_quit))
 
         Nothing -> return Nothing -- should be impossible
+
+endDelegateControlC :: ExitCode -> IO ()
+endDelegateControlC exitCode = do
+    stopDelegateControlC
 
     -- And if the process did die due to SIGINT or SIGQUIT then
     -- we throw our equivalent exception here (synchronously).
