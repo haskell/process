@@ -335,7 +335,6 @@ startDelegateControlC =
     modifyMVar_ runInteractiveProcess_delegate_ctlc $ \delegating -> do
       case delegating of
         Nothing -> do
---          print ("startDelegateControlC", "Nothing")
           -- We're going to ignore ^C in the parent while there are any
           -- processes using ^C delegation.
           --
@@ -347,7 +346,6 @@ startDelegateControlC =
           return (Just (1, old_int, old_quit))
 
         Just (count, old_int, old_quit) -> do
---          print ("startDelegateControlC", count)
           -- If we're already doing it, just increment the count
           let !count' = count + 1
           return (Just (count', old_int, old_quit))
@@ -357,14 +355,12 @@ stopDelegateControlC =
     modifyMVar_ runInteractiveProcess_delegate_ctlc $ \delegating -> do
       case delegating of
         Just (1, old_int, old_quit) -> do
---          print ("endDelegateControlC", exitCode, 1 :: Int)
           -- Last process, so restore the old signal handlers
           _ <- installHandler sigINT  old_int  Nothing
           _ <- installHandler sigQUIT old_quit Nothing
           return Nothing
 
         Just (count, old_int, old_quit) -> do
---          print ("endDelegateControlC", exitCode, count)
           -- Not the last, just decrement the count
           let !count' = count - 1
           return (Just (count', old_int, old_quit))
