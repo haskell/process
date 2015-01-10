@@ -33,6 +33,7 @@ module System.Process.Internals (
 #endif
     startDelegateControlC,
     endDelegateControlC,
+    stopDelegateControlC,
 #if !defined(mingw32_HOST_OS) && !defined(__MINGW32__)
     pPrPr_disableITimers, c_execvpe,
     ignoreSignal, defaultSignal,
