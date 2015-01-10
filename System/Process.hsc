@@ -372,17 +372,18 @@ processFailedException fun cmd args exit_code =
 
 -- | @readProcess@ forks an external process, reads its standard output
 -- strictly, blocking until the process terminates, and returns the output
--- string.
+-- string. The external process inherits the standard error.
 --
 -- If an asynchronous exception is thrown to the thread executing
--- @readProcess@. The forked process will be terminated and @readProcess@ will
+-- @readProcess@, the forked process will be terminated and @readProcess@ will
 -- wait (block) until the process has been terminated.
 --
 -- Output is returned strictly, so this is not suitable for
 -- interactive applications.
 --
 -- This function throws an 'IOError' if the process 'ExitCode' is
--- anything other than 'ExitSuccess'.
+-- anything other than 'ExitSuccess'. If instead you want to get the
+-- 'ExitCode' then use 'readProcessWithExitCode'.
 --
 -- Users of this function should compile with @-threaded@ if they
 -- want other Haskell threads to keep running while waiting on
@@ -435,26 +436,17 @@ readProcess cmd args input = do
      ExitSuccess   -> return output
      ExitFailure r -> processFailedException "readProcess" cmd args r
 
-{- |
-@readProcessWithExitCode@ creates an external process, reads its
-standard output and standard error strictly, waits until the process
-terminates, and then returns the 'ExitCode' of the process,
-the standard output, and the standard error.
-
-If an asynchronous exception is thrown to the thread executing
-@readProcessWithExitCode@. The forked process will be terminated and
-@readProcessWithExitCode@ will wait (block) until the process has been
-terminated.
-
-'readProcess' and 'readProcessWithExitCode' are fairly simple wrappers
-around 'createProcess'.  Constructing variants of these functions is
-quite easy: follow the link to the source code to see how
-'readProcess' is implemented.
-
-On Unix systems, see 'waitForProcess' for the meaning of exit codes
-when the process died as the result of a signal.
--}
-
+-- | @readProcessWithExitCode@ is like @readProcess@ but with two differences:
+-- 
+--  * it returns the 'ExitCode' of the process, and does not throw any
+--    exception if the code is not 'ExitSuccess'.
+--
+--  * it reads and returns the output from process' standard error handle,
+--    rather than the process inheriting the standard error handle.
+-- 
+-- On Unix systems, see 'waitForProcess' for the meaning of exit codes
+-- when the process died as the result of a signal.
+--
 readProcessWithExitCode
     :: FilePath                 -- ^ Filename of the executable (see 'RawCommand' for details)
     -> [String]                 -- ^ any arguments
