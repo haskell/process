@@ -5,7 +5,8 @@ env:
  # we have to use CABALVER=1.16 for GHC<7.6 as well, as there's
  # no package for earlier cabal versions in the PPA
  - GHCVER=7.6.3 CABALVER=1.16
- - GHCVER=7.8.3 CABALVER=1.18
+ - GHCVER=7.8.4 CABALVER=1.18
+ - GHCVER=7.10.1 CABALVER=1.22
  - GHCVER=head  CABALVER=head
 
 matrix:
