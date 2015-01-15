@@ -1,5 +1,14 @@
 # Changelog for [`process` package](http://hackage.haskell.org/package/process)
 
+## 1.2.2.0  *Jan 2015*
+
+  * Fix delegated CTRL-C handling in `createProcess` in case of failed
+    process creation. See [issue #15](https://github.com/haskell/process/issues/15)
+    for more details.
+
+  * `waitpid` on child PID after pre-exec failure in child to prevent zombies.
+    See also [issue #14](https://github.com/haskell/process/issues/14).
+
 ## 1.2.1.0  *Dec 2014*
 
   * Add support for `base-4.8.0.0`
