@@ -236,7 +236,8 @@ withCreateProcess_ fun c action =
 
 cleanupProcess :: (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)
                -> IO ()
-cleanupProcess (mb_stdin, mb_stdout, mb_stderr, ph) = do
+cleanupProcess (mb_stdin, mb_stdout, mb_stderr,
+                ph@(ProcessHandle _ delegating_ctlc)) = do
     terminateProcess ph
     -- Note, it's important that other threads that might be reading/writing
     -- these handles also get killed off, since otherwise they might be holding
@@ -248,9 +249,16 @@ cleanupProcess (mb_stdin, mb_stdout, mb_stderr, ph) = do
     -- Indeed on Unix it's SIGTERM, which asks nicely but does not guarantee
     -- that it stops. If it doesn't stop, we don't want to hang, so we wait
     -- asynchronously using forkIO.
-    _ <- forkIO (waitForProcess ph >> return ())
-    return ()
 
+    -- However we want to end the Ctl-C handling synchronously, so we'll do
+    -- that synchronously, and set delegating_ctlc as False for the
+    -- waitForProcess (which would otherwise end the Ctl-C delegation itself).
+    when delegating_ctlc
+      stopDelegateControlC
+    _ <- forkIO (waitForProcess (resetCtlcDelegation ph) >> return ())
+    return ()
+  where
+    resetCtlcDelegation (ProcessHandle m _) = ProcessHandle m False
 
 -- ----------------------------------------------------------------------------
 -- spawnProcess/spawnCommand

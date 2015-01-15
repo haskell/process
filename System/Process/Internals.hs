@@ -33,6 +33,7 @@ module System.Process.Internals (
 #endif
     startDelegateControlC,
     endDelegateControlC,
+    stopDelegateControlC,
 #if !defined(mingw32_HOST_OS) && !defined(__MINGW32__)
     pPrPr_disableITimers, c_execvpe,
     ignoreSignal, defaultSignal,
@@ -293,6 +294,8 @@ createProcess_ fun CreateProcess{ cmdspec = cmdsp,
      when (proc_handle == -1) $ do
          cFailedDoing <- peek pFailedDoing
          failedDoing <- peekCString cFailedDoing
+         when mb_delegate_ctlc
+           stopDelegateControlC
          throwErrno (fun ++ ": " ++ failedDoing)
 
      hndStdInput  <- mbPipe mb_stdin  pfdStdInput  WriteMode
@@ -332,7 +335,6 @@ startDelegateControlC =
     modifyMVar_ runInteractiveProcess_delegate_ctlc $ \delegating -> do
       case delegating of
         Nothing -> do
---          print ("startDelegateControlC", "Nothing")
           -- We're going to ignore ^C in the parent while there are any
           -- processes using ^C delegation.
           --
@@ -344,29 +346,30 @@ startDelegateControlC =
           return (Just (1, old_int, old_quit))
 
         Just (count, old_int, old_quit) -> do
---          print ("startDelegateControlC", count)
           -- If we're already doing it, just increment the count
           let !count' = count + 1
           return (Just (count', old_int, old_quit))
 
-endDelegateControlC :: ExitCode -> IO ()
-endDelegateControlC exitCode = do
+stopDelegateControlC :: IO ()
+stopDelegateControlC =
     modifyMVar_ runInteractiveProcess_delegate_ctlc $ \delegating -> do
       case delegating of
         Just (1, old_int, old_quit) -> do
---          print ("endDelegateControlC", exitCode, 1 :: Int)
           -- Last process, so restore the old signal handlers
           _ <- installHandler sigINT  old_int  Nothing
           _ <- installHandler sigQUIT old_quit Nothing
           return Nothing
 
         Just (count, old_int, old_quit) -> do
---          print ("endDelegateControlC", exitCode, count)
           -- Not the last, just decrement the count
           let !count' = count - 1
           return (Just (count', old_int, old_quit))
 
         Nothing -> return Nothing -- should be impossible
+
+endDelegateControlC :: ExitCode -> IO ()
+endDelegateControlC exitCode = do
+    stopDelegateControlC
 
     -- And if the process did die due to SIGINT or SIGQUIT then
     -- we throw our equivalent exception here (synchronously).
