@@ -27,9 +27,10 @@ install:
 
 script:
  - autoreconf -i
- - cabal configure -v2
+ - cabal configure -v2 --enable-tests
  - cabal build
  - cabal check || [ "$CABALVER" == "1.16" ]
+ - ./dist/build/test/test # Using cabal test was giving trouble with cabal 1.22
  - cabal sdist
 # The following scriptlet checks that the resulting source distribution can be built & installed
  - export SRC_TGZ=$(cabal info . | awk '{print $2 ".tar.gz";exit}') ;
