@@ -200,7 +200,9 @@ runInteractiveProcess (char *const args[],
             }
             // XXX Not the pipe
             for (i = 3; i < max_fd; i++) {
-                close(i);
+		if (i != forkCommunicationFds[1]) {
+		    close(i);
+		}
             }
         }
 
