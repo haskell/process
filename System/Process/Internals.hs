@@ -469,6 +469,9 @@ startDelegateControlC = return ()
 endDelegateControlC :: ExitCode -> IO ()
 endDelegateControlC _ = return ()
 
+stopDelegateControlC :: IO ()
+stopDelegateControlC = return ()
+
 foreign import ccall unsafe "runInteractiveProcess"
   c_runInteractiveProcess
         :: CWString
