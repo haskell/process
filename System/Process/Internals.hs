@@ -463,9 +463,10 @@ createProcess_ fun CreateProcess{ cmdspec = cmdsp,
 runInteractiveProcess_lock :: MVar ()
 runInteractiveProcess_lock = unsafePerformIO $ newMVar ()
 
--- Following functions are always exported in export list.
--- It should be a no-op function on Windows.
--- see the <https://github.com/haskell/process/pull/21>
+-- The following functions are always present in the export list. For
+-- compatibility with the non-Windows code, we provide the same functions with
+-- matching type signatures, but implemented as no-ops. For details, see:
+-- <https://github.com/haskell/process/pull/21>
 startDelegateControlC :: IO ()
 startDelegateControlC = return ()
 
@@ -474,6 +475,8 @@ endDelegateControlC _ = return ()
 
 stopDelegateControlC :: IO ()
 stopDelegateControlC = return ()
+
+-- End no-op functions
 
 foreign import ccall unsafe "runInteractiveProcess"
   c_runInteractiveProcess
