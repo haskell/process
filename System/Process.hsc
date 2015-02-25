@@ -40,6 +40,7 @@ module System.Process (
     callCommand,
     spawnProcess,
     spawnCommand,
+    readCreateProcess,
     readProcess,
     readProcessWithExitCode,
 
@@ -413,13 +414,25 @@ readProcess
     -> [String]                 -- ^ any arguments
     -> String                   -- ^ standard input
     -> IO String                -- ^ stdout
-readProcess cmd args input = do
-    let cp_opts = (proc cmd args) {
+readProcess cmd args = readCreateProcess $ proc cmd args
+
+-- | @readCreateProcess@ works exactly like 'readProcess' except that it
+-- lets you pass 'CreateProcess' giving better flexibility.
+--
+-- >  > readCreateProcess (shell "pwd" { cwd = "/etc/" }) ""
+-- >  "/etc\n"
+
+readCreateProcess
+    :: CreateProcess
+    -> String                   -- ^ standard input
+    -> IO String                -- ^ stdout
+readCreateProcess cp input = do
+    let cp_opts = cp {
                     std_in  = CreatePipe,
                     std_out = CreatePipe,
                     std_err = Inherit
                   }
-    (ex, output) <- withCreateProcess_ "readProcess" cp_opts $
+    (ex, output) <- withCreateProcess_ "readCreateProcess" cp_opts $
       \(Just inh) (Just outh) _ ph -> do
 
         -- fork off a thread to start consuming the output
@@ -442,16 +455,24 @@ readProcess cmd args input = do
 
     case ex of
      ExitSuccess   -> return output
-     ExitFailure r -> processFailedException "readProcess" cmd args r
+     ExitFailure r -> processFailedException "readCreateProcess" cmd args r
+  where
+    cmd = case cp of
+            CreateProcess { cmdspec = ShellCommand sc } -> sc
+            CreateProcess { cmdspec = RawCommand fp _ } -> fp
+    args = case cp of
+             CreateProcess { cmdspec = ShellCommand _ } -> []
+             CreateProcess { cmdspec = RawCommand _ args' } -> args'
+
 
 -- | @readProcessWithExitCode@ is like @readProcess@ but with two differences:
--- 
+--
 --  * it returns the 'ExitCode' of the process, and does not throw any
 --    exception if the code is not 'ExitSuccess'.
 --
 --  * it reads and returns the output from process' standard error handle,
 --    rather than the process inheriting the standard error handle.
--- 
+--
 -- On Unix systems, see 'waitForProcess' for the meaning of exit codes
 -- when the process died as the result of a signal.
 --
