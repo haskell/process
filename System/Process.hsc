@@ -298,7 +298,7 @@ spawnCommand cmd = do
 -- /Since: 1.2.0.0/
 callProcess :: FilePath -> [String] -> IO ()
 callProcess cmd args = do
-    exit_code <- withCreateProcess_ "callCommand"
+    exit_code <- withCreateProcess_ "callProcess"
                    (proc cmd args) { delegate_ctlc = True } $ \_ _ _ p ->
                    waitForProcess p
     case exit_code of
