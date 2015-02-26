@@ -421,6 +421,8 @@ readProcess cmd args = readCreateProcess $ proc cmd args
 --
 -- >  > readCreateProcess (shell "pwd" { cwd = "/etc/" }) ""
 -- >  "/etc\n"
+--
+-- /Since: 1.2.3.0/
 
 readCreateProcess
     :: CreateProcess
