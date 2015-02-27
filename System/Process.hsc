@@ -433,7 +433,7 @@ readCreateProcess
 readCreateProcess cp input = do
     let cp_opts = cp {
                     std_in  = CreatePipe,
-                    std_out = CreatePipe,
+                    std_out = CreatePipe
                   }
     (ex, output) <- withCreateProcess_ "readCreateProcess" cp_opts $
       \(Just inh) (Just outh) _ ph -> do
