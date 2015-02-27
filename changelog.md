@@ -1,6 +1,6 @@
 # Changelog for [`process` package](http://hackage.haskell.org/package/process)
 
-## Unreleased
+## 1.2.3.0 *unreleased*
 
   * [Meaningful error message when exe not found on close\_fds is
   True](https://ghc.haskell.org/trac/ghc/ticket/3649#comment:10)
