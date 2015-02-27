@@ -422,6 +422,8 @@ readProcess cmd args = readCreateProcess $ proc cmd args
 -- >  > readCreateProcess (shell "pwd" { cwd = "/etc/" }) ""
 -- >  "/etc\n"
 --
+-- Note that @Handle@s provided for @std_in@ or @std_out@ via the CreateProcess
+-- record will be ignored.
 -- /Since: 1.2.3.0/
 
 readCreateProcess
@@ -432,7 +434,6 @@ readCreateProcess cp input = do
     let cp_opts = cp {
                     std_in  = CreatePipe,
                     std_out = CreatePipe,
-                    std_err = Inherit
                   }
     (ex, output) <- withCreateProcess_ "readCreateProcess" cp_opts $
       \(Just inh) (Just outh) _ ph -> do
