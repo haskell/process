@@ -5,7 +5,7 @@
   * [Meaningful error message when exe not found on close\_fds is
   True](https://ghc.haskell.org/trac/ghc/ticket/3649#comment:10)
 
-  * New function `readCreateProcess`
+  * New functions `readCreateProcess` and `readCreateProcessWithExitCode`
 
 ## 1.2.2.0  *Jan 2015*
 

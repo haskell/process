@@ -42,6 +42,7 @@ module System.Process (
     spawnCommand,
     readCreateProcess,
     readProcess,
+    readCreateProcessWithExitCode,
     readProcessWithExitCode,
 
     -- ** Related utilities
@@ -484,13 +485,27 @@ readProcessWithExitCode
     -> [String]                 -- ^ any arguments
     -> String                   -- ^ standard input
     -> IO (ExitCode,String,String) -- ^ exitcode, stdout, stderr
-readProcessWithExitCode cmd args input = do
-    let cp_opts = (proc cmd args) {
+readProcessWithExitCode cmd args =
+    readCreateProcessWithExitCode $ proc cmd args
+
+-- | @readCreateProcessWithExitCode@ works exactly like 'readProcessWithExitCode' except that it
+-- lets you pass 'CreateProcess' giving better flexibility.
+--
+-- Note that @Handle@s provided for @std_in@, @std_out@, or @std_err@ via the CreateProcess
+-- record will be ignored.
+--
+-- /Since: 1.2.3.0/
+readCreateProcessWithExitCode
+    :: CreateProcess
+    -> String                      -- ^ standard input
+    -> IO (ExitCode,String,String) -- ^ exitcode, stdout, stderr
+readCreateProcessWithExitCode cp input = do
+    let cp_opts = cp {
                     std_in  = CreatePipe,
                     std_out = CreatePipe,
                     std_err = CreatePipe
                   }
-    withCreateProcess_ "readProcessWithExitCode" cp_opts $
+    withCreateProcess_ "readCreateProcessWithExitCode" cp_opts $
       \(Just inh) (Just outh) (Just errh) ph -> do
 
         out <- hGetContents outh
