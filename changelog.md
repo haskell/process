@@ -5,6 +5,8 @@
   * [Meaningful error message when exe not found on close\_fds is
   True](https://ghc.haskell.org/trac/ghc/ticket/3649#comment:10)
 
+  * New function `readCreateProcess`
+
 ## 1.2.2.0  *Jan 2015*
 
   * Fix delegated CTRL-C handling in `createProcess` in case of failed
