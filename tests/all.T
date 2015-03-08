@@ -22,7 +22,7 @@ test('T3231',
      compile_and_run,
      [''])
 test('T4198',
-     [pre_cmd('\'' + config.compiler + '\'' + ' exitminus1.c -no-hs-main -o exitminus1'),
+     [pre_cmd('{compiler} exitminus1.c -no-hs-main -o exitminus1'),
       extra_clean(['exitminus1.o', 'exitminus1', 'exitminus1.exe'])],
      compile_and_run,
      [''])
