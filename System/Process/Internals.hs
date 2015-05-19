@@ -634,7 +634,7 @@ passing a single command-line string (lpCommandLine) as its argument.
         traditional argument vector argv[0], argv[1], etc.  It does this
         using a complex and arcane set of rules which are described here:
 
-           http://msdn.microsoft.com/library/default.asp?url=/library/en-us/vccelng/htm/progs_12.asp
+           https://msdn.microsoft.com/en-us/library/a1y7w461.aspx
 
         (if this URL stops working, you might be able to find it by
         searching for "Parsing C Command-Line Arguments" on MSDN.  Also,
