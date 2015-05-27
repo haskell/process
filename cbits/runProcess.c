@@ -553,6 +553,12 @@ runInteractiveProcess (wchar_t *cmd, wchar_t *workingDirectory,
     if ((flags & RUN_PROCESS_IN_NEW_GROUP) != 0) {
         dwFlags |= CREATE_NEW_PROCESS_GROUP;
     }
+    if ((flags & RUN_PROCESS_WITHOUT_WINDOW) != 0) {
+        dwFlags |= CREATE_NO_WINDOW;
+    }
+    if ((flags & RUN_PROCESS_DETACHED) != 0) {
+        dwFlags |= DETACHED_PROCESS;
+    }
 
     if (!CreateProcess(NULL, cmd, NULL, NULL, inherit, dwFlags, environment, workingDirectory, &sInfo, &pInfo))
     {
