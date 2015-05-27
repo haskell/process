@@ -217,6 +217,10 @@ runInteractiveProcess (char *const args[],
             (void)sigaction(SIGQUIT, &dfl, NULL);
         }
 
+        if ((flags & RUN_PROCESS_DETACHED)) {
+          setsid();
+        }
+
         /* the child */
         if (environment) {
             // XXX Check result
