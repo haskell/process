@@ -138,6 +138,9 @@ runInteractiveProcess (char *const args[],
         close(forkCommunicationFds[0]);
         fcntl(forkCommunicationFds[1], F_SETFD, FD_CLOEXEC);
 
+        if ((flags & RUN_PROCESS_DETACHED) != 0) {
+            setsid();
+        }
         if ((flags & RUN_PROCESS_IN_NEW_GROUP) != 0) {
             setpgid(0, 0);
         }
@@ -552,6 +555,9 @@ runInteractiveProcess (wchar_t *cmd, wchar_t *workingDirectory,
 
     if ((flags & RUN_PROCESS_IN_NEW_GROUP) != 0) {
         dwFlags |= CREATE_NEW_PROCESS_GROUP;
+    }
+    if ((flags & RUN_PROCESS_DETACHED) != 0) {
+        dwFlags |= DETACHED_PROCESS;
     }
 
     if (!CreateProcess(NULL, cmd, NULL, NULL, inherit, dwFlags, environment, workingDirectory, &sInfo, &pInfo))

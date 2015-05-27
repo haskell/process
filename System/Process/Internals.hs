@@ -177,11 +177,16 @@ data CreateProcess = CreateProcess{
   std_err      :: StdStream,               -- ^ How to determine stderr
   close_fds    :: Bool,                    -- ^ Close all file descriptors except stdin, stdout and stderr in the new process (on Windows, only works if std_in, std_out, and std_err are all Inherit)
   create_group :: Bool,                    -- ^ Create a new process group
-  delegate_ctlc:: Bool                     -- ^ Delegate control-C handling. Use this for interactive console processes to let them handle control-C themselves (see below for details).
+  delegate_ctlc:: Bool,                    -- ^ Delegate control-C handling. Use this for interactive console processes to let them handle control-C themselves (see below for details).
                                            --
                                            --   On Windows this has no effect.
                                            --
                                            --   /Since: 1.2.0.0/
+  detach_console :: Bool                   -- ^ Detach the process from the console, so it has no controlling terminal.
+                                           --
+                                           --   On Unix, this uses setsid, while on Windows, it uses DETACHED_PROCESS.
+                                           --
+                                           --   /Since: 1.3.0.0/
  }
 
 data CmdSpec
@@ -258,7 +263,8 @@ createProcess_ fun CreateProcess{ cmdspec = cmdsp,
                                   std_err = mb_stderr,
                                   close_fds = mb_close_fds,
                                   create_group = mb_create_group,
-                                  delegate_ctlc = mb_delegate_ctlc }
+                                  delegate_ctlc = mb_delegate_ctlc,
+                                  detach_console = mb_detach_console }
  = do
   let (cmd,args) = commandToProcess cmdsp
   withFilePathException cmd $
@@ -288,7 +294,8 @@ createProcess_ fun CreateProcess{ cmdspec = cmdsp,
                                 pfdStdInput pfdStdOutput pfdStdError
                                 (if mb_delegate_ctlc then 1 else 0)
                                 ((if mb_close_fds then RUN_PROCESS_IN_CLOSE_FDS else 0)
-                                .|.(if mb_create_group then RUN_PROCESS_IN_NEW_GROUP else 0))
+                                .|.(if mb_create_group then RUN_PROCESS_IN_NEW_GROUP else 0)
+                                .|.(if mb_detach_console then RUN_PROCESS_DETACHED else 0))
                                 pFailedDoing
 
      when (proc_handle == -1) $ do
@@ -419,7 +426,8 @@ createProcess_ fun CreateProcess{ cmdspec = cmdsp,
                                   std_err = mb_stderr,
                                   close_fds = mb_close_fds,
                                   create_group = mb_create_group,
-                                  delegate_ctlc = _ignored }
+                                  delegate_ctlc = _ignored,
+                                  detach_console = mb_detach_console }
  = do
   (cmd, cmdline) <- commandToProcess cmdsp
   withFilePathException cmd $
@@ -450,7 +458,8 @@ createProcess_ fun CreateProcess{ cmdspec = cmdsp,
                                 fdin fdout fderr
                                 pfdStdInput pfdStdOutput pfdStdError
                                 ((if mb_close_fds then RUN_PROCESS_IN_CLOSE_FDS else 0)
-                                .|.(if mb_create_group then RUN_PROCESS_IN_NEW_GROUP else 0))
+                                .|.(if mb_create_group then RUN_PROCESS_IN_NEW_GROUP else 0)
+                                .|.(if mb_detach_console then RUN_PROCESS_DETACHED else 0))
 
      hndStdInput  <- mbPipe mb_stdin  pfdStdInput  WriteMode
      hndStdOutput <- mbPipe mb_stdout pfdStdOutput ReadMode
