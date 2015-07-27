@@ -601,7 +601,7 @@ readCreateProcessBS cp input = do
 
         -- fork off a thread to start consuming the output
         output  <- BS.hGetContents outh
-        withForkWait (C.evaluate $ rnf output) $ \waitOut -> do
+        withForkWait (C.evaluate output >> return ()) $ \waitOut -> do
 
           -- now write any input
           unless (BS.null input) $
@@ -668,12 +668,12 @@ readCreateProcessWithExitCodeBS cp input = do
     withCreateProcess_ "readCreateProcessWithExitCodeBS" cp_opts $
       \(Just inh) (Just outh) (Just errh) ph -> do
 
-        out <- BS.hGetContents outh
-        err <- BS.hGetContents errh
+        outVar <- newEmptyMVar
+        errVar <- newEmptyMVar
 
         -- fork off threads to start consuming stdout & stderr
-        withForkWait  (C.evaluate $ rnf out) $ \waitOut ->
-         withForkWait (C.evaluate $ rnf err) $ \waitErr -> do
+        withForkWait  (BS.hGetContents outh >>= putMVar outVar) $ \waitOut ->
+         withForkWait (BS.hGetContents errh >>= putMVar errVar) $ \waitErr -> do
 
           -- now write any input
           unless (BS.null input) $
@@ -690,6 +690,9 @@ readCreateProcessWithExitCodeBS cp input = do
 
         -- wait on the process
         ex <- waitForProcess ph
+
+        out <- takeMVar outVar
+        err <- takeMVar errVar
 
         return (ex, out, err)
 
