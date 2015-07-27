@@ -44,6 +44,7 @@ library
     exposed-modules:
         System.Cmd
         System.Process
+        System.Process.ByteString
     if impl(ghc)
         exposed-modules:
             System.Process.Internals

@@ -44,10 +44,6 @@ module System.Process (
     readProcess,
     readCreateProcessWithExitCode,
     readProcessWithExitCode,
-    readCreateProcessBS,
-    readProcessBS,
-    readCreateProcessWithExitCodeBS,
-    readProcessWithExitCodeBS,
 
     -- ** Related utilities
     showCommandForUser,
@@ -79,19 +75,13 @@ import Prelude hiding (mapM)
 
 import System.Process.Internals
 
-import Control.Concurrent
 import Control.DeepSeq (rnf)
-import Control.Exception (SomeException, mask, try, throwIO)
 import qualified Control.Exception as C
 import Control.Monad
 import Data.Maybe
-import Foreign
-import Foreign.C
 import System.Exit      ( ExitCode(..) )
 import System.IO
 import System.IO.Error (mkIOError, ioeSetErrorString)
-
-import qualified Data.ByteString as BS
 
 #if defined(mingw32_HOST_OS)
 # include <io.h>        /* for _close and _pipe */
@@ -100,11 +90,10 @@ import Control.Exception (onException)
 #else
 import System.Posix.Process (getProcessGroupIDOf)
 import qualified System.Posix.IO as Posix
-import System.Posix.Types
 #endif
 
 #ifdef __GLASGOW_HASKELL__
-import GHC.IO.Exception ( ioException, IOErrorType(..), IOException(..) )
+import GHC.IO.Exception ( ioException, IOErrorType(..) )
 # if defined(mingw32_HOST_OS)
 import System.Win32.Console (generateConsoleCtrlEvent, cTRL_BREAK_EVENT)
 import System.Win32.Process (getProcessId)
@@ -230,43 +219,6 @@ withCreateProcess c action =
                      (\(m_in, m_out, m_err, ph) -> action m_in m_out m_err ph)
 -}
 
--- wrapper so we can get exceptions with the appropriate function name.
-withCreateProcess_
-  :: String
-  -> CreateProcess
-  -> (Maybe Handle -> Maybe Handle -> Maybe Handle -> ProcessHandle -> IO a)
-  -> IO a
-withCreateProcess_ fun c action =
-    C.bracketOnError (createProcess_ fun c) cleanupProcess
-                     (\(m_in, m_out, m_err, ph) -> action m_in m_out m_err ph)
-
-
-cleanupProcess :: (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)
-               -> IO ()
-cleanupProcess (mb_stdin, mb_stdout, mb_stderr,
-                ph@(ProcessHandle _ delegating_ctlc)) = do
-    terminateProcess ph
-    -- Note, it's important that other threads that might be reading/writing
-    -- these handles also get killed off, since otherwise they might be holding
-    -- the handle lock and prevent us from closing, leading to deadlock.
-    maybe (return ()) (ignoreSigPipe . hClose) mb_stdin
-    maybe (return ()) hClose mb_stdout
-    maybe (return ()) hClose mb_stderr
-    -- terminateProcess does not guarantee that it terminates the process.
-    -- Indeed on Unix it's SIGTERM, which asks nicely but does not guarantee
-    -- that it stops. If it doesn't stop, we don't want to hang, so we wait
-    -- asynchronously using forkIO.
-
-    -- However we want to end the Ctl-C handling synchronously, so we'll do
-    -- that synchronously, and set delegating_ctlc as False for the
-    -- waitForProcess (which would otherwise end the Ctl-C delegation itself).
-    when delegating_ctlc
-      stopDelegateControlC
-    _ <- forkIO (waitForProcess (resetCtlcDelegation ph) >> return ())
-    return ()
-  where
-    resetCtlcDelegation (ProcessHandle m _) = ProcessHandle m False
-
 -- ----------------------------------------------------------------------------
 -- spawnProcess/spawnCommand
 
@@ -329,14 +281,6 @@ callCommand cmd = do
     case exit_code of
       ExitSuccess   -> return ()
       ExitFailure r -> processFailedException "callCommand" cmd [] r
-
-processFailedException :: String -> String -> [String] -> Int -> IO a
-processFailedException fun cmd args exit_code =
-      ioError (mkIOError OtherError (fun ++ ": " ++ cmd ++
-                                     concatMap ((' ':) . show) args ++
-                                     " (exit " ++ show exit_code ++ ")")
-                                 Nothing Nothing)
-
 
 -- ----------------------------------------------------------------------------
 -- Control-C handling on Unix
@@ -538,190 +482,6 @@ readCreateProcessWithExitCode cp input = do
 
         return (ex, out, err)
 
--- -----------------------------------------------------------------------------
-
--- | @readProcessBS@ forks an external process, reads its standard output
--- strictly, blocking until the process terminates, and returns the output
--- string. The external process inherits the standard error.
---
--- If an asynchronous exception is thrown to the thread executing
--- @readProcessBS@, the forked process will be terminated and @readProcessBS@ will
--- wait (block) until the process has been terminated.
---
--- Output is returned strictly, so this is not suitable for
--- interactive applications.
---
--- This function throws an 'IOError' if the process 'ExitCode' is
--- anything other than 'ExitSuccess'. If instead you want to get the
--- 'ExitCode' then use 'readProcessWithExitCode'.
---
--- Users of this function should compile with @-threaded@ if they
--- want other Haskell threads to keep running while waiting on
--- the result of readProcess.
---
--- >  > readProcessBS "date" [] []
--- >  "Thu Feb  7 10:03:39 PST 2008\n"
---
--- The arguments are:
---
--- * The command to run, which must be in the $PATH, or an absolute or relative path
---
--- * A list of separate command line arguments to the program
---
--- * A string to pass on standard input to the forked process.
---
-readProcessBS
-    :: FilePath                 -- ^ Filename of the executable (see 'RawCommand' for details)
-    -> [String]                 -- ^ any arguments
-    -> BS.ByteString            -- ^ standard input
-    -> IO BS.ByteString         -- ^ stdout
-readProcessBS cmd args = readCreateProcessBS $ proc cmd args
-
--- | @readCreateProcess@ works exactly like 'readProcess' except that it
--- lets you pass 'CreateProcess' giving better flexibility.
---
--- >  > readCreateProcessBS (shell "pwd" { cwd = "/etc/" }) ""
--- >  "/etc\n"
---
--- Note that @Handle@s provided for @std_in@ or @std_out@ via the CreateProcess
--- record will be ignored.
--- /Since: 1.2.3.0/
-
-readCreateProcessBS
-    :: CreateProcess
-    -> BS.ByteString            -- ^ standard input
-    -> IO BS.ByteString         -- ^ stdout
-readCreateProcessBS cp input = do
-    let cp_opts = cp {
-                    std_in  = CreatePipe,
-                    std_out = CreatePipe
-                  }
-    (ex, output) <- withCreateProcess_ "readCreateProcessBS" cp_opts $
-      \(Just inh) (Just outh) _ ph -> do
-
-        -- fork off a thread to start consuming the output
-        output  <- BS.hGetContents outh
-        withForkWait (C.evaluate output >> return ()) $ \waitOut -> do
-
-          -- now write any input
-          unless (BS.null input) $
-            ignoreSigPipe $ BS.hPutStr inh input
-          -- hClose performs implicit hFlush, and thus may trigger a SIGPIPE
-          ignoreSigPipe $ hClose inh
-
-          -- wait on the output
-          waitOut
-          hClose outh
-
-        -- wait on the process
-        ex <- waitForProcess ph
-        return (ex, output)
-
-    case ex of
-     ExitSuccess   -> return output
-     ExitFailure r -> processFailedException "readCreateProcessBS" cmd args r
-  where
-    cmd = case cp of
-            CreateProcess { cmdspec = ShellCommand sc } -> sc
-            CreateProcess { cmdspec = RawCommand fp _ } -> fp
-    args = case cp of
-             CreateProcess { cmdspec = ShellCommand _ } -> []
-             CreateProcess { cmdspec = RawCommand _ args' } -> args'
-
-
--- | @readProcessWithExitCodeBS@ is like @readProcessBS@ but with two differences:
---
---  * it returns the 'ExitCode' of the process, and does not throw any
---    exception if the code is not 'ExitSuccess'.
---
---  * it reads and returns the output from process' standard error handle,
---    rather than the process inheriting the standard error handle.
---
--- On Unix systems, see 'waitForProcess' for the meaning of exit codes
--- when the process died as the result of a signal.
---
-readProcessWithExitCodeBS
-    :: FilePath                                  -- ^ Filename of the executable (see 'RawCommand' for details)
-    -> [String]                                  -- ^ any arguments
-    -> BS.ByteString                             -- ^ standard input
-    -> IO (ExitCode,BS.ByteString,BS.ByteString) -- ^ exitcode, stdout, stderr
-readProcessWithExitCodeBS cmd args =
-    readCreateProcessWithExitCodeBS $ proc cmd args
-
--- | @readCreateProcessWithExitCodeBS@ works exactly like 'readProcessWithExitCodeBS' except that it
--- lets you pass 'CreateProcess' giving better flexibility.
---
--- Note that @Handle@s provided for @std_in@, @std_out@, or @std_err@ via the CreateProcess
--- record will be ignored.
---
--- /Since: 1.2.3.0/
-readCreateProcessWithExitCodeBS
-    :: CreateProcess
-    -> BS.ByteString                             -- ^ standard input
-    -> IO (ExitCode,BS.ByteString,BS.ByteString) -- ^ exitcode, stdout, stderr
-readCreateProcessWithExitCodeBS cp input = do
-    let cp_opts = cp {
-                    std_in  = CreatePipe,
-                    std_out = CreatePipe,
-                    std_err = CreatePipe
-                  }
-    withCreateProcess_ "readCreateProcessWithExitCodeBS" cp_opts $
-      \(Just inh) (Just outh) (Just errh) ph -> do
-
-        outVar <- newEmptyMVar
-        errVar <- newEmptyMVar
-
-        -- fork off threads to start consuming stdout & stderr
-        withForkWait  (BS.hGetContents outh >>= putMVar outVar) $ \waitOut ->
-         withForkWait (BS.hGetContents errh >>= putMVar errVar) $ \waitErr -> do
-
-          -- now write any input
-          unless (BS.null input) $
-            ignoreSigPipe $ BS.hPutStr inh input
-          -- hClose performs implicit hFlush, and thus may trigger a SIGPIPE
-          ignoreSigPipe $ hClose inh
-
-          -- wait on the output
-          waitOut
-          waitErr
-
-          hClose outh
-          hClose errh
-
-        -- wait on the process
-        ex <- waitForProcess ph
-
-        out <- takeMVar outVar
-        err <- takeMVar errVar
-
-        return (ex, out, err)
-
--- | Fork a thread while doing something else, but kill it if there's an
--- exception.
---
--- This is important in the cases above because we want to kill the thread
--- that is holding the Handle lock, because when we clean up the process we
--- try to close that handle, which could otherwise deadlock.
---
-withForkWait :: IO () -> (IO () ->  IO a) -> IO a
-withForkWait async body = do
-  waitVar <- newEmptyMVar :: IO (MVar (Either SomeException ()))
-  mask $ \restore -> do
-    tid <- forkIO $ try (restore async) >>= putMVar waitVar
-    let wait = takeMVar waitVar >>= either throwIO return
-    restore (body wait) `C.onException` killThread tid
-
-ignoreSigPipe :: IO () -> IO ()
-#if defined(__GLASGOW_HASKELL__)
-ignoreSigPipe = C.handle $ \e -> case e of
-                                   IOError { ioe_type  = ResourceVanished
-                                           , ioe_errno = Just ioe }
-                                     | Errno ioe == ePIPE -> return ()
-                                   _ -> throwIO e
-#else
-ignoreSigPipe = id
-#endif
-
 -- ----------------------------------------------------------------------------
 -- showCommandForUser
 
@@ -730,116 +490,6 @@ ignoreSigPipe = id
 --   into @\/bin\/sh@ (on Unix systems) or @CMD.EXE@ (on Windows).
 showCommandForUser :: FilePath -> [String] -> String
 showCommandForUser cmd args = unwords (map translate (cmd : args))
-
-
--- ----------------------------------------------------------------------------
--- waitForProcess
-
-{- | Waits for the specified process to terminate, and returns its exit code.
-
-GHC Note: in order to call @waitForProcess@ without blocking all the
-other threads in the system, you must compile the program with
-@-threaded@.
-
-(/Since: 1.2.0.0/) On Unix systems, a negative value @'ExitFailure' -/signum/@
-indicates that the child was terminated by signal @/signum/@.
-The signal numbers are platform-specific, so to test for a specific signal use
-the constants provided by "System.Posix.Signals" in the @unix@ package.
-Note: core dumps are not reported, use "System.Posix.Process" if you need this
-detail.
-
--}
-waitForProcess
-  :: ProcessHandle
-  -> IO ExitCode
-waitForProcess ph@(ProcessHandle _ delegating_ctlc) = do
-  p_ <- modifyProcessHandle ph $ \p_ -> return (p_,p_)
-  case p_ of
-    ClosedHandle e -> return e
-    OpenHandle h  -> do
-        -- don't hold the MVar while we call c_waitForProcess...
-        -- (XXX but there's a small race window here during which another
-        -- thread could close the handle or call waitForProcess)
-        e <- alloca $ \pret -> do
-          throwErrnoIfMinus1Retry_ "waitForProcess" (c_waitForProcess h pret)
-          modifyProcessHandle ph $ \p_' ->
-            case p_' of
-              ClosedHandle e -> return (p_',e)
-              OpenHandle ph' -> do
-                closePHANDLE ph'
-                code <- peek pret
-                let e = if (code == 0)
-                       then ExitSuccess
-                       else (ExitFailure (fromIntegral code))
-                return (ClosedHandle e, e)
-        when delegating_ctlc $
-          endDelegateControlC e
-        return e
-
-
--- ----------------------------------------------------------------------------
--- getProcessExitCode
-
-{- |
-This is a non-blocking version of 'waitForProcess'.  If the process is
-still running, 'Nothing' is returned.  If the process has exited, then
-@'Just' e@ is returned where @e@ is the exit code of the process.
-
-On Unix systems, see 'waitForProcess' for the meaning of exit codes
-when the process died as the result of a signal.
--}
-
-getProcessExitCode :: ProcessHandle -> IO (Maybe ExitCode)
-getProcessExitCode ph@(ProcessHandle _ delegating_ctlc) = do
-  (m_e, was_open) <- modifyProcessHandle ph $ \p_ ->
-    case p_ of
-      ClosedHandle e -> return (p_, (Just e, False))
-      OpenHandle h ->
-        alloca $ \pExitCode -> do
-            res <- throwErrnoIfMinus1Retry "getProcessExitCode" $
-                        c_getProcessExitCode h pExitCode
-            code <- peek pExitCode
-            if res == 0
-              then return (p_, (Nothing, False))
-              else do
-                   closePHANDLE h
-                   let e  | code == 0 = ExitSuccess
-                          | otherwise = ExitFailure (fromIntegral code)
-                   return (ClosedHandle e, (Just e, True))
-  case m_e of
-    Just e | was_open && delegating_ctlc -> endDelegateControlC e
-    _                                    -> return ()
-  return m_e
-
-
--- ----------------------------------------------------------------------------
--- terminateProcess
-
--- | Attempts to terminate the specified process.  This function should
--- not be used under normal circumstances - no guarantees are given regarding
--- how cleanly the process is terminated.  To check whether the process
--- has indeed terminated, use 'getProcessExitCode'.
---
--- On Unix systems, 'terminateProcess' sends the process the SIGTERM signal.
--- On Windows systems, the Win32 @TerminateProcess@ function is called, passing
--- an exit code of 1.
---
--- Note: on Windows, if the process was a shell command created by
--- 'createProcess' with 'shell', or created by 'runCommand' or
--- 'runInteractiveCommand', then 'terminateProcess' will only
--- terminate the shell, not the command itself.  On Unix systems, both
--- processes are in a process group and will be terminated together.
-
-terminateProcess :: ProcessHandle -> IO ()
-terminateProcess ph = do
-  withProcessHandle ph $ \p_ ->
-    case p_ of
-      ClosedHandle _ -> return ()
-      OpenHandle h -> do
-        throwErrnoIfMinus1Retry_ "terminateProcess" $ c_terminateProcess h
-        return ()
-        -- does not close the handle, we might want to try terminating it
-        -- again, or get its exit code.
 
 
 -- ----------------------------------------------------------------------------
@@ -871,27 +521,6 @@ interruptProcessGroupOf ph = do
                 signalProcessGroup sigINT pgid
 #endif
                 return ()
-
-
--- ----------------------------------------------------------------------------
--- Interface to C bits
-
-foreign import ccall unsafe "terminateProcess"
-  c_terminateProcess
-        :: PHANDLE
-        -> IO CInt
-
-foreign import ccall unsafe "getProcessExitCode"
-  c_getProcessExitCode
-        :: PHANDLE
-        -> Ptr CInt
-        -> IO CInt
-
-foreign import ccall interruptible "waitForProcess" -- NB. safe - can block
-  c_waitForProcess
-        :: PHANDLE
-        -> Ptr CInt
-        -> IO CInt
 
 
 -- ----------------------------------------------------------------------------
