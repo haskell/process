@@ -79,7 +79,11 @@ import GHC.IO.Device
 import GHC.IO.Handle.FD
 import GHC.IO.Handle.Internals
 import GHC.IO.Handle.Types hiding (ClosedHandle)
+#if MIN_VERSION_base (4,6,0)
 import System.IO.Error
+#else
+import System.IO.Error hiding (try)
+#endif
 import Data.Typeable
 # if defined(mingw32_HOST_OS)
 import GHC.IO.IOMode
