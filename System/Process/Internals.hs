@@ -230,6 +230,7 @@ data StdStream
                              -- @Handle@ will use the default encoding
                              -- and newline translation mode (just
                              -- like @Handle@s created by @openFile@).
+  | NoStream                 -- ^ No stream handle will be passed
 
 -- | This function is almost identical to
 -- 'System.Process.createProcess'. The only differences are:
@@ -517,6 +518,7 @@ fd_stderr = 2
 mbFd :: String -> FD -> StdStream -> IO FD
 mbFd _   _std CreatePipe      = return (-1)
 mbFd _fun std Inherit         = return std
+mbFd _fn _std NoStream        = return (-2)
 mbFd fun _std (UseHandle hdl) =
   withHandle fun hdl $ \Handle__{haDevice=dev,..} ->
     case cast dev of

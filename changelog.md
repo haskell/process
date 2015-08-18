@@ -1,5 +1,9 @@
 # Changelog for [`process` package](http://hackage.haskell.org/package/process)
 
+## 1.3.0.0 (unreleased)
+
+* Add StdStream(NoStream) to have standard handles closed. [#13](https://github.com/haskell/process/pull/13)
+
 ## 1.2.3.0 *March 2015*
 
   * [Meaningful error message when exe not found on close\_fds is

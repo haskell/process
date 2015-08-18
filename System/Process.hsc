@@ -91,7 +91,6 @@ import System.IO.Error (mkIOError, ioeSetErrorString)
 # include <io.h>        /* for _close and _pipe */
 # include <fcntl.h>     /* for _O_BINARY */
 import Control.Exception (onException)
-import Foreign.C.Types (CInt(..), CUInt(..))
 #else
 import System.Posix.Process (getProcessGroupIDOf)
 import qualified System.Posix.IO as Posix
