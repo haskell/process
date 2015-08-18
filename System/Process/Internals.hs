@@ -182,9 +182,10 @@ data CreateProcess = CreateProcess{
                                            --   On Windows this has no effect.
                                            --
                                            --   /Since: 1.2.0.0/
-  detach_console :: Bool                   -- ^ Detach the process from the console, so it has no controlling terminal.
+  detach_console :: Bool,                  -- ^ Use the windows DETACHED_PROCESS flag when creating the process; does nothing on other platforms.
                                            --
-                                           --   On Unix, this uses setsid, while on Windows, it uses DETACHED_PROCESS.
+                                           --   /Since: 1.3.0.0/
+  new_session :: Bool                      -- ^ Use posix setsid to start the new process in a new session; does nothing on other platforms.
                                            --
                                            --   /Since: 1.3.0.0/
  }
@@ -264,7 +265,8 @@ createProcess_ fun CreateProcess{ cmdspec = cmdsp,
                                   close_fds = mb_close_fds,
                                   create_group = mb_create_group,
                                   delegate_ctlc = mb_delegate_ctlc,
-                                  detach_console = mb_detach_console }
+                                  detach_console = mb_detach_console,
+                                  new_session = mb_new_session }
  = do
   let (cmd,args) = commandToProcess cmdsp
   withFilePathException cmd $
@@ -295,7 +297,8 @@ createProcess_ fun CreateProcess{ cmdspec = cmdsp,
                                 (if mb_delegate_ctlc then 1 else 0)
                                 ((if mb_close_fds then RUN_PROCESS_IN_CLOSE_FDS else 0)
                                 .|.(if mb_create_group then RUN_PROCESS_IN_NEW_GROUP else 0)
-                                .|.(if mb_detach_console then RUN_PROCESS_DETACHED else 0))
+                                .|.(if mb_detach_console then RUN_PROCESS_DETACHED else 0)
+                                .|.(if mb_new_session then RUN_PROCESS_NEW_SESSION else 0))
                                 pFailedDoing
 
      when (proc_handle == -1) $ do
@@ -427,7 +430,8 @@ createProcess_ fun CreateProcess{ cmdspec = cmdsp,
                                   close_fds = mb_close_fds,
                                   create_group = mb_create_group,
                                   delegate_ctlc = _ignored,
-                                  detach_console = mb_detach_console }
+                                  detach_console = mb_detach_console,
+                                  new_session = mb_new_session }
  = do
   (cmd, cmdline) <- commandToProcess cmdsp
   withFilePathException cmd $
@@ -460,6 +464,7 @@ createProcess_ fun CreateProcess{ cmdspec = cmdsp,
                                 ((if mb_close_fds then RUN_PROCESS_IN_CLOSE_FDS else 0)
                                 .|.(if mb_create_group then RUN_PROCESS_IN_NEW_GROUP else 0)
                                 .|.(if mb_detach_console then RUN_PROCESS_DETACHED else 0))
+                                .|.(if mb_new_session then RUN_PROCESS_NEW_SESSION else 0))
 
      hndStdInput  <- mbPipe mb_stdin  pfdStdInput  WriteMode
      hndStdOutput <- mbPipe mb_stdout pfdStdOutput ReadMode

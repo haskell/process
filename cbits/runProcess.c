@@ -138,7 +138,7 @@ runInteractiveProcess (char *const args[],
         close(forkCommunicationFds[0]);
         fcntl(forkCommunicationFds[1], F_SETFD, FD_CLOEXEC);
 
-        if ((flags & RUN_PROCESS_DETACHED) != 0) {
+        if ((flags & RUN_PROCESS_NEW_SESSION) != 0) {
             setsid();
         }
         if ((flags & RUN_PROCESS_IN_NEW_GROUP) != 0) {
