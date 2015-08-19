@@ -125,6 +125,7 @@ proc cmd args = CreateProcess { cmdspec = RawCommand cmd args,
                                 create_group = False,
                                 delegate_ctlc = False,
                                 detach_console = False,
+                                create_new_console = False,
                                 new_session = False }
 
 -- | Construct a 'CreateProcess' record for passing to 'createProcess',
@@ -140,6 +141,7 @@ shell str = CreateProcess { cmdspec = ShellCommand str,
                             create_group = False,
                             delegate_ctlc = False,
                             detach_console = False,
+                            create_new_console = False,
                             new_session = False }
 
 {- |

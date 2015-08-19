@@ -185,6 +185,11 @@ data CreateProcess = CreateProcess{
   detach_console :: Bool,                  -- ^ Use the windows DETACHED_PROCESS flag when creating the process; does nothing on other platforms.
                                            --
                                            --   /Since: 1.3.0.0/
+  create_new_console :: Bool,              -- ^ Use the windows CREATE_NEW_CONSOLE flag when creating the process; does nothing on other platforms.
+                                           --
+                                           --   Default: @False@
+                                           --
+                                           --   /Since: 1.3.0.0/
   new_session :: Bool                      -- ^ Use posix setsid to start the new process in a new session; does nothing on other platforms.
                                            --
                                            --   /Since: 1.3.0.0/
@@ -267,6 +272,7 @@ createProcess_ fun CreateProcess{ cmdspec = cmdsp,
                                   create_group = mb_create_group,
                                   delegate_ctlc = mb_delegate_ctlc,
                                   detach_console = mb_detach_console,
+                                  create_new_console = mb_create_new_console,
                                   new_session = mb_new_session }
  = do
   let (cmd,args) = commandToProcess cmdsp
@@ -299,6 +305,7 @@ createProcess_ fun CreateProcess{ cmdspec = cmdsp,
                                 ((if mb_close_fds then RUN_PROCESS_IN_CLOSE_FDS else 0)
                                 .|.(if mb_create_group then RUN_PROCESS_IN_NEW_GROUP else 0)
                                 .|.(if mb_detach_console then RUN_PROCESS_DETACHED else 0)
+                                .|.(if mb_create_new_console then RUN_PROCESS_NEW_CONSOLE else 0)
                                 .|.(if mb_new_session then RUN_PROCESS_NEW_SESSION else 0))
                                 pFailedDoing
 
@@ -432,6 +439,7 @@ createProcess_ fun CreateProcess{ cmdspec = cmdsp,
                                   create_group = mb_create_group,
                                   delegate_ctlc = _ignored,
                                   detach_console = mb_detach_console,
+                                  create_new_console = mb_create_new_console,
                                   new_session = mb_new_session }
  = do
   (cmd, cmdline) <- commandToProcess cmdsp
@@ -465,6 +473,7 @@ createProcess_ fun CreateProcess{ cmdspec = cmdsp,
                                 ((if mb_close_fds then RUN_PROCESS_IN_CLOSE_FDS else 0)
                                 .|.(if mb_create_group then RUN_PROCESS_IN_NEW_GROUP else 0)
                                 .|.(if mb_detach_console then RUN_PROCESS_DETACHED else 0))
+                                .|.(if mb_create_new_console then RUN_PROCESS_NEW_CONSOLE else 0))
                                 .|.(if mb_new_session then RUN_PROCESS_NEW_SESSION else 0))
 
      hndStdInput  <- mbPipe mb_stdin  pfdStdInput  WriteMode

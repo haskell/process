@@ -571,6 +571,9 @@ runInteractiveProcess (wchar_t *cmd, wchar_t *workingDirectory,
     if ((flags & RUN_PROCESS_DETACHED) != 0) {
         dwFlags |= DETACHED_PROCESS;
     }
+    if ((flags & RUN_PROCESS_NEW_CONSOLE) != 0) {
+        dwFlags |= CREATE_NEW_CONSOLE;
+    }
 
     if (!CreateProcess(NULL, cmd, NULL, NULL, inherit, dwFlags, environment, workingDirectory, &sInfo, &pInfo))
     {
