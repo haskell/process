@@ -472,8 +472,8 @@ createProcess_ fun CreateProcess{ cmdspec = cmdsp,
                                 pfdStdInput pfdStdOutput pfdStdError
                                 ((if mb_close_fds then RUN_PROCESS_IN_CLOSE_FDS else 0)
                                 .|.(if mb_create_group then RUN_PROCESS_IN_NEW_GROUP else 0)
-                                .|.(if mb_detach_console then RUN_PROCESS_DETACHED else 0))
-                                .|.(if mb_create_new_console then RUN_PROCESS_NEW_CONSOLE else 0))
+                                .|.(if mb_detach_console then RUN_PROCESS_DETACHED else 0)
+                                .|.(if mb_create_new_console then RUN_PROCESS_NEW_CONSOLE else 0)
                                 .|.(if mb_new_session then RUN_PROCESS_NEW_SESSION else 0))
 
      hndStdInput  <- mbPipe mb_stdin  pfdStdInput  WriteMode
