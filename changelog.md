@@ -2,7 +2,7 @@
 
 ## 1.3.0.0 (unreleased)
 
-* Add StdStream(NoStream) to have standard handles closed. [#13](https://github.com/haskell/process/pull/13)
+* Add `StdStream(NoStream)` to have standard handles closed. [#13](https://github.com/haskell/process/pull/13)
 * Support for Windows `DETACHED_PROCESS` and `setsid` [#32](https://github.com/haskell/process/issues/32)
 * Support for Windows `CREATE_NEW_CONSOLE` [#38](https://github.com/haskell/process/issues/38)
 

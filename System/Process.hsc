@@ -274,7 +274,7 @@ cleanupProcess (mb_stdin, mb_stdout, mb_stderr,
 -- arguments. It does not wait for the program to finish, but returns the
 -- 'ProcessHandle'.
 --
--- /Since: 1.2.0.0/
+-- @since 1.2.0.0
 spawnProcess :: FilePath -> [String] -> IO ProcessHandle
 spawnProcess cmd args = do
     (_,_,_,p) <- createProcess_ "spawnProcess" (proc cmd args)
@@ -283,7 +283,7 @@ spawnProcess cmd args = do
 -- | Creates a new process to run the specified shell command.
 -- It does not wait for the program to finish, but returns the 'ProcessHandle'.
 --
--- /Since: 1.2.0.0/
+-- @since 1.2.0.0
 spawnCommand :: String -> IO ProcessHandle
 spawnCommand cmd = do
     (_,_,_,p) <- createProcess_ "spawnCommand" (shell cmd)
@@ -302,7 +302,7 @@ spawnCommand cmd = do
 -- @callProcess@ will wait (block) until the process has been
 -- terminated.
 --
--- /Since: 1.2.0.0/
+-- @since 1.2.0.0
 callProcess :: FilePath -> [String] -> IO ()
 callProcess cmd args = do
     exit_code <- withCreateProcess_ "callProcess"
@@ -320,7 +320,7 @@ callProcess cmd args = do
 -- @callCommand@ will wait (block) until the process has been
 -- terminated.
 --
--- /Since: 1.2.0.0/
+-- @since 1.2.0.0
 callCommand :: String -> IO ()
 callCommand cmd = do
     exit_code <- withCreateProcess_ "callCommand"
@@ -430,7 +430,7 @@ readProcess cmd args = readCreateProcess $ proc cmd args
 --
 -- Note that @Handle@s provided for @std_in@ or @std_out@ via the CreateProcess
 -- record will be ignored.
--- /Since: 1.2.3.0/
+-- @since 1.2.3.0
 
 readCreateProcess
     :: CreateProcess
@@ -499,7 +499,7 @@ readProcessWithExitCode cmd args =
 -- Note that @Handle@s provided for @std_in@, @std_out@, or @std_err@ via the CreateProcess
 -- record will be ignored.
 --
--- /Since: 1.2.3.0/
+-- @since 1.2.3.0
 readCreateProcessWithExitCode
     :: CreateProcess
     -> String                      -- ^ standard input
@@ -934,7 +934,7 @@ rawSystem cmd args = system (showCommandForUser cmd args)
 -- | Create a pipe for interprocess communication and return a
 -- @(readEnd, writeEnd)@ `Handle` pair.
 --
--- /Since: 1.2.1.0/
+-- @since 1.2.1.0
 createPipe :: IO (Handle, Handle)
 #if !mingw32_HOST_OS
 createPipe = do

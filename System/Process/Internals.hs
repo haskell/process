@@ -181,18 +181,18 @@ data CreateProcess = CreateProcess{
                                            --
                                            --   On Windows this has no effect.
                                            --
-                                           --   /Since: 1.2.0.0/
+                                           --   @since 1.2.0.0
   detach_console :: Bool,                  -- ^ Use the windows DETACHED_PROCESS flag when creating the process; does nothing on other platforms.
                                            --
-                                           --   /Since: 1.3.0.0/
+                                           --   @since 1.3.0.0
   create_new_console :: Bool,              -- ^ Use the windows CREATE_NEW_CONSOLE flag when creating the process; does nothing on other platforms.
                                            --
                                            --   Default: @False@
                                            --
-                                           --   /Since: 1.3.0.0/
+                                           --   @since 1.3.0.0
   new_session :: Bool                      -- ^ Use posix setsid to start the new process in a new session; does nothing on other platforms.
                                            --
-                                           --   /Since: 1.3.0.0/
+                                           --   @since 1.3.0.0
  }
 
 data CmdSpec
@@ -224,7 +224,7 @@ data CmdSpec
 
 -- | construct a `ShellCommand` from a string literal
 --
--- /Since: 1.2.1.0/
+-- @since 1.2.1.0
 instance IsString CmdSpec where
   fromString = ShellCommand
 
@@ -249,7 +249,7 @@ data StdStream
 -- for some time, and is part of the "System.Process" module since version
 -- 1.2.1.0.
 --
--- /Since: 1.2.1.0/
+-- @since 1.2.1.0
 createProcess_
   :: String                     -- ^ function name (for error messages)
   -> CreateProcess
