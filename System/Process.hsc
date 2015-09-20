@@ -430,6 +430,7 @@ readProcess cmd args = readCreateProcess $ proc cmd args
 --
 -- Note that @Handle@s provided for @std_in@ or @std_out@ via the CreateProcess
 -- record will be ignored.
+--
 -- @since 1.2.3.0
 
 readCreateProcess
