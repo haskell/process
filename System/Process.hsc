@@ -298,7 +298,7 @@ spawnCommand cmd = do
 -- exit code, an exception is raised.
 --
 -- If an asynchronous exception is thrown to the thread executing
--- @callProcess@. The forked process will be terminated and
+-- @callProcess@, the forked process will be terminated and
 -- @callProcess@ will wait (block) until the process has been
 -- terminated.
 --
