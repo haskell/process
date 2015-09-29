@@ -316,7 +316,7 @@ callProcess cmd args = do
 -- command returns a non-zero exit code, an exception is raised.
 --
 -- If an asynchronous exception is thrown to the thread executing
--- @callCommand@. The forked process will be terminated and
+-- @callCommand@, the forked process will be terminated and
 -- @callCommand@ will wait (block) until the process has been
 -- terminated.
 --
