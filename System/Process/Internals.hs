@@ -197,12 +197,12 @@ data CreateProcess = CreateProcess{
                                            --
                                            --   Default: @Nothing@
                                            --
-                                           --   @since 1.4.0.0
+                                           --   @since X.X.X.X
   child_user :: Maybe UserID               -- ^ Use posix setuid to set child process's user id; does nothing on other platforms.
                                            --
                                            --   Default: @Nothing@
                                            --
-                                           --   @since 1.4.0.0
+                                           --   @since X.X.X.X
  }
 
 data CmdSpec
@@ -295,8 +295,8 @@ createProcess_ fun CreateProcess{ cmdspec = cmdsp,
    alloca $ \ pFailedDoing ->
    maybeWith withCEnvironment mb_env $ \pEnv ->
    maybeWith withFilePath mb_cwd $ \pWorkDir ->
-   let childGroup = maybe (-1) id mb_child_group in
-   let childUser = maybe (-1) id mb_child_user in
+   maybeWith with mb_child_group $ \pChildGroup ->
+   maybeWith with mb_child_user $ \pChildUser ->
    withMany withFilePath (cmd:args) $ \cstrs ->
    withArray0 nullPtr cstrs $ \pargs -> do
 
@@ -315,7 +315,7 @@ createProcess_ fun CreateProcess{ cmdspec = cmdsp,
                          c_runInteractiveProcess pargs pWorkDir pEnv
                                 fdin fdout fderr
                                 pfdStdInput pfdStdOutput pfdStdError
-                                childGroup childUser
+                                pChildGroup pChildUser
                                 (if mb_delegate_ctlc then 1 else 0)
                                 ((if mb_close_fds then RUN_PROCESS_IN_CLOSE_FDS else 0)
                                 .|.(if mb_create_group then RUN_PROCESS_IN_NEW_GROUP else 0)
@@ -429,8 +429,8 @@ foreign import ccall unsafe "runInteractiveProcess"
         -> Ptr FD
         -> Ptr FD
         -> Ptr FD
-        -> CGid
-        -> CUid
+        -> Ptr CGid
+        -> Ptr CUid
         -> CInt                         -- reset child's SIGINT & SIGQUIT handlers
         -> CInt                         -- flags
         -> Ptr CString

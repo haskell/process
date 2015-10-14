@@ -61,7 +61,7 @@ runInteractiveProcess (char *const args[],
                        char *workingDirectory, char **environment,
                        int fdStdIn, int fdStdOut, int fdStdErr,
                        int *pfdStdInput, int *pfdStdOutput, int *pfdStdError,
-                       gid_t childGroup, uid_t childUser,
+                       gid_t *childGroup, uid_t *childUser,
                        int reset_int_quit_handlers,
                        int flags,
                        char **failed_doing)
@@ -150,15 +150,15 @@ runInteractiveProcess (char *const args[],
             setpgid(0, 0);
         }
         
-        if ( childGroup != -1) {
-            if ( setgid( childGroup) != 0) {
+        if ( childGroup) {
+            if ( setgid( *childGroup) != 0) {
                 // ERROR
                 childFailed(forkCommunicationFds[1], forkSetgidFailed);
             }
         }
 
-        if ( childUser  != -1) {
-            if ( setuid( childUser) != 0) {
+        if ( childUser) {
+            if ( setuid( *childUser) != 0) {
                 // ERROR
                 childFailed(forkCommunicationFds[1], forkSetuidFailed);
             }
