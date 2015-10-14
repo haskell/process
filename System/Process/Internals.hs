@@ -197,12 +197,12 @@ data CreateProcess = CreateProcess{
                                            --
                                            --   Default: @Nothing@
                                            --
-                                           --   @since X.X.X.X
+                                           --   @since 1.4.0.0
   child_user :: Maybe UserID               -- ^ Use posix setuid to set child process's user id; does nothing on other platforms.
                                            --
                                            --   Default: @Nothing@
                                            --
-                                           --   @since X.X.X.X
+                                           --   @since 1.4.0.0
  }
 
 data CmdSpec
