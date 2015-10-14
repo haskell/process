@@ -40,6 +40,10 @@ extern void unblockUserSignals(void);
 #define forkChdirFailed 126
 #define forkExecFailed  127
 
+// These are arbitrarily chosen -- JP
+#define forkSetgidFailed 124
+#define forkSetuidFailed 125
+
 __attribute__((__noreturn__))
 static void childFailed(int pipe, int failCode) {
     int err;
@@ -57,6 +61,7 @@ runInteractiveProcess (char *const args[],
                        char *workingDirectory, char **environment,
                        int fdStdIn, int fdStdOut, int fdStdErr,
                        int *pfdStdInput, int *pfdStdOutput, int *pfdStdError,
+                       gid_t *childGroup, uid_t *childUser,
                        int reset_int_quit_handlers,
                        int flags,
                        char **failed_doing)
@@ -143,6 +148,20 @@ runInteractiveProcess (char *const args[],
         }
         if ((flags & RUN_PROCESS_IN_NEW_GROUP) != 0) {
             setpgid(0, 0);
+        }
+        
+        if ( childGroup) {
+            if ( setgid( *childGroup) != 0) {
+                // ERROR
+                childFailed(forkCommunicationFds[1], forkSetgidFailed);
+            }
+        }
+
+        if ( childUser) {
+            if ( setuid( *childUser) != 0) {
+                // ERROR
+                childFailed(forkCommunicationFds[1], forkSetuidFailed);
+            }
         }
 
         unblockUserSignals();
@@ -281,6 +300,11 @@ runInteractiveProcess (char *const args[],
         case forkExecFailed:
             *failed_doing = "runInteractiveProcess: exec";
             break;
+        case forkSetgidFailed:
+            *failed_doing = "runInteractiveProcess: setgid";
+            break;
+        case forkSetuidFailed:
+            *failed_doing = "runInteractiveProcess: setuid";
         default:
             *failed_doing = "runInteractiveProcess: unknown";
             break;

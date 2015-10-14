@@ -190,9 +190,19 @@ data CreateProcess = CreateProcess{
                                            --   Default: @False@
                                            --
                                            --   @since 1.3.0.0
-  new_session :: Bool                      -- ^ Use posix setsid to start the new process in a new session; does nothing on other platforms.
+  new_session :: Bool,                     -- ^ Use posix setsid to start the new process in a new session; does nothing on other platforms.
                                            --
                                            --   @since 1.3.0.0
+  child_group :: Maybe GroupID,            -- ^ Use posix setgid to set child process's group id; does nothing on other platforms.
+                                           --
+                                           --   Default: @Nothing@
+                                           --
+                                           --   @since X.X.X.X
+  child_user :: Maybe UserID               -- ^ Use posix setuid to set child process's user id; does nothing on other platforms.
+                                           --
+                                           --   Default: @Nothing@
+                                           --
+                                           --   @since X.X.X.X
  }
 
 data CmdSpec
@@ -273,7 +283,9 @@ createProcess_ fun CreateProcess{ cmdspec = cmdsp,
                                   delegate_ctlc = mb_delegate_ctlc,
                                   detach_console = mb_detach_console,
                                   create_new_console = mb_create_new_console,
-                                  new_session = mb_new_session }
+                                  new_session = mb_new_session,
+                                  child_group = mb_child_group,
+                                  child_user = mb_child_user }
  = do
   let (cmd,args) = commandToProcess cmdsp
   withFilePathException cmd $
@@ -283,6 +295,8 @@ createProcess_ fun CreateProcess{ cmdspec = cmdsp,
    alloca $ \ pFailedDoing ->
    maybeWith withCEnvironment mb_env $ \pEnv ->
    maybeWith withFilePath mb_cwd $ \pWorkDir ->
+   maybeWith with mb_child_group $ \pChildGroup ->
+   maybeWith with mb_child_user $ \pChildUser ->
    withMany withFilePath (cmd:args) $ \cstrs ->
    withArray0 nullPtr cstrs $ \pargs -> do
 
@@ -301,6 +315,7 @@ createProcess_ fun CreateProcess{ cmdspec = cmdsp,
                          c_runInteractiveProcess pargs pWorkDir pEnv
                                 fdin fdout fderr
                                 pfdStdInput pfdStdOutput pfdStdError
+                                pChildGroup pChildUser
                                 (if mb_delegate_ctlc then 1 else 0)
                                 ((if mb_close_fds then RUN_PROCESS_IN_CLOSE_FDS else 0)
                                 .|.(if mb_create_group then RUN_PROCESS_IN_NEW_GROUP else 0)
@@ -414,6 +429,8 @@ foreign import ccall unsafe "runInteractiveProcess"
         -> Ptr FD
         -> Ptr FD
         -> Ptr FD
+        -> Ptr CGid
+        -> Ptr CUid
         -> CInt                         -- reset child's SIGINT & SIGQUIT handlers
         -> CInt                         -- flags
         -> Ptr CString

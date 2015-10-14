@@ -126,7 +126,9 @@ proc cmd args = CreateProcess { cmdspec = RawCommand cmd args,
                                 delegate_ctlc = False,
                                 detach_console = False,
                                 create_new_console = False,
-                                new_session = False }
+                                new_session = False,
+                                child_group = Nothing,
+                                child_user = Nothing }
 
 -- | Construct a 'CreateProcess' record for passing to 'createProcess',
 -- representing a command to be passed to the shell.
@@ -142,7 +144,9 @@ shell str = CreateProcess { cmdspec = ShellCommand str,
                             delegate_ctlc = False,
                             detach_console = False,
                             create_new_console = False,
-                            new_session = False }
+                            new_session = False,
+                            child_group = Nothing,
+                            child_user = Nothing }
 
 {- |
 This is the most general way to spawn an external process.  The
