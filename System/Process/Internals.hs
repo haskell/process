@@ -59,6 +59,8 @@ import Data.Char
 import System.IO
 import System.Posix.Process.Internals ( pPrPr_disableITimers, c_execvpe )
 import System.Posix.Types
+#else
+import Data.Word (Word32)
 #endif
 
 #ifdef __GLASGOW_HASKELL__
@@ -97,6 +99,13 @@ import System.FilePath
 # else
 #  error Unknown mingw32 arch
 # endif
+#endif
+
+#if defined(mingw32_HOST_OS) || defined(__MINGW32__)
+-- Define some missing types for Windows compatibility
+newtype CGid = CGid Word32
+type GroupID = CGid
+type UserID = CGid
 #endif
 
 -- ----------------------------------------------------------------------------
