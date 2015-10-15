@@ -1,5 +1,9 @@
 # Changelog for [`process` package](http://hackage.haskell.org/package/process)
 
+## 1.4.0.0 *unreleased*
+
+* Added `child_user` and `child_group` to `CreateProcess` for unix. [#45](https://github.com/haskell/process/pull/45)
+
 ## 1.3.0.0 *August 2015*
 
 * Add `StdStream(NoStream)` to have standard handles closed. [#13](https://github.com/haskell/process/pull/13)
