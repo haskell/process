@@ -1,6 +1,6 @@
 # Changelog for [`process` package](http://hackage.haskell.org/package/process)
 
-## 1.4.0.0 *unreleased*
+## 1.4.0.0 *November 2015*
 
 * Added `child_user` and `child_group` to `CreateProcess` for unix. [#45](https://github.com/haskell/process/pull/45)
 
