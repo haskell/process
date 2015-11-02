@@ -37,6 +37,8 @@ import System.IO.Error
 import Data.Typeable
 import GHC.IO.IOMode
 
+-- We do a minimal amount of CPP here to provide uniform data types across
+-- Windows and POSIX.
 #ifdef WINDOWS
 import Data.Word (Word32)
 import System.Win32.DebugApi (PHANDLE)
@@ -45,7 +47,9 @@ import System.Posix.Types
 #endif
 
 #ifdef WINDOWS
--- Define some missing types for Windows compatibility
+-- Define some missing types for Windows compatibility. Note that these values
+-- will never actually be used, as the setuid/setgid system calls are not
+-- applicable on Windows. No value of this type will ever exist.
 newtype CGid = CGid Word32
 type GroupID = CGid
 type UserID = CGid
