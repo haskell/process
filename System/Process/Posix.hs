@@ -14,6 +14,7 @@ module System.Process.Posix
     , defaultSignal
     , c_execvpe
     , pPrPr_disableITimers
+    , createPipeInternal
     ) where
 
 import Control.Concurrent
@@ -34,6 +35,7 @@ import System.Posix.Types
 import System.Posix.Internals
 import GHC.IO.Exception
 import System.Posix.Signals as Sig
+import qualified System.Posix.IO as Posix
 
 import System.Process.Common
 
@@ -271,3 +273,10 @@ defaultSignal = CONST_SIG_DFL
 
 isDefaultSignal :: CLong -> Bool
 isDefaultSignal = (== defaultSignal)
+
+createPipeInternal :: IO (Handle, Handle)
+createPipeInternal = do
+    (readfd, writefd) <- Posix.createPipe
+    readh <- Posix.fdToHandle readfd
+    writeh <- Posix.fdToHandle writefd
+    return (readh, writeh)

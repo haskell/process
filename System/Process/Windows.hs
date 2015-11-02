@@ -9,6 +9,7 @@ module System.Process.Windows
     , endDelegateControlC
     , stopDelegateControlC
     , isDefaultSignal
+    , createPipeInternal
     ) where
 
 import System.Process.Common
@@ -45,6 +46,7 @@ import System.Process.Common
 # define WINDOWS_CCONV ccall
 #endif
 
+#include <io.h>        /* for _close and _pipe */
 #include "HsProcessConfig.h"
 #include "processFlags.h"
 
@@ -240,3 +242,23 @@ withCEnvironment envir act =
 
 isDefaultSignal :: CLong -> Bool
 isDefaultSignal = const False
+
+createPipeInternal :: IO (Handle, Handle)
+createPipeInternal = do
+    (readfd, writefd) <- allocaArray 2 $ \ pfds -> do
+        throwErrnoIfMinus1_ "_pipe" $ c__pipe pfds 2 (#const _O_BINARY)
+        readfd <- peek pfds
+        writefd <- peekElemOff pfds 1
+        return (readfd, writefd)
+    (do readh <- fdToHandle readfd
+        writeh <- fdToHandle writefd
+        return (readh, writeh)) `onException` (close readfd >> close writefd)
+
+close :: CInt -> IO ()
+close = throwErrnoIfMinus1_ "_close" . c__close
+
+foreign import ccall "io.h _pipe" c__pipe ::
+    Ptr CInt -> CUInt -> CInt -> IO CInt
+
+foreign import ccall "io.h _close" c__close ::
+    CInt -> IO CInt

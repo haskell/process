@@ -41,6 +41,7 @@ module System.Process.Internals (
 #endif
     withFilePathException, withCEnvironment,
     translate,
+    createPipe,
     ) where
 
 import Foreign.C
@@ -158,3 +159,14 @@ runGenProcess_ fun c (Just sig) (Just sig') | isDefaultSignal sig && sig == sig'
 runGenProcess_ fun c _ _ = createProcess_ fun c
 
 #endif
+
+-- ---------------------------------------------------------------------------
+-- createPipe
+
+-- | Create a pipe for interprocess communication and return a
+-- @(readEnd, writeEnd)@ `Handle` pair.
+--
+-- @since 1.2.1.0
+createPipe :: IO (Handle, Handle)
+createPipe = createPipeInternal
+{-# INLINE createPipe #-}

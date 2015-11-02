@@ -88,12 +88,9 @@ import System.IO
 import System.IO.Error (mkIOError, ioeSetErrorString)
 
 #if defined(mingw32_HOST_OS)
-# include <io.h>        /* for _close and _pipe */
 # include <fcntl.h>     /* for _O_BINARY */
-import Control.Exception (onException)
 #else
 import System.Posix.Process (getProcessGroupIDOf)
-import qualified System.Posix.IO as Posix
 #if MIN_VERSION_base(4,5,0)
 import System.Posix.Types
 #endif
@@ -933,39 +930,4 @@ rawSystem cmd args = do
 rawSystem cmd args = system (showCommandForUser cmd args)
 #else
 rawSystem cmd args = system (showCommandForUser cmd args)
-#endif
-
--- ---------------------------------------------------------------------------
--- createPipe
-
--- | Create a pipe for interprocess communication and return a
--- @(readEnd, writeEnd)@ `Handle` pair.
---
--- @since 1.2.1.0
-createPipe :: IO (Handle, Handle)
-#if !mingw32_HOST_OS
-createPipe = do
-    (readfd, writefd) <- Posix.createPipe
-    readh <- Posix.fdToHandle readfd
-    writeh <- Posix.fdToHandle writefd
-    return (readh, writeh)
-#else
-createPipe = do
-    (readfd, writefd) <- allocaArray 2 $ \ pfds -> do
-        throwErrnoIfMinus1_ "_pipe" $ c__pipe pfds 2 (#const _O_BINARY)
-        readfd <- peek pfds
-        writefd <- peekElemOff pfds 1
-        return (readfd, writefd)
-    (do readh <- fdToHandle readfd
-        writeh <- fdToHandle writefd
-        return (readh, writeh)) `onException` (close readfd >> close writefd)
-
-close :: CInt -> IO ()
-close = throwErrnoIfMinus1_ "_close" . c__close
-
-foreign import ccall "io.h _pipe" c__pipe ::
-    Ptr CInt -> CUInt -> CInt -> IO CInt
-
-foreign import ccall "io.h _close" c__close ::
-    CInt -> IO CInt
 #endif
