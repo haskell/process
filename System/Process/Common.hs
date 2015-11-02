@@ -1,8 +1,7 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE RecordWildCards #-}
 module System.Process.Common
-    ( CGid (..)
-    , CreateProcess (..)
+    ( CreateProcess (..)
     , CmdSpec (..)
     , StdStream (..)
     , ProcessHandle(..)
@@ -17,6 +16,13 @@ module System.Process.Common
     , mbFd
     , mbPipe
     , pfdToHandle
+
+-- Avoid a warning on Windows
+#ifdef WINDOWS
+    , CGid (..)
+#else
+    , CGid
+#endif
     ) where
 
 import Control.Concurrent

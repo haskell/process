@@ -94,7 +94,9 @@ import Control.Exception (onException)
 #else
 import System.Posix.Process (getProcessGroupIDOf)
 import qualified System.Posix.IO as Posix
+#if MIN_VERSION_base(4,5,0)
 import System.Posix.Types
+#endif
 #endif
 
 #ifdef __GLASGOW_HASKELL__
