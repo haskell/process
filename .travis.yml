@@ -28,7 +28,7 @@ install:
 
 script:
  - autoreconf -i
- - cabal configure -v2 --enable-tests
+ - cabal configure -v2 --enable-tests --ghc-options="-Wall -Werror"
  - cabal build
  - cabal check || [ "$CABALVER" == "1.16" ]
  - ./dist/build/test/test # Using cabal test was giving trouble with cabal 1.22
