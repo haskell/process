@@ -40,6 +40,7 @@ import System.Environment       ( getEnv )
 import System.FilePath
 import System.Win32.Console (generateConsoleCtrlEvent, cTRL_BREAK_EVENT)
 import System.Win32.Process (getProcessId)
+# include <fcntl.h>     /* for _O_BINARY */
 
 import System.Process.Common
 

@@ -87,12 +87,9 @@ import System.Exit      ( ExitCode(..) )
 import System.IO
 import System.IO.Error (mkIOError, ioeSetErrorString)
 
-#if defined(mingw32_HOST_OS)
-# include <fcntl.h>     /* for _O_BINARY */
-#else
-#if MIN_VERSION_base(4,5,0)
-import System.Posix.Types
-#endif
+-- Provide the data constructors for CPid on GHC 7.4 and later
+#if !defined(WINDOWS) && MIN_VERSION_base(4,5,0)
+import System.Posix.Types (CPid (..))
 #endif
 
 #ifdef __GLASGOW_HASKELL__
@@ -887,9 +884,7 @@ rawSystem :: String -> [String] -> IO ExitCode
 rawSystem cmd args = do
   (_,_,_,p) <- createProcess_ "rawSystem" (proc cmd args) { delegate_ctlc = True }
   waitForProcess p
-#elif !mingw32_HOST_OS
--- crude fallback implementation: could do much better than this under Unix
-rawSystem cmd args = system (showCommandForUser cmd args)
 #else
+-- crude fallback implementation: could do much better than this under Unix
 rawSystem cmd args = system (showCommandForUser cmd args)
 #endif
