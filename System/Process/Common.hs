@@ -40,6 +40,8 @@ import GHC.IO.IOMode
 #ifdef WINDOWS
 import Data.Word (Word32)
 import System.Win32.DebugApi (PHANDLE)
+#else
+import System.Posix.Types
 #endif
 
 #ifdef WINDOWS
@@ -47,6 +49,8 @@ import System.Win32.DebugApi (PHANDLE)
 newtype CGid = CGid Word32
 type GroupID = CGid
 type UserID = CGid
+#else
+type PHANDLE = CPid
 #endif
 
 data CreateProcess = CreateProcess{

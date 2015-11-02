@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP, RecordWildCards, BangPatterns #-}
+{-# LANGUAGE CPP #-}
 {-# OPTIONS_HADDOCK not-home #-}
 #ifdef __GLASGOW_HASKELL__
 {-# LANGUAGE Trustworthy #-}
@@ -43,15 +43,8 @@ module System.Process.Internals (
     translate,
     ) where
 
-import Control.Concurrent
-import Control.Exception
-import Data.Bits
 import Foreign.C
-import Foreign.Marshal
-import Foreign.Ptr
-import Foreign.Storable
 import System.IO
-import System.IO.Unsafe
 
 #ifdef __GLASGOW_HASKELL__
 import GHC.IO.Handle.FD (fdToHandle)
@@ -64,9 +57,6 @@ import System.Process.Windows
 #else
 import System.Process.Posix
 #endif
-
-#include "HsProcessConfig.h"
-#include "processFlags.h"
 
 -- ----------------------------------------------------------------------------
 
@@ -88,6 +78,7 @@ createProcess_
   -> CreateProcess
   -> IO (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)
 createProcess_ = createProcess_Internal
+{-# INLINE createProcess_ #-}
 
 -- ------------------------------------------------------------------------
 -- Escaping commands for shells
@@ -146,6 +137,7 @@ use lpCommandLine alone, which CreateProcess supports.
 
 translate :: String -> String
 translate = translateInternal
+{-# INLINE translate #-}
 
 
 -- ----------------------------------------------------------------------------

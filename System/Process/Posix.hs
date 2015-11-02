@@ -1,5 +1,19 @@
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE CPP #-}
 module System.Process.Posix
-    (
+    ( mkProcessHandle
+    , translateInternal
+    , createProcess_Internal
+    , withCEnvironment
+    , closePHANDLE
+    , startDelegateControlC
+    , endDelegateControlC
+    , stopDelegateControlC
+    , isDefaultSignal
+    , ignoreSignal
+    , defaultSignal
+    , c_execvpe
+    , pPrPr_disableITimers
     ) where
 
 import Control.Concurrent
@@ -11,42 +25,20 @@ import Foreign.Ptr
 import Foreign.Storable
 import System.IO.Unsafe
 
-#if !defined(mingw32_HOST_OS) && !defined(__MINGW32__)
 import Control.Monad
 import Data.Char
 import System.IO
 import System.Posix.Process.Internals ( pPrPr_disableITimers, c_execvpe )
 import System.Posix.Types
-#endif
 
-#ifdef __GLASGOW_HASKELL__
 import System.Posix.Internals
 import GHC.IO.Exception
-import GHC.IO.Encoding
-import qualified GHC.IO.FD as FD
-import GHC.IO.Device
-import GHC.IO.Handle.FD
-import GHC.IO.Handle.Internals
-import GHC.IO.Handle.Types hiding (ClosedHandle)
-import System.IO.Error
-import Data.Typeable
-# ifndef WINDOWS
 import System.Posix.Signals as Sig
-# endif
-#endif
 
 import System.Process.Common
 
-#if WINDOWS
-import System.Process.Windows
-#else
-import System.Process.Posix
-#endif
-
 #include "HsProcessConfig.h"
 #include "processFlags.h"
-
-type PHANDLE = CPid
 
 mkProcessHandle :: PHANDLE -> Bool -> IO ProcessHandle
 mkProcessHandle p mb_delegate_ctlc = do
@@ -102,7 +94,12 @@ withCEnvironment envir act =
 -- -----------------------------------------------------------------------------
 -- POSIX runProcess with signal handling in the child
 
-createProcess_ fun CreateProcess{ cmdspec = cmdsp,
+createProcess_Internal
+    :: String
+    -> CreateProcess
+    -> IO (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)
+createProcess_Internal fun
+                   CreateProcess{ cmdspec = cmdsp,
                                   cwd = mb_cwd,
                                   env = mb_env,
                                   std_in = mb_stdin,

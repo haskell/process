@@ -75,7 +75,6 @@ foreign import WINDOWS_CCONV unsafe "CloseHandle"
         :: PHANDLE
         -> IO ()
 
-{-# INLINE createProcess_Internal #-}
 createProcess_Internal
   :: String                     -- ^ function name (for error messages)
   -> CreateProcess
@@ -222,7 +221,6 @@ findCommandInterpreter = do
                                 "findCommandInterpreter" Nothing Nothing)
       Just cmd -> return cmd
 
-{-# INLINE translateInternal #-}
 translateInternal :: String -> String
 translateInternal xs = '"' : snd (foldr escape (True,"\"") xs)
   where escape '"'  (_,     str) = (True,  '\\' : '"'  : str)
