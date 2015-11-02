@@ -42,6 +42,7 @@ module System.Process.Internals (
     withFilePathException, withCEnvironment,
     translate,
     createPipe,
+    interruptProcessGroupOf,
     ) where
 
 import Foreign.C
@@ -170,3 +171,19 @@ runGenProcess_ fun c _ _ = createProcess_ fun c
 createPipe :: IO (Handle, Handle)
 createPipe = createPipeInternal
 {-# INLINE createPipe #-}
+
+
+-- ----------------------------------------------------------------------------
+-- interruptProcessGroupOf
+
+-- | Sends an interrupt signal to the process group of the given process.
+--
+-- On Unix systems, it sends the group the SIGINT signal.
+--
+-- On Windows systems, it generates a CTRL_BREAK_EVENT and will only work for
+-- processes created using 'createProcess' and setting the 'create_group' flag
+
+interruptProcessGroupOf
+    :: ProcessHandle    -- ^ A process in the process group
+    -> IO ()
+interruptProcessGroupOf = interruptProcessGroupOfInternal

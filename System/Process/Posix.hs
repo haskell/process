@@ -15,6 +15,7 @@ module System.Process.Posix
     , c_execvpe
     , pPrPr_disableITimers
     , createPipeInternal
+    , interruptProcessGroupOfInternal
     ) where
 
 import Control.Concurrent
@@ -36,6 +37,7 @@ import System.Posix.Internals
 import GHC.IO.Exception
 import System.Posix.Signals as Sig
 import qualified System.Posix.IO as Posix
+import System.Posix.Process (getProcessGroupIDOf)
 
 import System.Process.Common
 
@@ -280,3 +282,14 @@ createPipeInternal = do
     readh <- Posix.fdToHandle readfd
     writeh <- Posix.fdToHandle writefd
     return (readh, writeh)
+
+interruptProcessGroupOfInternal
+    :: ProcessHandle    -- ^ A process in the process group
+    -> IO ()
+interruptProcessGroupOfInternal ph = do
+    withProcessHandle ph $ \p_ -> do
+        case p_ of
+            ClosedHandle _ -> return ()
+            OpenHandle h -> do
+                pgid <- getProcessGroupIDOf h
+                signalProcessGroup sigINT pgid

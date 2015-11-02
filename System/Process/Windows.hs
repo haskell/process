@@ -10,6 +10,7 @@ module System.Process.Windows
     , stopDelegateControlC
     , isDefaultSignal
     , createPipeInternal
+    , interruptProcessGroupOfInternal
     ) where
 
 import System.Process.Common
@@ -37,6 +38,8 @@ import GHC.IO.IOMode
 import System.Directory         ( doesFileExist )
 import System.Environment       ( getEnv )
 import System.FilePath
+import System.Win32.Console (generateConsoleCtrlEvent, cTRL_BREAK_EVENT)
+import System.Win32.Process (getProcessId)
 
 import System.Process.Common
 
@@ -262,3 +265,23 @@ foreign import ccall "io.h _pipe" c__pipe ::
 
 foreign import ccall "io.h _close" c__close ::
     CInt -> IO CInt
+
+interruptProcessGroupOfInternal
+    :: ProcessHandle    -- ^ A process in the process group
+    -> IO ()
+interruptProcessGroupOfInternal ph = do
+    withProcessHandle ph $ \p_ -> do
+        case p_ of
+            ClosedHandle _ -> return ()
+            OpenHandle h -> do
+#if mingw32_HOST_OS
+                pid <- getProcessId h
+                generateConsoleCtrlEvent cTRL_BREAK_EVENT pid
+-- We can't use an #elif here, because MIN_VERSION_unix isn't defined
+-- on Windows, so on Windows cpp fails:
+-- error: missing binary operator before token "("
+#else
+                pgid <- getProcessGroupIDOf h
+                signalProcessGroup sigINT pgid
+#endif
+                return ()

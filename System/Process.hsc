@@ -90,7 +90,6 @@ import System.IO.Error (mkIOError, ioeSetErrorString)
 #if defined(mingw32_HOST_OS)
 # include <fcntl.h>     /* for _O_BINARY */
 #else
-import System.Posix.Process (getProcessGroupIDOf)
 #if MIN_VERSION_base(4,5,0)
 import System.Posix.Types
 #endif
@@ -98,12 +97,6 @@ import System.Posix.Types
 
 #ifdef __GLASGOW_HASKELL__
 import GHC.IO.Exception ( ioException, IOErrorType(..), IOException(..) )
-# if defined(mingw32_HOST_OS)
-import System.Win32.Console (generateConsoleCtrlEvent, cTRL_BREAK_EVENT)
-import System.Win32.Process (getProcessId)
-# else
-import System.Posix.Signals
-# endif
 #endif
 
 -- ----------------------------------------------------------------------------
@@ -686,37 +679,6 @@ terminateProcess ph = do
         return ()
         -- does not close the handle, we might want to try terminating it
         -- again, or get its exit code.
-
-
--- ----------------------------------------------------------------------------
--- interruptProcessGroupOf
-
--- | Sends an interrupt signal to the process group of the given process.
---
--- On Unix systems, it sends the group the SIGINT signal.
---
--- On Windows systems, it generates a CTRL_BREAK_EVENT and will only work for
--- processes created using 'createProcess' and setting the 'create_group' flag
-
-interruptProcessGroupOf
-    :: ProcessHandle    -- ^ A process in the process group
-    -> IO ()
-interruptProcessGroupOf ph = do
-    withProcessHandle ph $ \p_ -> do
-        case p_ of
-            ClosedHandle _ -> return ()
-            OpenHandle h -> do
-#if mingw32_HOST_OS
-                pid <- getProcessId h
-                generateConsoleCtrlEvent cTRL_BREAK_EVENT pid
--- We can't use an #elif here, because MIN_VERSION_unix isn't defined
--- on Windows, so on Windows cpp fails:
--- error: missing binary operator before token "("
-#else
-                pgid <- getProcessGroupIDOf h
-                signalProcessGroup sigINT pgid
-#endif
-                return ()
 
 
 -- ----------------------------------------------------------------------------
