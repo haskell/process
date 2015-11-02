@@ -93,8 +93,6 @@ withCEnvironment envir act =
   let env' = map (\(name, val) -> name ++ ('=':val)) envir
   in withMany withCString env' (\pEnv -> withArray0 nullPtr pEnv act)
 
-#ifdef __GLASGOW_HASKELL__
-
 -- -----------------------------------------------------------------------------
 -- POSIX runProcess with signal handling in the child
 
@@ -266,8 +264,6 @@ foreign import ccall unsafe "runInteractiveProcess"
         -> CInt                         -- flags
         -> Ptr CString
         -> IO PHANDLE
-
-#endif /* __GLASGOW_HASKELL__ */
 
 ignoreSignal, defaultSignal :: CLong
 ignoreSignal  = CONST_SIG_IGN

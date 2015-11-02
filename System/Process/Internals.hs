@@ -1,9 +1,7 @@
 {-# LANGUAGE CPP #-}
 {-# OPTIONS_HADDOCK not-home #-}
-#ifdef __GLASGOW_HASKELL__
 {-# LANGUAGE Trustworthy #-}
 {-# LANGUAGE InterruptibleFFI #-}
-#endif
 
 -----------------------------------------------------------------------------
 -- |
@@ -25,13 +23,11 @@ module System.Process.Internals (
     ProcessHandle(..), ProcessHandle__(..),
     PHANDLE, closePHANDLE, mkProcessHandle,
     modifyProcessHandle, withProcessHandle,
-#ifdef __GLASGOW_HASKELL__
     CreateProcess(..),
     CmdSpec(..), StdStream(..),
     createProcess_,
     runGenProcess_, --deprecated
     fdToHandle,
-#endif
     startDelegateControlC,
     endDelegateControlC,
     stopDelegateControlC,
@@ -48,9 +44,7 @@ module System.Process.Internals (
 import Foreign.C
 import System.IO
 
-#ifdef __GLASGOW_HASKELL__
 import GHC.IO.Handle.FD (fdToHandle)
-#endif
 
 import System.Process.Common
 
@@ -145,7 +139,6 @@ translate = translateInternal
 -- ----------------------------------------------------------------------------
 -- Deprecated / compat
 
-#ifdef __GLASGOW_HASKELL__
 {-# DEPRECATED runGenProcess_
       "Please do not use this anymore, use the ordinary 'System.Process.createProcess'. If you need the SIGINT handling, use delegate_ctlc = True (runGenProcess_ is now just an imperfectly emulated stub that probably duplicates or overrides your own signal handling)." #-}
 runGenProcess_
@@ -158,8 +151,6 @@ runGenProcess_
 runGenProcess_ fun c (Just sig) (Just sig') | isDefaultSignal sig && sig == sig'
                          = createProcess_ fun c { delegate_ctlc = True }
 runGenProcess_ fun c _ _ = createProcess_ fun c
-
-#endif
 
 -- ---------------------------------------------------------------------------
 -- createPipe

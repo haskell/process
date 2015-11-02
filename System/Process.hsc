@@ -1,12 +1,10 @@
 {-# LANGUAGE CPP, ForeignFunctionInterface #-}
-#ifdef __GLASGOW_HASKELL__
 #if __GLASGOW_HASKELL__ >= 709
 {-# LANGUAGE Safe #-}
 #else
 {-# LANGUAGE Trustworthy #-}
 #endif
 {-# LANGUAGE InterruptibleFFI #-}
-#endif
 
 -----------------------------------------------------------------------------
 -- |
@@ -92,9 +90,7 @@ import System.IO.Error (mkIOError, ioeSetErrorString)
 import System.Posix.Types (CPid (..))
 #endif
 
-#ifdef __GLASGOW_HASKELL__
 import GHC.IO.Exception ( ioException, IOErrorType(..), IOException(..) )
-#endif
 
 -- ----------------------------------------------------------------------------
 -- createProcess
@@ -548,15 +544,11 @@ withForkWait async body = do
     restore (body wait) `C.onException` killThread tid
 
 ignoreSigPipe :: IO () -> IO ()
-#if defined(__GLASGOW_HASKELL__)
 ignoreSigPipe = C.handle $ \e -> case e of
                                    IOError { ioe_type  = ResourceVanished
                                            , ioe_errno = Just ioe }
                                      | Errno ioe == ePIPE -> return ()
                                    _ -> throwIO e
-#else
-ignoreSigPipe = id
-#endif
 
 -- ----------------------------------------------------------------------------
 -- showCommandForUser
@@ -860,13 +852,11 @@ will not work.
 On Unix systems, see 'waitForProcess' for the meaning of exit codes
 when the process died as the result of a signal.
 -}
-#ifdef __GLASGOW_HASKELL__
 system :: String -> IO ExitCode
 system "" = ioException (ioeSetErrorString (mkIOError InvalidArgument "system" Nothing Nothing) "null command")
 system str = do
   (_,_,_,p) <- createProcess_ "system" (shell str) { delegate_ctlc = True }
   waitForProcess p
-#endif  /* __GLASGOW_HASKELL__ */
 
 
 --TODO: in a later release {-# DEPRECATED rawSystem "Use 'callProcess' (or 'spawnProcess' and 'waitForProcess') instead" #-}
@@ -880,11 +870,6 @@ It will therefore behave more portably between operating systems than 'system'.
 The return codes and possible failures are the same as for 'system'.
 -}
 rawSystem :: String -> [String] -> IO ExitCode
-#ifdef __GLASGOW_HASKELL__
 rawSystem cmd args = do
   (_,_,_,p) <- createProcess_ "rawSystem" (proc cmd args) { delegate_ctlc = True }
   waitForProcess p
-#else
--- crude fallback implementation: could do much better than this under Unix
-rawSystem cmd args = system (showCommandForUser cmd args)
-#endif
