@@ -38,6 +38,7 @@ module System.Process.Internals (
     withFilePathException, withCEnvironment,
     translate,
     createPipe,
+    createPipeInternalFd,
     interruptProcessGroupOf,
     ) where
 

@@ -57,6 +57,7 @@ module System.Process (
 
     -- Interprocess communication
     createPipe,
+    createPipeInternalFd,
 
     -- * Old deprecated functions
     -- | These functions pre-date 'createProcess' which is much more

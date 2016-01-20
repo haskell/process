@@ -51,6 +51,12 @@ library
         build-depends: Win32 >=2.2 && < 2.4
         extra-libraries: kernel32
         cpp-options: -DWINDOWS
+        c-sources: 
+            cbits/pipes.c
+        includes:
+            pipes.h
+        install-includes:
+            pipes.h
     else
         other-modules: System.Process.Posix
         build-depends: unix >= 2.5 && < 2.8
