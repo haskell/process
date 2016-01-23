@@ -245,11 +245,7 @@ isDefaultSignal = const False
 
 createPipeInternal :: IO (Handle, Handle)
 createPipeInternal = do
-    (readfd, writefd) <- allocaArray 2 $ \ pfds -> do
-            throwErrnoIfMinus1_ "_pipe" $ c__pipe pfds 2 (#const _O_BINARY)
-            readfd <- peek pfds
-            writefd <- peekElemOff pfds 1
-            return (readfd, writefd)
+    (readfd, writefd) <- createPipeInternalFd
     (do readh <- fdToHandle readfd
         writeh <- fdToHandle writefd
         return (readh, writeh)) `onException` (close' readfd >> close' writefd)
@@ -257,7 +253,7 @@ createPipeInternal = do
 createPipeInternalFd :: IO (FD, FD)
 createPipeInternalFd = do
     allocaArray 2 $ \ pfds -> do
-        throwErrnoIfMinus1_ "_pipe" $ c__pipe2 pfds 2 (#const _O_BINARY)
+        throwErrnoIfMinus1_ "_pipe" $ c__pipe pfds 2 (#const _O_BINARY)
         readfd <- peek pfds
         writefd <- peekElemOff pfds 1
         return (readfd, writefd)
@@ -267,9 +263,6 @@ close' :: CInt -> IO ()
 close' = throwErrnoIfMinus1_ "_close" . c__close
 
 foreign import ccall "io.h _pipe" c__pipe ::
-    Ptr CInt -> CUInt -> CInt -> IO CInt
-    
-foreign import ccall "pipes.h createInheritablePipe" c__pipe2 ::
     Ptr CInt -> CUInt -> CInt -> IO CInt
 
 foreign import ccall "io.h _close" c__close ::

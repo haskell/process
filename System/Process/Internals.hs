@@ -38,7 +38,7 @@ module System.Process.Internals (
     withFilePathException, withCEnvironment,
     translate,
     createPipe,
-    createPipeInternalFd,
+    createPipeFD,
     interruptProcessGroupOf,
     ) where
 
@@ -46,6 +46,7 @@ import Foreign.C
 import System.IO
 
 import GHC.IO.Handle.FD (fdToHandle)
+import System.Posix.Internals (FD)
 
 import System.Process.Common
 
@@ -163,6 +164,17 @@ runGenProcess_ fun c _ _ = createProcess_ fun c
 createPipe :: IO (Handle, Handle)
 createPipe = createPipeInternal
 {-# INLINE createPipe #-}
+
+-- ---------------------------------------------------------------------------
+-- createPipeFD
+
+-- | Create a pipe for interprocess communication and return a
+-- @(readEnd, writeEnd)@ `FD` pair.
+--
+-- @since 1.2.1.0
+createPipeFD :: IO (FD, FD)
+createPipeFD = createPipeInternalFd
+{-# INLINE createPipeFD #-}
 
 
 -- ----------------------------------------------------------------------------
