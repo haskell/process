@@ -15,6 +15,7 @@ module System.Process.Posix
     , c_execvpe
     , pPrPr_disableITimers
     , createPipeInternal
+    , createPipeInternalFd
     , interruptProcessGroupOfInternal
     ) where
 
@@ -278,6 +279,9 @@ createPipeInternal = do
     readh <- Posix.fdToHandle readfd
     writeh <- Posix.fdToHandle writefd
     return (readh, writeh)
+
+createPipeInternalFd :: IO (FD, FD)
+createPipeInternalFd = Posix.createPipe
 
 interruptProcessGroupOfInternal
     :: ProcessHandle    -- ^ A process in the process group
