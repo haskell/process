@@ -281,7 +281,9 @@ createPipeInternal = do
     return (readh, writeh)
 
 createPipeInternalFd :: IO (FD, FD)
-createPipeInternalFd = Posix.createPipe
+createPipeInternalFd = do
+   (Fd readfd, Fd writefd) <- Posix.createPipe
+   return (readfd, writefd)
 
 interruptProcessGroupOfInternal
     :: ProcessHandle    -- ^ A process in the process group
