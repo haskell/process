@@ -171,7 +171,7 @@ createPipe = createPipeInternal
 -- | Create a pipe for interprocess communication and return a
 -- @(readEnd, writeEnd)@ `FD` pair.
 --
--- @since 1.2.1.0
+-- @since 1.4.2.0
 createPipeFD :: IO (FD, FD)
 createPipeFD = createPipeInternalFd
 {-# INLINE createPipeFD #-}
