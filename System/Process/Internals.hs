@@ -38,7 +38,7 @@ module System.Process.Internals (
     withFilePathException, withCEnvironment,
     translate,
     createPipe,
-    createPipeFD,
+    createPipeFd,
     interruptProcessGroupOf,
     ) where
 
@@ -166,15 +166,15 @@ createPipe = createPipeInternal
 {-# INLINE createPipe #-}
 
 -- ---------------------------------------------------------------------------
--- createPipeFD
+-- createPipeFd
 
 -- | Create a pipe for interprocess communication and return a
 -- @(readEnd, writeEnd)@ `FD` pair.
 --
 -- @since 1.4.2.0
-createPipeFD :: IO (FD, FD)
-createPipeFD = createPipeInternalFd
-{-# INLINE createPipeFD #-}
+createPipeFd :: IO (FD, FD)
+createPipeFd = createPipeInternalFd
+{-# INLINE createPipeFd #-}
 
 
 -- ----------------------------------------------------------------------------
