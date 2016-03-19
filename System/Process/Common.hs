@@ -98,7 +98,7 @@ data CreateProcess = CreateProcess{
                                            --   Default: @Nothing@
                                            --
                                            --   @since 1.4.0.0
- }
+ } deriving (Show, Eq)
 
 data CmdSpec
   = ShellCommand String
@@ -125,6 +125,7 @@ data CmdSpec
       --   see the
       --   <http://msdn.microsoft.com/en-us/library/windows/desktop/aa365527%28v=vs.85%29.aspx documentation>
       --   for the Windows @SearchPath@ API.
+  deriving (Show, Eq)
 
 
 -- | construct a `ShellCommand` from a string literal
@@ -141,6 +142,7 @@ data StdStream
                              -- and newline translation mode (just
                              -- like @Handle@s created by @openFile@).
   | NoStream                 -- ^ No stream handle will be passed
+  deriving (Eq, Show)
 
 -- ----------------------------------------------------------------------------
 -- ProcessHandle type
