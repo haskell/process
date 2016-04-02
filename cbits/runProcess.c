@@ -425,6 +425,11 @@ int waitForProcess (ProcHandle handle, int *pret)
 
     if (waitpid(handle, &wstat, 0) < 0)
     {
+        if (errno == ECHILD)
+        {
+            *pret = 0;
+            return 1;
+        }
         return -1;
     }
 
