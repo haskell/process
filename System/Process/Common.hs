@@ -140,6 +140,9 @@ data StdStream
                              -- @Handle@ will use the default encoding
                              -- and newline translation mode (just
                              -- like @Handle@s created by @openFile@).
+  | CreateBinaryPipe         -- ^ Create a new pipe in binary mode
+                             -- (just like @Handle@s created by
+                             -- @openBinaryFile@).
   | NoStream                 -- ^ No stream handle will be passed
 
 -- ----------------------------------------------------------------------------
@@ -179,6 +182,7 @@ fd_stderr = 2
 
 mbFd :: String -> FD -> StdStream -> IO FD
 mbFd _   _std CreatePipe      = return (-1)
+mbFd _   _std CreateBinaryPipe = return (-1)
 mbFd _fun std Inherit         = return std
 mbFd _fn _std NoStream        = return (-2)
 mbFd fun _std (UseHandle hdl) =
@@ -195,11 +199,12 @@ mbFd fun _std (UseHandle hdl) =
                    `ioeSetErrorString` "handle is not a file descriptor")
 
 mbPipe :: StdStream -> Ptr FD -> IOMode -> IO (Maybe Handle)
-mbPipe CreatePipe pfd  mode = fmap Just (pfdToHandle pfd mode)
+mbPipe CreatePipe pfd  mode = fmap Just (pfdToHandle pfd mode False)
+mbPipe CreateBinaryPipe pfd  mode = fmap Just (pfdToHandle pfd mode True)
 mbPipe _std      _pfd _mode = return Nothing
 
-pfdToHandle :: Ptr FD -> IOMode -> IO Handle
-pfdToHandle pfd mode = do
+pfdToHandle :: Ptr FD -> IOMode -> Bool -> IO Handle
+pfdToHandle pfd mode binary = do
   fd <- peek pfd
   let filepath = "fd:" ++ show fd
   (fD,fd_type) <- FD.mkFD (fromIntegral fd) mode
@@ -207,9 +212,14 @@ pfdToHandle pfd mode = do
                        False {-is_socket-}
                        False {-non-blocking-}
   fD' <- FD.setNonBlockingMode fD True -- see #3316
+  -- Choose either text or binary mode (cf. GHC.IO.Handle.FD.openFile').
 #if __GLASGOW_HASKELL__ >= 704
-  enc <- getLocaleEncoding
+  mb_enc <- if binary
+            then return Nothing
+            else fmap Just getLocaleEncoding
 #else
-  let enc = localeEncoding
+  let mb_enc = if binary
+               then Nothing
+               else Just localeEncoding
 #endif
-  mkHandleFromFD fD' fd_type filepath mode False {-is_socket-} (Just enc)
+  mkHandleFromFD fD' fd_type filepath mode False {-is_socket-} mb_enc
