@@ -36,20 +36,18 @@ matrix:
     compiler: ": #GHC 7.10.3"
     addons: {apt: {packages: [cabal-install-1.22,ghc-7.10.3], sources: [hvr-ghc]}}
 
-  - env: BUILD=stack GHCVER=7.8.4
-    compiler: ": #stack 7.8.4"
-    addons: {apt: {packages: [ghc-7.8.4], sources: [hvr-ghc]}}
+  - env: BUILD=stack LTS_HASKELL_VER=2.22
+    compiler: ": #stack lts-2.22"
 
-  - env: BUILD=stack GHCVER=7.10.3
-    compiler: ": #stack 7.10.3"
-    addons: {apt: {packages: [ghc-7.10.3], sources: [hvr-ghc]}}
+  - env: BUILD=stack LTS_HASKELL_VER=5.14
+    compiler: ": #stack lts-5.14"
 
-  - env: BUILD=stack GHCVER=7.8.4
-    compiler: ": #stack 7.8.4 osx"
+  - env: BUILD=stack LTS_HASKELL_VER=2.22
+    compiler: ": #stack lts-2.22 osx"
     os: osx
 
-  - env: BUILD=stack GHCVER=7.10.3
-    compiler: ": #stack 7.10.3 osx"
+  - env: BUILD=stack LTS_HASKELL_VER=5.14
+    compiler: ": #stack lts-5.14 osx"
     os: osx
 
   - env: BUILD=cabal GHCVER=head  CABALVER=head
@@ -57,11 +55,16 @@ matrix:
 
   allow_failures:
   - env: BUILD=cabal GHCVER=head  CABALVER=head
-  - env: BUILD=stack GHCVER=7.8.4
+  - env: BUILD=stack LTS_HASKELL_VER=2.22
 
 before_install:
  - unset CC
- - export PATH=/opt/ghc/$GHCVER/bin:/opt/cabal/$CABALVER/bin:$HOME/.local/bin:$PATH
+ - case "$BUILD" in
+     stack)
+       export PATH=$HOME/.local/bin:$PATH;;
+     cabal)
+       export PATH=/opt/ghc/$GHCVER/bin:/opt/cabal/$CABALVER/bin:$HOME/.local/bin:$PATH;;
+   esac
  - mkdir -p ~/.local/bin
  - if [ `uname` = "Darwin" ];
    then
@@ -71,14 +74,14 @@ before_install:
    fi
 
 install:
- - echo "$(ghc --version) [$(ghc --print-project-git-commit-id 2> /dev/null || echo '?')]"
  - autoreconf -i
  - |
    case "$BUILD" in
      stack)
-       echo "resolver: ghc-$GHCVER" > stack.yaml;
+       echo "resolver: lts-$LTS_HASKELL_VER" > stack.yaml;
        stack --no-terminal --install-ghc test --only-dependencies;;
      cabal)
+       echo "$(ghc --version) [$(ghc --print-project-git-commit-id 2> /dev/null || echo '?')]";
        cabal --version;
        travis_retry cabal update;
        rm -f $(stack path --dist-dir)/stack-*.tar.gz;
