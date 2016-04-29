@@ -1,6 +1,5 @@
 -- Test suite for System.Process.Binary.
 
-import System.Process
 import System.Process.Binary (ByteString)
 import qualified System.Process.Binary as B
 
