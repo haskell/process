@@ -150,9 +150,9 @@ needed.
 'createProcess' returns @(/mb_stdin_hdl/, /mb_stdout_hdl/, /mb_stderr_hdl/, /ph/)@,
 where
 
- * if @'std_in' == 'CreatePipe'@, then @/mb_stdin_hdl/@ will be @Just /h/@,
-   where @/h/@ is the write end of the pipe connected to the child
-   process's @stdin@.
+ * if 'std_in' is equal to 'CreatePipe' or 'CreateBinaryPipe',
+   then @/mb_stdin_hdl/@ will be @Just /h/@, where @/h/@ is the
+   write end of the pipe connected to the child process's @stdin@.
 
  * otherwise, @/mb_stdin_hdl/ == Nothing@
 
