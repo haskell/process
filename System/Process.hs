@@ -42,6 +42,7 @@ module System.Process (
     readProcess,
     readCreateProcessWithExitCode,
     readProcessWithExitCode,
+    withCreateProcess,
 
     -- ** Related utilities
     showCommandForUser,
@@ -196,29 +197,27 @@ createProcess cp = do
   maybeCloseStd _ = return ()
 
 {-
--- TODO: decide if we want to expose this to users
--- | A 'C.bracketOnError'-style resource handler for 'createProcess'.
+-- | A 'C.bracket'-style resource handler for 'createProcess'.
 --
--- In normal operation it adds nothing, you are still responsible for waiting
--- for (or forcing) process termination and closing any 'Handle's. It only does
--- automatic cleanup if there is an exception. If there is an exception in the
--- body then it ensures that the process gets terminated and any 'CreatePipe'
--- 'Handle's are closed. In particular this means that if the Haskell thread
--- is killed (e.g. 'killThread'), that the external process is also terminated.
+-- Does automatic cleanup when the action finishes. If there is an exception
+-- in the body then it ensures that the process gets terminated and any
+-- 'CreatePipe' 'Handle's are closed. In particular this means that if the
+-- Haskell thread is killed (e.g. 'killThread'), that the external process is
+-- also terminated.
 --
 -- e.g.
 --
 -- > withCreateProcess (proc cmd args) { ... }  $ \_ _ _ ph -> do
 -- >   ...
 --
+-}
 withCreateProcess
   :: CreateProcess
   -> (Maybe Handle -> Maybe Handle -> Maybe Handle -> ProcessHandle -> IO a)
   -> IO a
 withCreateProcess c action =
-    C.bracketOnError (createProcess c) cleanupProcess
-                     (\(m_in, m_out, m_err, ph) -> action m_in m_out m_err ph)
--}
+    C.bracket (createProcess c) cleanupProcess
+              (\(m_in, m_out, m_err, ph) -> action m_in m_out m_err ph)
 
 -- wrapper so we can get exceptions with the appropriate function name.
 withCreateProcess_
