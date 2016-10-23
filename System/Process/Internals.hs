@@ -50,7 +50,7 @@ import System.Posix.Internals (FD)
 
 import System.Process.Common
 
-#if WINDOWS
+#ifdef WINDOWS
 import System.Process.Windows
 #else
 import System.Process.Posix
