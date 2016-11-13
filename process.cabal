@@ -1,5 +1,5 @@
 name:          process
-version:       1.4.0.0
+version:       1.4.2.0
 -- NOTE: Don't forget to update ./changelog.md
 license:       BSD3
 license-file:  LICENSE
@@ -46,14 +46,16 @@ library
     exposed-modules:
         System.Cmd
         System.Process
-    if impl(ghc)
-        exposed-modules:
-            System.Process.Internals
-        other-modules: System.Process.Common
-        if os(windows)
-            other-modules: System.Process.Windows
-        else
-            other-modules: System.Process.Posix
+        System.Process.Internals
+    other-modules: System.Process.Common
+    if os(windows)
+        other-modules: System.Process.Windows
+        build-depends: Win32 >=2.2 && < 2.4
+        extra-libraries: kernel32
+        cpp-options: -DWINDOWS
+    else
+        other-modules: System.Process.Posix
+        build-depends: unix >= 2.5 && < 2.8
 
     c-sources:
         cbits/runProcess.c
@@ -70,12 +72,6 @@ library
                    directory >= 1.1 && < 1.3,
                    filepath  >= 1.2 && < 1.5,
                    deepseq   >= 1.1 && < 1.5
-    if os(windows)
-        build-depends: Win32 >=2.2 && < 2.4
-        extra-libraries: kernel32
-        cpp-options: -DWINDOWS
-    else
-        build-depends: unix >= 2.5 && < 2.8
 
 test-suite test
   default-language: Haskell2010

@@ -1,12 +1,10 @@
 {-# LANGUAGE CPP, ForeignFunctionInterface #-}
-#ifdef __GLASGOW_HASKELL__
 #if __GLASGOW_HASKELL__ >= 709
 {-# LANGUAGE Safe #-}
 #else
 {-# LANGUAGE Trustworthy #-}
 #endif
 {-# LANGUAGE InterruptibleFFI #-}
-#endif
 
 -----------------------------------------------------------------------------
 -- |
@@ -59,6 +57,7 @@ module System.Process (
 
     -- Interprocess communication
     createPipe,
+    createPipeFd,
 
     -- * Old deprecated functions
     -- | These functions pre-date 'createProcess' which is much more
@@ -87,24 +86,12 @@ import System.Exit      ( ExitCode(..) )
 import System.IO
 import System.IO.Error (mkIOError, ioeSetErrorString)
 
-#if defined(mingw32_HOST_OS)
-# include <fcntl.h>     /* for _O_BINARY */
-#else
-import System.Posix.Process (getProcessGroupIDOf)
-#if MIN_VERSION_base(4,5,0)
-import System.Posix.Types
-#endif
+-- Provide the data constructors for CPid on GHC 7.4 and later
+#if !defined(WINDOWS) && MIN_VERSION_base(4,5,0)
+import System.Posix.Types (CPid (..))
 #endif
 
-#ifdef __GLASGOW_HASKELL__
 import GHC.IO.Exception ( ioException, IOErrorType(..), IOException(..) )
-# if defined(mingw32_HOST_OS)
-import System.Win32.Console (generateConsoleCtrlEvent, cTRL_BREAK_EVENT)
-import System.Win32.Process (getProcessId)
-# else
-import System.Posix.Signals
-# endif
-#endif
 
 -- ----------------------------------------------------------------------------
 -- createProcess
@@ -558,15 +545,11 @@ withForkWait async body = do
     restore (body wait) `C.onException` killThread tid
 
 ignoreSigPipe :: IO () -> IO ()
-#if defined(__GLASGOW_HASKELL__)
 ignoreSigPipe = C.handle $ \e -> case e of
                                    IOError { ioe_type  = ResourceVanished
                                            , ioe_errno = Just ioe }
                                      | Errno ioe == ePIPE -> return ()
                                    _ -> throwIO e
-#else
-ignoreSigPipe = id
-#endif
 
 -- ----------------------------------------------------------------------------
 -- showCommandForUser
@@ -686,37 +669,6 @@ terminateProcess ph = do
         return ()
         -- does not close the handle, we might want to try terminating it
         -- again, or get its exit code.
-
-
--- ----------------------------------------------------------------------------
--- interruptProcessGroupOf
-
--- | Sends an interrupt signal to the process group of the given process.
---
--- On Unix systems, it sends the group the SIGINT signal.
---
--- On Windows systems, it generates a CTRL_BREAK_EVENT and will only work for
--- processes created using 'createProcess' and setting the 'create_group' flag
-
-interruptProcessGroupOf
-    :: ProcessHandle    -- ^ A process in the process group
-    -> IO ()
-interruptProcessGroupOf ph = do
-    withProcessHandle ph $ \p_ -> do
-        case p_ of
-            ClosedHandle _ -> return ()
-            OpenHandle h -> do
-#if mingw32_HOST_OS
-                pid <- getProcessId h
-                generateConsoleCtrlEvent cTRL_BREAK_EVENT pid
--- We can't use an #elif here, because MIN_VERSION_unix isn't defined
--- on Windows, so on Windows cpp fails:
--- error: missing binary operator before token "("
-#else
-                pgid <- getProcessGroupIDOf h
-                signalProcessGroup sigINT pgid
-#endif
-                return ()
 
 
 -- ----------------------------------------------------------------------------
@@ -901,13 +853,11 @@ will not work.
 On Unix systems, see 'waitForProcess' for the meaning of exit codes
 when the process died as the result of a signal.
 -}
-#ifdef __GLASGOW_HASKELL__
 system :: String -> IO ExitCode
 system "" = ioException (ioeSetErrorString (mkIOError InvalidArgument "system" Nothing Nothing) "null command")
 system str = do
   (_,_,_,p) <- createProcess_ "system" (shell str) { delegate_ctlc = True }
   waitForProcess p
-#endif  /* __GLASGOW_HASKELL__ */
 
 
 --TODO: in a later release {-# DEPRECATED rawSystem "Use 'callProcess' (or 'spawnProcess' and 'waitForProcess') instead" #-}
@@ -921,13 +871,6 @@ It will therefore behave more portably between operating systems than 'system'.
 The return codes and possible failures are the same as for 'system'.
 -}
 rawSystem :: String -> [String] -> IO ExitCode
-#ifdef __GLASGOW_HASKELL__
 rawSystem cmd args = do
   (_,_,_,p) <- createProcess_ "rawSystem" (proc cmd args) { delegate_ctlc = True }
   waitForProcess p
-#elif !mingw32_HOST_OS
--- crude fallback implementation: could do much better than this under Unix
-rawSystem cmd args = system (showCommandForUser cmd args)
-#else
-rawSystem cmd args = system (showCommandForUser cmd args)
-#endif

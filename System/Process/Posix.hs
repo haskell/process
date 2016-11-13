@@ -15,6 +15,8 @@ module System.Process.Posix
     , c_execvpe
     , pPrPr_disableITimers
     , createPipeInternal
+    , createPipeInternalFd
+    , interruptProcessGroupOfInternal
     ) where
 
 import Control.Concurrent
@@ -36,6 +38,7 @@ import System.Posix.Internals
 import GHC.IO.Exception
 import System.Posix.Signals as Sig
 import qualified System.Posix.IO as Posix
+import System.Posix.Process (getProcessGroupIDOf)
 
 import System.Process.Common
 
@@ -90,8 +93,6 @@ withCEnvironment :: [(String,String)] -> (Ptr CString  -> IO a) -> IO a
 withCEnvironment envir act =
   let env' = map (\(name, val) -> name ++ ('=':val)) envir
   in withMany withCString env' (\pEnv -> withArray0 nullPtr pEnv act)
-
-#ifdef __GLASGOW_HASKELL__
 
 -- -----------------------------------------------------------------------------
 -- POSIX runProcess with signal handling in the child
@@ -265,8 +266,6 @@ foreign import ccall unsafe "runInteractiveProcess"
         -> Ptr CString
         -> IO PHANDLE
 
-#endif /* __GLASGOW_HASKELL__ */
-
 ignoreSignal, defaultSignal :: CLong
 ignoreSignal  = CONST_SIG_IGN
 defaultSignal = CONST_SIG_DFL
@@ -280,3 +279,19 @@ createPipeInternal = do
     readh <- Posix.fdToHandle readfd
     writeh <- Posix.fdToHandle writefd
     return (readh, writeh)
+
+createPipeInternalFd :: IO (FD, FD)
+createPipeInternalFd = do
+   (Fd readfd, Fd writefd) <- Posix.createPipe
+   return (readfd, writefd)
+
+interruptProcessGroupOfInternal
+    :: ProcessHandle    -- ^ A process in the process group
+    -> IO ()
+interruptProcessGroupOfInternal ph = do
+    withProcessHandle ph $ \p_ -> do
+        case p_ of
+            ClosedHandle _ -> return ()
+            OpenHandle h -> do
+                pgid <- getProcessGroupIDOf h
+                signalProcessGroup sigINT pgid

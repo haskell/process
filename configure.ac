@@ -5,10 +5,7 @@ AC_CONFIG_SRCDIR([include/runProcess.h])
 
 AC_CONFIG_HEADERS([include/HsProcessConfig.h])
 
-AC_ARG_WITH([cc],
-            [C compiler],
-            [CC=$withval])
-AC_PROG_CC()
+AC_PROG_CC
 
 dnl ** Working vfork?
 AC_FUNC_FORK

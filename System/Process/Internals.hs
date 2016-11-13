@@ -1,9 +1,7 @@
 {-# LANGUAGE CPP #-}
 {-# OPTIONS_HADDOCK not-home #-}
-#ifdef __GLASGOW_HASKELL__
 {-# LANGUAGE Trustworthy #-}
 {-# LANGUAGE InterruptibleFFI #-}
-#endif
 
 -----------------------------------------------------------------------------
 -- |
@@ -25,13 +23,11 @@ module System.Process.Internals (
     ProcessHandle(..), ProcessHandle__(..),
     PHANDLE, closePHANDLE, mkProcessHandle,
     modifyProcessHandle, withProcessHandle,
-#ifdef __GLASGOW_HASKELL__
     CreateProcess(..),
     CmdSpec(..), StdStream(..),
     createProcess_,
     runGenProcess_, --deprecated
     fdToHandle,
-#endif
     startDelegateControlC,
     endDelegateControlC,
     stopDelegateControlC,
@@ -42,14 +38,15 @@ module System.Process.Internals (
     withFilePathException, withCEnvironment,
     translate,
     createPipe,
+    createPipeFd,
+    interruptProcessGroupOf,
     ) where
 
 import Foreign.C
 import System.IO
 
-#ifdef __GLASGOW_HASKELL__
 import GHC.IO.Handle.FD (fdToHandle)
-#endif
+import System.Posix.Internals (FD)
 
 import System.Process.Common
 
@@ -144,7 +141,6 @@ translate = translateInternal
 -- ----------------------------------------------------------------------------
 -- Deprecated / compat
 
-#ifdef __GLASGOW_HASKELL__
 {-# DEPRECATED runGenProcess_
       "Please do not use this anymore, use the ordinary 'System.Process.createProcess'. If you need the SIGINT handling, use delegate_ctlc = True (runGenProcess_ is now just an imperfectly emulated stub that probably duplicates or overrides your own signal handling)." #-}
 runGenProcess_
@@ -158,8 +154,6 @@ runGenProcess_ fun c (Just sig) (Just sig') | isDefaultSignal sig && sig == sig'
                          = createProcess_ fun c { delegate_ctlc = True }
 runGenProcess_ fun c _ _ = createProcess_ fun c
 
-#endif
-
 -- ---------------------------------------------------------------------------
 -- createPipe
 
@@ -170,3 +164,30 @@ runGenProcess_ fun c _ _ = createProcess_ fun c
 createPipe :: IO (Handle, Handle)
 createPipe = createPipeInternal
 {-# INLINE createPipe #-}
+
+-- ---------------------------------------------------------------------------
+-- createPipeFd
+
+-- | Create a pipe for interprocess communication and return a
+-- @(readEnd, writeEnd)@ `FD` pair.
+--
+-- @since 1.4.2.0
+createPipeFd :: IO (FD, FD)
+createPipeFd = createPipeInternalFd
+{-# INLINE createPipeFd #-}
+
+
+-- ----------------------------------------------------------------------------
+-- interruptProcessGroupOf
+
+-- | Sends an interrupt signal to the process group of the given process.
+--
+-- On Unix systems, it sends the group the SIGINT signal.
+--
+-- On Windows systems, it generates a CTRL_BREAK_EVENT and will only work for
+-- processes created using 'createProcess' and setting the 'create_group' flag
+
+interruptProcessGroupOf
+    :: ProcessHandle    -- ^ A process in the process group
+    -> IO ()
+interruptProcessGroupOf = interruptProcessGroupOfInternal

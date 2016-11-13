@@ -10,6 +10,8 @@ module System.Process.Windows
     , stopDelegateControlC
     , isDefaultSignal
     , createPipeInternal
+    , createPipeInternalFd
+    , interruptProcessGroupOfInternal
     ) where
 
 import System.Process.Common
@@ -24,31 +26,21 @@ import System.IO.Unsafe
 
 import System.Posix.Internals
 import GHC.IO.Exception
-import GHC.IO.Encoding
-import qualified GHC.IO.FD as FD
-import GHC.IO.Device
 import GHC.IO.Handle.FD
-import GHC.IO.Handle.Internals
 import GHC.IO.Handle.Types hiding (ClosedHandle)
 import System.IO.Error
-import Data.Typeable
 import GHC.IO.IOMode
 
 import System.Directory         ( doesFileExist )
 import System.Environment       ( getEnv )
 import System.FilePath
+import System.Win32.Console (generateConsoleCtrlEvent, cTRL_BREAK_EVENT)
+import System.Win32.Process (getProcessId)
 
-import System.Process.Common
+-- The double hash is used so that hsc does not process this include file
+##include "processFlags.h"
 
-#if defined(i386_HOST_ARCH)
-# define WINDOWS_CCONV stdcall
-#elif defined(x86_64_HOST_ARCH)
-# define WINDOWS_CCONV ccall
-#endif
-
-#include <io.h>        /* for _close and _pipe */
-#include "HsProcessConfig.h"
-#include "processFlags.h"
+#include <fcntl.h>     /* for _O_BINARY */
 
 throwErrnoIfBadPHandle :: String -> IO PHANDLE -> IO PHANDLE
 throwErrnoIfBadPHandle = throwErrnoIfNull
@@ -72,7 +64,15 @@ processHandleFinaliser m =
 closePHANDLE :: PHANDLE -> IO ()
 closePHANDLE ph = c_CloseHandle ph
 
-foreign import WINDOWS_CCONV unsafe "CloseHandle"
+foreign import
+#if defined(i386_HOST_ARCH)
+  stdcall
+#elif defined(x86_64_HOST_ARCH)
+  ccall
+#else
+#error "Unknown architecture"
+#endif
+  unsafe "CloseHandle"
   c_CloseHandle
         :: PHANDLE
         -> IO ()
@@ -237,7 +237,7 @@ translateInternal xs = '"' : snd (foldr escape (True,"\"") xs)
 
 withCEnvironment :: [(String,String)] -> (Ptr CWString -> IO a) -> IO a
 withCEnvironment envir act =
-  let env' = foldr (\(name, val) env -> name ++ ('=':val)++'\0':env) "\0" envir
+  let env' = foldr (\(name, val) env0 -> name ++ ('=':val)++'\0':env0) "\0" envir
   in withCWString env' (act . castPtr)
 
 isDefaultSignal :: CLong -> Bool
@@ -245,20 +245,45 @@ isDefaultSignal = const False
 
 createPipeInternal :: IO (Handle, Handle)
 createPipeInternal = do
-    (readfd, writefd) <- allocaArray 2 $ \ pfds -> do
+    (readfd, writefd) <- createPipeInternalFd
+    (do readh <- fdToHandle readfd
+        writeh <- fdToHandle writefd
+        return (readh, writeh)) `onException` (close' readfd >> close' writefd)
+        
+createPipeInternalFd :: IO (FD, FD)
+createPipeInternalFd = do
+    allocaArray 2 $ \ pfds -> do
         throwErrnoIfMinus1_ "_pipe" $ c__pipe pfds 2 (#const _O_BINARY)
         readfd <- peek pfds
         writefd <- peekElemOff pfds 1
         return (readfd, writefd)
-    (do readh <- fdToHandle readfd
-        writeh <- fdToHandle writefd
-        return (readh, writeh)) `onException` (close readfd >> close writefd)
 
-close :: CInt -> IO ()
-close = throwErrnoIfMinus1_ "_close" . c__close
+
+close' :: CInt -> IO ()
+close' = throwErrnoIfMinus1_ "_close" . c__close
 
 foreign import ccall "io.h _pipe" c__pipe ::
     Ptr CInt -> CUInt -> CInt -> IO CInt
 
 foreign import ccall "io.h _close" c__close ::
     CInt -> IO CInt
+
+interruptProcessGroupOfInternal
+    :: ProcessHandle    -- ^ A process in the process group
+    -> IO ()
+interruptProcessGroupOfInternal ph = do
+    withProcessHandle ph $ \p_ -> do
+        case p_ of
+            ClosedHandle _ -> return ()
+            OpenHandle h -> do
+#if mingw32_HOST_OS
+                pid <- getProcessId h
+                generateConsoleCtrlEvent cTRL_BREAK_EVENT pid
+-- We can't use an #elif here, because MIN_VERSION_unix isn't defined
+-- on Windows, so on Windows cpp fails:
+-- error: missing binary operator before token "("
+#else
+                pgid <- getProcessGroupIDOf h
+                signalProcessGroup sigINT pgid
+#endif
+                return ()

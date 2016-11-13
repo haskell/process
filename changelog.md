@@ -1,5 +1,17 @@
 # Changelog for [`process` package](http://hackage.haskell.org/package/process)
 
+## 1.4.2.0 *January 2016*
+
+* Added `createPipeFD` [#52](https://github.com/haskell/process/pull/52)
+    * New function `createPipeFD` added which returns a POSIX File Descriptor (CInt)
+      instead of a GHC Handle to a pipe
+
+## 1.4.1.0 *November 2015*
+
+* Use less CPP [#47](https://github.com/haskell/process/pull/47)
+    * Refactor to have separate Windows and POSIX modules internally
+    * Remove the broken non-GHC code paths
+
 ## 1.4.0.0 *November 2015*
 
 * Added `child_user` and `child_group` to `CreateProcess` for unix. [#45](https://github.com/haskell/process/pull/45)
