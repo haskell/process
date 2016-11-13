@@ -57,6 +57,7 @@ import System.Posix.Types
 -- will never actually be used, as the setuid/setgid system calls are not
 -- applicable on Windows. No value of this type will ever exist.
 newtype CGid = CGid Word32
+  deriving (Show, Eq)
 type GroupID = CGid
 type UserID = CGid
 #else
