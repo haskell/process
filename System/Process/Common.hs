@@ -64,7 +64,7 @@ type PHANDLE = CPid
 #endif
 
 data CreateProcess = CreateProcess{
-  cmdspec      :: CmdSpec,                 -- ^ Executable & arguments, or shell command
+  cmdspec      :: CmdSpec,                 -- ^ Executable & arguments, or shell command.  Relative paths are resolved with respect to 'cwd' if given, and otherwise the current working directory.
   cwd          :: Maybe FilePath,          -- ^ Optional path to the working directory for the new process
   env          :: Maybe [(String,String)], -- ^ Optional environment (otherwise inherit from the current process)
   std_in       :: StdStream,               -- ^ How to determine stdin

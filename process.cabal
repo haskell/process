@@ -79,5 +79,6 @@ test-suite test
   main-is: main.hs
   type: exitcode-stdio-1.0
   build-depends: base
+               , bytestring
                , directory
                , process

@@ -5,6 +5,10 @@ import System.IO.Error
 import System.Directory (getCurrentDirectory, setCurrentDirectory)
 import System.Process
 import Data.List (isInfixOf)
+import System.IO (hClose, openBinaryTempFile)
+import qualified Data.ByteString as S
+import qualified Data.ByteString.Char8 as S8
+import System.Directory (getTemporaryDirectory, removeFile)
 
 main :: IO ()
 main = do
@@ -40,6 +44,27 @@ main = do
       res2 <- readCreateProcess (proc "./echo.bat" []) { cwd = Just "subdir" } ""
       unless ("child" `isInfixOf` res2) $ error $
         "echo.bat with cwd failed: " ++ show res2
+
+    putStrLn "Binary handles"
+    tmpDir <- getTemporaryDirectory
+    bracket
+      (openBinaryTempFile tmpDir "process-binary-test.bin")
+      (\(fp, h) -> hClose h `finally` removeFile fp)
+      $ \(fp, h) -> do
+        let bs = S8.pack "hello\nthere\r\nworld\0"
+        S.hPut h bs
+        hClose h
+
+        (Nothing, Just out, Nothing, ph) <- createProcess (proc "cat" [fp])
+            { std_out = CreatePipe
+            }
+        res' <- S.hGetContents out
+        hClose out
+        ec <- waitForProcess ph
+        unless (ec == ExitSuccess)
+            $ error $ "Unexpected exit code " ++ show ec
+        unless (bs == res')
+            $ error $ "Unexpected result: " ++ show res'
 
     putStrLn "Tests passed successfully"
 

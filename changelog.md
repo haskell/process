@@ -1,5 +1,9 @@
 # Changelog for [`process` package](http://hackage.haskell.org/package/process)
 
+## Unreleased
+
+  * New exposed `withCreateProcess`
+
 ## 1.4.2.0 *January 2016*
 
 * Added `createPipeFD` [#52](https://github.com/haskell/process/pull/52)
