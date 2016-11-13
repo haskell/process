@@ -32,13 +32,13 @@ main = do
     putStrLn "Testing subdirectories"
 
     withCurrentDirectory "exes" $ do
-      res <- readCreateProcess (proc "./echo.bat" []) ""
-      unless (res == "parent\n") $ error $
-        "echo.bat with cwd failed: " ++ show res
+      res1 <- readCreateProcess (proc "./echo.bat" []) ""
+      unless (res1 == "parent\n") $ error $
+        "echo.bat with cwd failed: " ++ show res1
 
-      res <- readCreateProcess (proc "./echo.bat" []) { cwd = Just "subdir" } ""
-      unless (res == "child\n") $ error $
-        "echo.bat with cwd failed: " ++ show res
+      res2 <- readCreateProcess (proc "./echo.bat" []) { cwd = Just "subdir" } ""
+      unless (res2 == "child\n") $ error $
+        "echo.bat with cwd failed: " ++ show res2
 
     putStrLn "Tests passed successfully"
 
