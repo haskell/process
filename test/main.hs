@@ -38,11 +38,11 @@ main = do
 
     withCurrentDirectory "exes" $ do
       res1 <- readCreateProcess (proc "./echo.bat" []) ""
-      unless ("parent" `isInfixOf` res1) $ error $
+      unless ("parent" `isInfixOf` res1 && not ("child" `isInfixOf` res1)) $ error $
         "echo.bat with cwd failed: " ++ show res1
 
       res2 <- readCreateProcess (proc "./echo.bat" []) { cwd = Just "subdir" } ""
-      unless ("child" `isInfixOf` res2) $ error $
+      unless ("child" `isInfixOf` res2 && not ("parent" `isInfixOf` res2)) $ error $
         "echo.bat with cwd failed: " ++ show res2
 
     putStrLn "Binary handles"
