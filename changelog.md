@@ -2,7 +2,8 @@
 
 ## Unreleased
 
-  * New exposed `withCreateProcess`
+* New exposed `withCreateProcess`
+* Derive `Show` and `Eq` for `CreateProcess`, `CmdSpec`, and `StdStream`
 
 ## 1.4.2.0 *January 2016*
 
