@@ -19,6 +19,8 @@ extra-source-files:
     configure.ac
     include/HsProcessConfig.h.in
     process.buildinfo
+    exes/echo.bat
+    exes/subdir/echo.bat
 
 extra-tmp-files:
     autom4te.cache
@@ -81,4 +83,5 @@ test-suite test
   main-is: main.hs
   type: exitcode-stdio-1.0
   build-depends: base
+               , directory
                , process

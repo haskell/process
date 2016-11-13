@@ -1,6 +1,8 @@
 import Control.Exception
+import Control.Monad (unless)
 import System.Exit
 import System.IO.Error
+import System.Directory (getCurrentDirectory, setCurrentDirectory)
 import System.Process
 
 main :: IO ()
@@ -27,4 +29,23 @@ main = do
     test "create_new_console" $ \cp -> cp { create_new_console = True }
     test "new_session" $ \cp -> cp { new_session = True }
 
+    putStrLn "Testing subdirectories"
+
+    withCurrentDirectory "exes" $ do
+      res <- readCreateProcess (proc "./echo.bat" []) ""
+      unless (res == "parent\n") $ error $
+        "echo.bat with cwd failed: " ++ show res
+
+      res <- readCreateProcess (proc "./echo.bat" []) { cwd = Just "subdir" } ""
+      unless (res == "child\n") $ error $
+        "echo.bat with cwd failed: " ++ show res
+
     putStrLn "Tests passed successfully"
+
+withCurrentDirectory :: FilePath -> IO a -> IO a
+withCurrentDirectory new inner = do
+  orig <- getCurrentDirectory
+  bracket_
+    (setCurrentDirectory new)
+    (setCurrentDirectory orig)
+    inner
