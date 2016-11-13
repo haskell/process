@@ -4,6 +4,7 @@ import System.Exit
 import System.IO.Error
 import System.Directory (getCurrentDirectory, setCurrentDirectory)
 import System.Process
+import Data.List (isInfixOf)
 
 main :: IO ()
 main = do
@@ -33,11 +34,11 @@ main = do
 
     withCurrentDirectory "exes" $ do
       res1 <- readCreateProcess (proc "./echo.bat" []) ""
-      unless (res1 == "parent\n") $ error $
+      unless ("parent" `isInfixOf` res1) $ error $
         "echo.bat with cwd failed: " ++ show res1
 
       res2 <- readCreateProcess (proc "./echo.bat" []) { cwd = Just "subdir" } ""
-      unless (res2 == "child\n") $ error $
+      unless ("child" `isInfixOf` res2) $ error $
         "echo.bat with cwd failed: " ++ show res2
 
     putStrLn "Tests passed successfully"
