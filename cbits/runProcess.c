@@ -510,12 +510,49 @@ mkAnonPipe (HANDLE* pHandleIn, BOOL isInheritableIn,
     return TRUE;
 }
 
+static HANDLE
+createJob ()
+{
+    HANDLE hJob = CreateJobObject (NULL, NULL);
+    JOBOBJECT_EXTENDED_LIMIT_INFORMATION jeli;
+    ZeroMemory(&jeli, sizeof(JOBOBJECT_EXTENDED_LIMIT_INFORMATION));
+    // Configure all child processes associated with the job to terminate when the
+    // Last process in the job terminates. This prevent half dead processes.
+    jeli.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+
+    return SetInformationJobObject(hJob, JobObjectExtendedLimitInformation,
+        &jeli, sizeof(JOBOBJECT_EXTENDED_LIMIT_INFORMATION));
+}
+
+static HANDLE
+createCompletionPort (HANDLE hJob)
+{
+    HANDLE ioPort = CreateIoCompletionPort (INVALID_HANDLE_VALUE, NULL, 0, 1);
+    if (!ioPort)
+    {
+        // Something failed. Error is in GetLastError, let caller handler it.
+        return NULL;
+    }
+
+    JOBOBJECT_ASSOCIATE_COMPLETION_PORT Port;
+    Port.CompletionKey = hJob;
+    Port.CompletionPort = ioPort;
+    if (!SetInformationJobObject(hJob,
+        JobObjectAssociateCompletionPortInformation,
+        &Port, sizeof(Port))) {
+        // Something failed. Error is in GetLastError, let caller handler it.
+        return NULL;
+    }
+
+    return ioPort;
+}
+
 ProcHandle
 runInteractiveProcess (wchar_t *cmd, wchar_t *workingDirectory,
                        wchar_t *environment,
                        int fdStdIn, int fdStdOut, int fdStdErr,
                        int *pfdStdInput, int *pfdStdOutput, int *pfdStdError,
-                       int flags)
+                       int flags, bool useJobObject, HANDLE *hJob, HANDLE *hIOcpPort)
 {
     STARTUPINFO sInfo;
     PROCESS_INFORMATION pInfo;
@@ -624,10 +661,41 @@ runInteractiveProcess (wchar_t *cmd, wchar_t *workingDirectory,
         dwFlags |= CREATE_NEW_CONSOLE;
     }
 
+    // If we're going to use a job object, then we have to create
+    // the thread suspended.
+    if (useJobObject)
+    {
+        dwFlags |= CREATE_SUSPENDED;
+        *hJob = createJob();
+        if (!*hJob)
+        {
+            goto cleanup_err;
+        }
+    }
+
     if (!CreateProcess(NULL, cmd, NULL, NULL, inherit, dwFlags, environment, workingDirectory, &sInfo, &pInfo))
     {
             goto cleanup_err;
     }
+
+    if (hJob)
+    {
+        // Create the completion port and attach it to the job
+        *hIOcpPort = createCompletionPort (*hJob);
+        if (!*hIOcpPort)
+        {
+            goto cleanup_err;
+        }
+        // Then associate the process and the job;
+        if (!AssignProcessToJobObject (*hJob, pInfo.hProcess))
+        {
+            goto cleanup_err;
+        }
+        // And now that we've associated the new process with the job
+        // we can actively resume it.
+        ResumeThread (pInfo.hThread);
+    }
+
     CloseHandle(pInfo.hThread);
 
     // Close the ends of the pipes that were inherited by the
@@ -650,6 +718,8 @@ cleanup_err:
     if (hStdOutputWrite != INVALID_HANDLE_VALUE) CloseHandle(hStdOutputWrite);
     if (hStdErrorRead   != INVALID_HANDLE_VALUE) CloseHandle(hStdErrorRead);
     if (hStdErrorWrite  != INVALID_HANDLE_VALUE) CloseHandle(hStdErrorWrite);
+    if (hJob                                   ) CloseHandle(hJob);
+    if (hIOcpPort                              ) CloseHandle(hIOcpPort);
     maperrno();
     return NULL;
 }
@@ -657,7 +727,17 @@ cleanup_err:
 int
 terminateProcess (ProcHandle handle)
 {
-    if (!TerminateProcess((HANDLE) handle, 1)) {
+    if (!TerminateProcess ((HANDLE) handle, 1)) {
+        maperrno();
+        return -1;
+    }
+    return 0;
+}
+
+int
+terminateJob (ProcHandle handle)
+{
+    if (!TerminateJobObject ((HANDLE)handle, 1)) {
         maperrno();
         return -1;
     }
@@ -700,6 +780,59 @@ waitForProcess (ProcHandle handle, int *pret)
 
     maperrno();
     return -1;
+}
+
+static int
+waitForJobCompletion (HANDLE hJob, HANDLE ioPort, DWORD timeout, int *pExitCode)
+{
+    DWORD CompletionCode;
+    ULONG_PTR CompletionKey;
+    LPOVERLAPPED Overlapped;
+    *pExitCode = 0;
+
+    // We have to loop here. It's a blocking call, but
+    // we get notified on each completion event. So if it's
+    // not one we care for we should just block again.
+    // If all processes are finished before this call is made
+    // then the initial call will return false.
+    // List of events we can listen to:
+    // https://msdn.microsoft.com/en-us/library/windows/desktop/ms684141(v=vs.85).aspx
+    while (GetQueuedCompletionStatus (ioPort, &CompletionCode,
+           &CompletionKey, &Overlapped, timeout)) {
+
+        switch (CompletionCode)
+        {
+            case JOB_OBJECT_MSG_NEW_PROCESS:
+                // A new child process is born.
+                break;
+            case JOB_OBJECT_MSG_ABNORMAL_EXIT_PROCESS:
+            case JOB_OBJECT_MSG_EXIT_PROCESS:
+                // A child process has just exited.
+                // Read exit code, We assume the last process to exit
+                // is the process whose exit code we're interested in.
+                if (GetExitCodeProcess((HANDLE)Overlapped, (DWORD *)pExitCode) == 0)
+                {
+                    maperrno();
+                }
+                break;
+            case JOB_OBJECT_MSG_ACTIVE_PROCESS_ZERO:
+                // All processes in the tree are done.
+                return 0;
+            default:
+                break;
+        }
+    }
+
+    // Check to see if a timeout has occurred or that the
+    // all processes in the job were finished by the time we
+    // got to the loop.
+    if (Overlapped == NULL && (HANDLE)CompletionKey != hJob)
+    {
+        // Timeout occurred.
+        return -1;
+    }
+
+    return 0;
 }
 
 #endif /* Win32 */

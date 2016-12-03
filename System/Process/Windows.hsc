@@ -3,6 +3,7 @@ module System.Process.Windows
     ( mkProcessHandle
     , translateInternal
     , createProcess_Internal
+    , createProcess_Internal_ext
     , withCEnvironment
     , closePHANDLE
     , startDelegateControlC
@@ -53,6 +54,12 @@ mkProcessHandle h = do
    _ <- mkWeakMVar m (processHandleFinaliser m)
    return (ProcessHandle m False)
 
+mkProcessHandle' :: PHANDLE -> IO (Maybe ProcessHandle)
+mkProcessHandle' h = do
+  if h /= nullPtr
+     then return $ Just $ mkProcessHandle h
+     else return $ Nothing
+
 processHandleFinaliser :: MVar ProcessHandle__ -> IO ()
 processHandleFinaliser m =
    modifyMVar_ m $ \p_ -> do
@@ -80,26 +87,40 @@ foreign import
 createProcess_Internal
   :: String                     -- ^ function name (for error messages)
   -> CreateProcess
-  -> IO (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)
+  -> IO (Maybe Handle, Maybe Handle,
+         Maybe Handle, ProcessHandle)
+createProcess_Internal fun cp
+ = let (hndStdInput, hndStdOutput, hndStdError, ph, _, _) = createProcess_Internal_ext fun cp
+   in return (hndStdInput, hndStdOutput, hndStdError, ph)
 
-createProcess_Internal fun CreateProcess{ cmdspec = cmdsp,
-                                  cwd = mb_cwd,
-                                  env = mb_env,
-                                  std_in = mb_stdin,
-                                  std_out = mb_stdout,
-                                  std_err = mb_stderr,
-                                  close_fds = mb_close_fds,
-                                  create_group = mb_create_group,
-                                  delegate_ctlc = _ignored,
-                                  detach_console = mb_detach_console,
-                                  create_new_console = mb_create_new_console,
-                                  new_session = mb_new_session }
+createProcess_Internal_ext
+  :: String                     -- ^ function name (for error messages)
+  -> Bool                       -- ^ use job to manage process tree
+  -> CreateProcess
+  -> IO (Maybe Handle, Maybe Handle,
+         Maybe Handle, ProcessHandle,
+         Maybe ProcessHandle, Maybe ProcessHandle)
+
+createProcess_Internal fun useJob CreateProcess{ cmdspec = cmdsp,
+                                    cwd = mb_cwd,
+                                    env = mb_env,
+                                    std_in = mb_stdin,
+                                    std_out = mb_stdout,
+                                    std_err = mb_stderr,
+                                    close_fds = mb_close_fds,
+                                    create_group = mb_create_group,
+                                    delegate_ctlc = _ignored,
+                                    detach_console = mb_detach_console,
+                                    create_new_console = mb_create_new_console,
+                                    new_session = mb_new_session }
  = do
   (cmd, cmdline) <- commandToProcess cmdsp
   withFilePathException cmd $
    alloca $ \ pfdStdInput  ->
    alloca $ \ pfdStdOutput ->
    alloca $ \ pfdStdError  ->
+   alloca $ \ hJob         ->
+   alloca $ \ hIOcpPort    ->
    maybeWith withCEnvironment mb_env $ \pEnv ->
    maybeWith withCWString mb_cwd $ \pWorkDir -> do
    withCWString cmdline $ \pcmdline -> do
@@ -128,12 +149,17 @@ createProcess_Internal fun CreateProcess{ cmdspec = cmdsp,
                                 .|.(if mb_detach_console then RUN_PROCESS_DETACHED else 0)
                                 .|.(if mb_create_new_console then RUN_PROCESS_NEW_CONSOLE else 0)
                                 .|.(if mb_new_session then RUN_PROCESS_NEW_SESSION else 0))
+                                useJob
+                                hJob
+                                hIOcpPort
 
      hndStdInput  <- mbPipe mb_stdin  pfdStdInput  WriteMode
      hndStdOutput <- mbPipe mb_stdout pfdStdOutput ReadMode
      hndStdError  <- mbPipe mb_stderr pfdStdError  ReadMode
 
-     ph <- mkProcessHandle proc_handle
+     ph     <- mkProcessHandle proc_handle
+     phJob  <- mkProcessHandle' hJob
+     phIOCP <- mkProcessHandle' hIOcpPort
      return (hndStdInput, hndStdOutput, hndStdError, ph)
 
 {-# NOINLINE runInteractiveProcess_lock #-}
@@ -155,6 +181,22 @@ stopDelegateControlC = return ()
 
 -- End no-op functions
 
+-- ----------------------------------------------------------------------------
+-- Interface to C bits
+
+foreign import ccall unsafe "terminateJob"
+  c_terminateJob
+        :: PHANDLE
+        -> IO CInt
+
+foreign import ccall interruptible "waitForJobCompletion" -- NB. safe - can block
+  c_waitForJobCompletion
+        :: PHANDLE
+        :: PHANDLE
+        -> CInt
+        -> Ptr CInt
+        -> IO CInt
+
 foreign import ccall unsafe "runInteractiveProcess"
   c_runInteractiveProcess
         :: CWString
@@ -166,7 +208,10 @@ foreign import ccall unsafe "runInteractiveProcess"
         -> Ptr FD
         -> Ptr FD
         -> Ptr FD
-        -> CInt                         -- flags
+        -> CInt          -- flags
+        -> Bool          -- useJobObject
+        -> PHANDLE       -- Handle to Job
+        -> PHANDLE       -- Handle to I/O Completion Port
         -> IO PHANDLE
 
 commandToProcess
