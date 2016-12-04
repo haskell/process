@@ -520,8 +520,14 @@ createJob ()
     // Last process in the job terminates. This prevent half dead processes.
     jeli.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
 
-    return SetInformationJobObject(hJob, JobObjectExtendedLimitInformation,
-        &jeli, sizeof(JOBOBJECT_EXTENDED_LIMIT_INFORMATION));
+    if (SetInformationJobObject (hJob, JobObjectExtendedLimitInformation,
+                                 &jeli, sizeof(JOBOBJECT_EXTENDED_LIMIT_INFORMATION)))
+    {
+        return hJob;
+    }
+
+    maperrno();
+    return NULL;
 }
 
 static HANDLE
@@ -782,7 +788,7 @@ waitForProcess (ProcHandle handle, int *pret)
     return -1;
 }
 
-static int
+int
 waitForJobCompletion (HANDLE hJob, HANDLE ioPort, DWORD timeout, int *pExitCode)
 {
     DWORD CompletionCode;

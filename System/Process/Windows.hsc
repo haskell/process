@@ -1,4 +1,5 @@
-{-# LANGUAGE CPP #-}
+{-# LANGUAGE CPP, ForeignFunctionInterface #-}
+{-# LANGUAGE InterruptibleFFI #-}
 module System.Process.Windows
     ( mkProcessHandle
     , translateInternal
@@ -57,7 +58,7 @@ mkProcessHandle h = do
 mkProcessHandle' :: PHANDLE -> IO (Maybe ProcessHandle)
 mkProcessHandle' h = do
   if h /= nullPtr
-     then return $ Just $ mkProcessHandle h
+     then Just <$> mkProcessHandle h
      else return $ Nothing
 
 processHandleFinaliser :: MVar ProcessHandle__ -> IO ()
@@ -90,8 +91,8 @@ createProcess_Internal
   -> IO (Maybe Handle, Maybe Handle,
          Maybe Handle, ProcessHandle)
 createProcess_Internal fun cp
- = let (hndStdInput, hndStdOutput, hndStdError, ph, _, _) = createProcess_Internal_ext fun cp
-   in return (hndStdInput, hndStdOutput, hndStdError, ph)
+ = do (hndStdInput, hndStdOutput, hndStdError, ph, _, _) <- createProcess_Internal_ext fun False cp
+      return (hndStdInput, hndStdOutput, hndStdError, ph)
 
 createProcess_Internal_ext
   :: String                     -- ^ function name (for error messages)
@@ -101,7 +102,7 @@ createProcess_Internal_ext
          Maybe Handle, ProcessHandle,
          Maybe ProcessHandle, Maybe ProcessHandle)
 
-createProcess_Internal fun useJob CreateProcess{ cmdspec = cmdsp,
+createProcess_Internal_ext fun useJob CreateProcess{ cmdspec = cmdsp,
                                     cwd = mb_cwd,
                                     env = mb_env,
                                     std_in = mb_stdin,
@@ -114,17 +115,18 @@ createProcess_Internal fun useJob CreateProcess{ cmdspec = cmdsp,
                                     create_new_console = mb_create_new_console,
                                     new_session = mb_new_session }
  = do
+  let lenPtr = sizeOf (undefined :: WordPtr)
   (cmd, cmdline) <- commandToProcess cmdsp
   withFilePathException cmd $
-   alloca $ \ pfdStdInput  ->
-   alloca $ \ pfdStdOutput ->
-   alloca $ \ pfdStdError  ->
-   alloca $ \ hJob         ->
-   alloca $ \ hIOcpPort    ->
+   alloca $ \ pfdStdInput           ->
+   alloca $ \ pfdStdOutput          ->
+   alloca $ \ pfdStdError           ->
+   allocaBytes lenPtr $ \ hJob      ->
+   allocaBytes lenPtr $ \ hIOcpPort ->
    maybeWith withCEnvironment mb_env $ \pEnv ->
    maybeWith withCWString mb_cwd $ \pWorkDir -> do
    withCWString cmdline $ \pcmdline -> do
-
+     
      fdin  <- mbFd fun fd_stdin  mb_stdin
      fdout <- mbFd fun fd_stdout mb_stdout
      fderr <- mbFd fun fd_stderr mb_stderr
@@ -160,7 +162,7 @@ createProcess_Internal fun useJob CreateProcess{ cmdspec = cmdsp,
      ph     <- mkProcessHandle proc_handle
      phJob  <- mkProcessHandle' hJob
      phIOCP <- mkProcessHandle' hIOcpPort
-     return (hndStdInput, hndStdOutput, hndStdError, ph)
+     return (hndStdInput, hndStdOutput, hndStdError, ph, phJob, phIOCP)
 
 {-# NOINLINE runInteractiveProcess_lock #-}
 runInteractiveProcess_lock :: MVar ()
@@ -192,7 +194,7 @@ foreign import ccall unsafe "terminateJob"
 foreign import ccall interruptible "waitForJobCompletion" -- NB. safe - can block
   c_waitForJobCompletion
         :: PHANDLE
-        :: PHANDLE
+        -> PHANDLE
         -> CInt
         -> Ptr CInt
         -> IO CInt
