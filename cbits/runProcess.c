@@ -671,6 +671,7 @@ runInteractiveProcess (wchar_t *cmd, wchar_t *workingDirectory,
     // the thread suspended.
     if (useJobObject)
     {
+        printf("** NO CALL\n");
         dwFlags |= CREATE_SUSPENDED;
         *hJob = createJob();
         if (!*hJob)
@@ -684,8 +685,9 @@ runInteractiveProcess (wchar_t *cmd, wchar_t *workingDirectory,
             goto cleanup_err;
     }
 
-    if (hJob)
+    if (useJobObject && hJob)
     {
+        printf("** NO CALL\n");
         // Create the completion port and attach it to the job
         *hIOcpPort = createCompletionPort (*hJob);
         if (!*hIOcpPort)
@@ -724,8 +726,8 @@ cleanup_err:
     if (hStdOutputWrite != INVALID_HANDLE_VALUE) CloseHandle(hStdOutputWrite);
     if (hStdErrorRead   != INVALID_HANDLE_VALUE) CloseHandle(hStdErrorRead);
     if (hStdErrorWrite  != INVALID_HANDLE_VALUE) CloseHandle(hStdErrorWrite);
-    if (hJob                                   ) CloseHandle(hJob);
-    if (hIOcpPort                              ) CloseHandle(hIOcpPort);
+    if (useJobObject && hJob      && *hJob     ) CloseHandle(*hJob);
+    if (useJobObject && hIOcpPort && *hIOcpPort) CloseHandle(*hIOcpPort);
     maperrno();
     return NULL;
 }

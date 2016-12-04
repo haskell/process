@@ -106,7 +106,7 @@ createProcessExt_
 #ifdef WINDOWS
 createProcessExt_ = createProcess_Internal_ext
 #else
-createProcessExt_ name _ proc_ 
+createProcessExt_ name _ proc_
   = do (hndStdInput, hndStdOutput, hndStdError, ph) <- createProcess_ nme proc_
         return ((hndStdInput, hndStdOutput, hndStdError, ph, Nothing, Nothing)
 #endif
