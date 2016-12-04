@@ -34,6 +34,9 @@ module System.Process.Internals (
 #ifndef WINDOWS
     pPrPr_disableITimers, c_execvpe,
     ignoreSignal, defaultSignal,
+#else
+    terminateJob,
+    waitForJobCompletion,
 #endif
     withFilePathException, withCEnvironment,
     translate,
