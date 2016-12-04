@@ -43,6 +43,7 @@ module System.Process (
     readCreateProcessWithExitCode,
     readProcessWithExitCode,
     withCreateProcess,
+    executeAndWait,
 
     -- ** Related utilities
     showCommandForUser,
@@ -852,9 +853,7 @@ when the process died as the result of a signal.
 -}
 system :: String -> IO ExitCode
 system "" = ioException (ioeSetErrorString (mkIOError InvalidArgument "system" Nothing Nothing) "null command")
-system str = do
-  (_,_,_,p) <- createProcess_ "system" (shell str) { delegate_ctlc = True }
-  waitForProcess p
+system str = executeAndWait "system" (shell str) { delegate_ctlc = True }
 
 
 --TODO: in a later release {-# DEPRECATED rawSystem "Use 'callProcess' (or 'spawnProcess' and 'waitForProcess') instead" #-}
@@ -868,6 +867,22 @@ It will therefore behave more portably between operating systems than 'system'.
 The return codes and possible failures are the same as for 'system'.
 -}
 rawSystem :: String -> [String] -> IO ExitCode
-rawSystem cmd args = do
-  (_,_,_,p) <- createProcess_ "rawSystem" (proc cmd args) { delegate_ctlc = True }
+rawSystem cmd args = executeAndWait "rawSystem" (proc cmd args) { delegate_ctlc = True }
+
+-- ---------------------------------------------------------------------------
+-- executeAndWait
+
+-- | Create a new process and wait for it's termination.
+--
+-- @since 1.4.?.?
+executeAndWait :: String -> CreateProcess -> IO ExitCode
+executeAndWait name proc_ = do
+#if defined(WINDOWS)
+  (_,_,_,_,Just job,Just iocp) <- createProcessExt_ name True proc_
+  maybe (ExitFailure (-1)) mkExitCode <$> waitForJobCompletion job iocp (-1)
+    where mkExitCode code | code == 0 = ExitSuccess
+                          | otherwise = ExitFailure $ fromIntegral code
+#else
+  (_,_,_,p) <- createProcess_ name proc_
   waitForProcess p
+#endif

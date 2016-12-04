@@ -43,6 +43,7 @@ module System.Process.Internals (
     createPipe,
     createPipeFd,
     interruptProcessGroupOf,
+    createProcessExt_,
     ) where
 
 import Foreign.C
@@ -60,7 +61,6 @@ import System.Process.Posix
 #endif
 
 -- ----------------------------------------------------------------------------
-
 -- | This function is almost identical to
 -- 'System.Process.createProcess'. The only differences are:
 --
@@ -80,6 +80,37 @@ createProcess_
   -> IO (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)
 createProcess_ = createProcess_Internal
 {-# INLINE createProcess_ #-}
+
+-- ----------------------------------------------------------------------------
+-- | This function is almost identical to
+-- 'createProcess_'. The only differences are:
+--
+-- * A boolean argument can be given in order to create an I/O cp port to monitor
+--   a process tree's progress on Windows.
+--
+-- The function also returns two new handles:
+--   * an I/O Completion Port handle on which events
+--     will be signaled.
+--   * a Job handle which can be used to kill all running
+--     processes.
+--
+--  On POSIX platforms these two new handles will always be Nothing
+--
+-- @since 1.4.?.?
+createProcessExt_
+  :: String   -- ^ function name (for error messages)
+  -> Bool     -- ^ Use I/O CP port for monitoring
+  -> CreateProcess
+  -> IO (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle,
+         Maybe ProcessHandle, Maybe ProcessHandle)
+#ifdef WINDOWS
+createProcessExt_ = createProcess_Internal_ext
+#else
+createProcessExt_ name _ proc_ 
+  = do (hndStdInput, hndStdOutput, hndStdError, ph) <- createProcess_ nme proc_
+        return ((hndStdInput, hndStdOutput, hndStdError, ph, Nothing, Nothing)
+#endif
+{-# INLINE createProcessExt_ #-}
 
 -- ------------------------------------------------------------------------
 -- Escaping commands for shells
