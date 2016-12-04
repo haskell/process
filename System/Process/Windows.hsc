@@ -14,6 +14,8 @@ module System.Process.Windows
     , createPipeInternal
     , createPipeInternalFd
     , interruptProcessGroupOfInternal
+    , terminateJob
+    , waitForJobCompletion
     ) where
 
 import System.Process.Common
@@ -44,6 +46,14 @@ import System.Win32.Process (getProcessId)
 
 #include <fcntl.h>     /* for _O_BINARY */
 
+##if defined(i386_HOST_ARCH)
+## define WINDOWS_CCONV stdcall
+##elif defined(x86_64_HOST_ARCH)
+## define WINDOWS_CCONV ccall
+##else
+## error Unknown mingw32 arch
+##endif
+
 throwErrnoIfBadPHandle :: String -> IO PHANDLE -> IO PHANDLE
 throwErrnoIfBadPHandle = throwErrnoIfNull
 
@@ -72,15 +82,7 @@ processHandleFinaliser m =
 closePHANDLE :: PHANDLE -> IO ()
 closePHANDLE ph = c_CloseHandle ph
 
-foreign import
-#if defined(i386_HOST_ARCH)
-  stdcall
-#elif defined(x86_64_HOST_ARCH)
-  ccall
-#else
-#error "Unknown architecture"
-#endif
-  unsafe "CloseHandle"
+foreign import WINDOWS_CCONV unsafe "CloseHandle"
   c_CloseHandle
         :: PHANDLE
         -> IO ()
@@ -183,13 +185,38 @@ stopDelegateControlC = return ()
 
 -- End no-op functions
 
+
+-- ----------------------------------------------------------------------------
+-- Interface to C I/O CP bits
+
+terminateJob :: ProcessHandle -> CUInt -> IO Bool
+terminateJob jh ecode =
+    withProcessHandle jh $ \p_ -> do
+        case p_ of
+            ClosedHandle _ -> return False
+            OpenHandle   h -> c_terminateJobObject h ecode
+
+waitForJobCompletion :: ProcessHandle
+                     -> ProcessHandle
+                     -> CInt
+                     -> IO (Maybe CInt)
+waitForJobCompletion jh ioh timeout =
+    withProcessHandle jh  $ \p_  ->
+    withProcessHandle ioh $ \io_ ->
+        case (p_, io_) of
+          (OpenHandle job, OpenHandle io) ->
+            alloca $ \p_exitCode -> Just <$>
+              c_waitForJobCompletion job io timeout p_exitCode
+          _ -> return Nothing
+
 -- ----------------------------------------------------------------------------
 -- Interface to C bits
 
-foreign import ccall unsafe "terminateJob"
-  c_terminateJob
+foreign import WINDOWS_CCONV unsafe "TerminateJobObject"
+  c_terminateJobObject
         :: PHANDLE
-        -> IO CInt
+        -> CUInt
+        -> IO Bool
 
 foreign import ccall interruptible "waitForJobCompletion" -- NB. safe - can block
   c_waitForJobCompletion
