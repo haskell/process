@@ -69,7 +69,7 @@ library
     ghc-options: -Wall
 
     build-depends: base      >= 4.4 && < 4.11,
-                   directory >= 1.1 && < 1.3,
+                   directory >= 1.1 && < 1.4,
                    filepath  >= 1.2 && < 1.5,
                    deepseq   >= 1.1 && < 1.5
 
