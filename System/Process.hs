@@ -210,6 +210,7 @@ createProcess cp = do
 -- > withCreateProcess (proc cmd args) { ... }  $ \_ _ _ ph -> do
 -- >   ...
 --
+-- @since 1.4.3.0
 -}
 withCreateProcess
   :: CreateProcess

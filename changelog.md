@@ -1,6 +1,6 @@
 # Changelog for [`process` package](http://hackage.haskell.org/package/process)
 
-## Unreleased
+## 1.4.3.0 *December 2016*
 
 * New exposed `withCreateProcess`
 * Derive `Show` and `Eq` for `CreateProcess`, `CmdSpec`, and `StdStream`
