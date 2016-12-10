@@ -9,4 +9,3 @@ main
       maybe (ExitFailure (-1)) mkExitCode <$> waitForJobCompletion j io timeout_Infinite >>= print
         where mkExitCode code | code == 0 = ExitSuccess
                               | otherwise = ExitFailure $ fromIntegral code
-      
