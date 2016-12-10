@@ -37,6 +37,7 @@ module System.Process.Internals (
 #else
     terminateJob,
     waitForJobCompletion,
+    timeout_Infinite,
 #endif
     withFilePathException, withCEnvironment,
     translate,

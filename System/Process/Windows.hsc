@@ -16,6 +16,7 @@ module System.Process.Windows
     , interruptProcessGroupOfInternal
     , terminateJob
     , waitForJobCompletion
+    , timeout_Infinite
     ) where
 
 import System.Process.Common
@@ -195,6 +196,9 @@ terminateJob jh ecode =
         case p_ of
             ClosedHandle _ -> return False
             OpenHandle   h -> c_terminateJobObject h ecode
+
+timeout_Infinite :: CUInt
+timeout_Infinite = 0xFFFFFFFF
 
 waitForJobCompletion :: ProcessHandle
                      -> ProcessHandle

@@ -879,7 +879,7 @@ executeAndWait :: String -> CreateProcess -> IO ExitCode
 executeAndWait name proc_ = do
 #if defined(WINDOWS)
   (_,_,_,_,Just job,Just iocp) <- createProcessExt_ name True proc_
-  maybe (ExitFailure (-1)) mkExitCode <$> waitForJobCompletion job iocp (-1)
+  maybe (ExitFailure (-1)) mkExitCode <$> waitForJobCompletion job iocp timeout_Infinite
     where mkExitCode code | code == 0 = ExitSuccess
                           | otherwise = ExitFailure $ fromIntegral code
 #else

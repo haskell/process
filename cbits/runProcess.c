@@ -798,8 +798,7 @@ waitForJobCompletion (HANDLE hJob, HANDLE ioPort, DWORD timeout, int *pExitCode)
     DWORD CompletionCode;
     ULONG_PTR CompletionKey;
     LPOVERLAPPED Overlapped;
-    *pExitCode = 5;
-    HANDLE lastProc;
+    *pExitCode = 0;
 
     // We have to loop here. It's a blocking call, but
     // we get notified on each completion event. So if it's
@@ -815,7 +814,6 @@ waitForJobCompletion (HANDLE hJob, HANDLE ioPort, DWORD timeout, int *pExitCode)
         {
             case JOB_OBJECT_MSG_NEW_PROCESS:
                 // A new child process is born.
-                lastProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, TRUE, (DWORD)(uintptr_t)Overlapped);
                 break;
             case JOB_OBJECT_MSG_ABNORMAL_EXIT_PROCESS:
             case JOB_OBJECT_MSG_EXIT_PROCESS:
@@ -823,12 +821,12 @@ waitForJobCompletion (HANDLE hJob, HANDLE ioPort, DWORD timeout, int *pExitCode)
                 // A child process has just exited.
                 // Read exit code, We assume the last process to exit
                 // is the process whose exit code we're interested in.
-                if (GetExitCodeProcess (lastProc, (DWORD *)pExitCode) == 0)
+                HANDLE pHwnd = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, TRUE, (DWORD)(uintptr_t)Overlapped);
+                if (GetExitCodeProcess(pHwnd, (DWORD *)pExitCode) == 0)
                 {
                     maperrno();
-                    return -1;
+                    return 1;
                 }
-                printf("Exit(0x%x): %d\n", (HANDLE)Overlapped, *pExitCode);
             }
             break;
             case JOB_OBJECT_MSG_ACTIVE_PROCESS_ZERO:
