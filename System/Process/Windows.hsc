@@ -162,8 +162,8 @@ createProcess_Internal_ext fun useJob CreateProcess{ cmdspec = cmdsp,
      hndStdError  <- mbPipe mb_stderr pfdStdError  ReadMode
 
      ph     <- mkProcessHandle proc_handle
-     phJob  <- mkProcessHandle' hJob
-     phIOCP <- mkProcessHandle' hIOcpPort
+     phJob  <- mkProcessHandle' =<< peek hJob
+     phIOCP <- mkProcessHandle' =<< peek hIOcpPort
      return (hndStdInput, hndStdOutput, hndStdError, ph, phJob, phIOCP)
 
 {-# NOINLINE runInteractiveProcess_lock #-}
@@ -198,15 +198,17 @@ terminateJob jh ecode =
 
 waitForJobCompletion :: ProcessHandle
                      -> ProcessHandle
-                     -> CInt
+                     -> CUInt
                      -> IO (Maybe CInt)
 waitForJobCompletion jh ioh timeout =
     withProcessHandle jh  $ \p_  ->
     withProcessHandle ioh $ \io_ ->
         case (p_, io_) of
           (OpenHandle job, OpenHandle io) ->
-            alloca $ \p_exitCode -> Just <$>
-              c_waitForJobCompletion job io timeout p_exitCode
+            alloca $ \p_exitCode -> do ret <- c_waitForJobCompletion job io timeout p_exitCode
+                                       if ret == 0
+                                          then Just <$> peek p_exitCode
+                                          else return Nothing
           _ -> return Nothing
 
 -- ----------------------------------------------------------------------------
@@ -222,7 +224,7 @@ foreign import ccall interruptible "waitForJobCompletion" -- NB. safe - can bloc
   c_waitForJobCompletion
         :: PHANDLE
         -> PHANDLE
-        -> CInt
+        -> CUInt
         -> Ptr CInt
         -> IO CInt
 
@@ -239,8 +241,8 @@ foreign import ccall unsafe "runInteractiveProcess"
         -> Ptr FD
         -> CInt          -- flags
         -> Bool          -- useJobObject
-        -> PHANDLE       -- Handle to Job
-        -> PHANDLE       -- Handle to I/O Completion Port
+        -> Ptr PHANDLE       -- Handle to Job
+        -> Ptr PHANDLE       -- Handle to I/O Completion Port
         -> IO PHANDLE
 
 commandToProcess

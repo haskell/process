@@ -1,6 +1,8 @@
 #include <stdio.h>
+#include <windows.h>
 
 int main() {
-    printf("ok\n");
-    return 0;
+    Sleep(2000);
+    printf("bye bye\n");
+    return 120;
 }

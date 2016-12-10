@@ -518,7 +518,7 @@ createJob ()
     ZeroMemory(&jeli, sizeof(JOBOBJECT_EXTENDED_LIMIT_INFORMATION));
     // Configure all child processes associated with the job to terminate when the
     // Last process in the job terminates. This prevent half dead processes.
-    jeli.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+    //jeli.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
 
     if (SetInformationJobObject (hJob, JobObjectExtendedLimitInformation,
                                  &jeli, sizeof(JOBOBJECT_EXTENDED_LIMIT_INFORMATION)))
@@ -577,6 +577,7 @@ runInteractiveProcess (wchar_t *cmd, wchar_t *workingDirectory,
     ZeroMemory(&sInfo, sizeof(sInfo));
     sInfo.cb = sizeof(sInfo);
     sInfo.dwFlags = STARTF_USESTDHANDLES;
+    ZeroMemory(&pInfo, sizeof(pInfo));
 
     if (fdStdIn == -1) {
         if (!mkAnonPipe(&hStdInputRead,  TRUE, &hStdInputWrite,  FALSE))
@@ -671,10 +672,16 @@ runInteractiveProcess (wchar_t *cmd, wchar_t *workingDirectory,
     // the thread suspended.
     if (useJobObject)
     {
-        printf("** NO CALL\n");
         dwFlags |= CREATE_SUSPENDED;
         *hJob = createJob();
         if (!*hJob)
+        {
+            goto cleanup_err;
+        }
+
+        // Create the completion port and attach it to the job
+        *hIOcpPort = createCompletionPort(*hJob);
+        if (!*hIOcpPort)
         {
             goto cleanup_err;
         }
@@ -685,20 +692,14 @@ runInteractiveProcess (wchar_t *cmd, wchar_t *workingDirectory,
             goto cleanup_err;
     }
 
-    if (useJobObject && hJob)
+    if (useJobObject && hJob && *hJob)
     {
-        printf("** NO CALL\n");
-        // Create the completion port and attach it to the job
-        *hIOcpPort = createCompletionPort (*hJob);
-        if (!*hIOcpPort)
-        {
-            goto cleanup_err;
-        }
         // Then associate the process and the job;
         if (!AssignProcessToJobObject (*hJob, pInfo.hProcess))
         {
             goto cleanup_err;
         }
+
         // And now that we've associated the new process with the job
         // we can actively resume it.
         ResumeThread (pInfo.hThread);
@@ -728,6 +729,7 @@ cleanup_err:
     if (hStdErrorWrite  != INVALID_HANDLE_VALUE) CloseHandle(hStdErrorWrite);
     if (useJobObject && hJob      && *hJob     ) CloseHandle(*hJob);
     if (useJobObject && hIOcpPort && *hIOcpPort) CloseHandle(*hIOcpPort);
+
     maperrno();
     return NULL;
 }
@@ -796,7 +798,8 @@ waitForJobCompletion (HANDLE hJob, HANDLE ioPort, DWORD timeout, int *pExitCode)
     DWORD CompletionCode;
     ULONG_PTR CompletionKey;
     LPOVERLAPPED Overlapped;
-    *pExitCode = 0;
+    *pExitCode = 5;
+    HANDLE lastProc;
 
     // We have to loop here. It's a blocking call, but
     // we get notified on each completion event. So if it's
@@ -812,17 +815,22 @@ waitForJobCompletion (HANDLE hJob, HANDLE ioPort, DWORD timeout, int *pExitCode)
         {
             case JOB_OBJECT_MSG_NEW_PROCESS:
                 // A new child process is born.
+                lastProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, TRUE, (DWORD)(uintptr_t)Overlapped);
                 break;
             case JOB_OBJECT_MSG_ABNORMAL_EXIT_PROCESS:
             case JOB_OBJECT_MSG_EXIT_PROCESS:
+            {
                 // A child process has just exited.
                 // Read exit code, We assume the last process to exit
                 // is the process whose exit code we're interested in.
-                if (GetExitCodeProcess((HANDLE)Overlapped, (DWORD *)pExitCode) == 0)
+                if (GetExitCodeProcess (lastProc, (DWORD *)pExitCode) == 0)
                 {
                     maperrno();
+                    return -1;
                 }
-                break;
+                printf("Exit(0x%x): %d\n", (HANDLE)Overlapped, *pExitCode);
+            }
+            break;
             case JOB_OBJECT_MSG_ACTIVE_PROCESS_ZERO:
                 // All processes in the tree are done.
                 return 0;
