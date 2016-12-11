@@ -6,8 +6,8 @@ TOP=../../../testsuite
 include $(TOP)/mk/boilerplate.mk
 include $(TOP)/mk/test.mk
 
-.PHONY: T12725
-T12725:
+.PHONY: T9775
+T9775:
 	'$(TEST_CC)' ok.c -o ok.exe
 	'$(TEST_CC)' main.c -o main.exe
 
