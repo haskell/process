@@ -2,7 +2,7 @@
 # assumes the package is part of a GHC build tree with the testsuite
 # installed in ../../../testsuite.
 
-TOP=../../../testsuite
+TOP=../../../../testsuite
 include $(TOP)/mk/boilerplate.mk
 include $(TOP)/mk/test.mk
 
