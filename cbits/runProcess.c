@@ -161,7 +161,7 @@ runInteractiveProcess (char *const args[],
         if ((flags & RUN_PROCESS_IN_NEW_GROUP) != 0) {
             setpgid(0, 0);
         }
-        
+
         if ( childGroup) {
             if ( setgid( *childGroup) != 0) {
                 // ERROR
@@ -240,9 +240,9 @@ runInteractiveProcess (char *const args[],
             }
             // XXX Not the pipe
             for (i = 3; i < max_fd; i++) {
-		if (i != forkCommunicationFds[1]) {
-		    close(i);
-		}
+                if (i != forkCommunicationFds[1]) {
+                    close(i);
+                }
             }
         }
 
