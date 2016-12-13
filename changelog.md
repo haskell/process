@@ -1,5 +1,10 @@
 # Changelog for [`process` package](http://hackage.haskell.org/package/process)
 
+## Unreleased changes
+
+* Bug fix: Don't close already closed pipes
+  [#81](https://github.com/haskell/process/pull/81)
+
 ## 1.4.3.0 *December 2016*
 
 * New exposed `withCreateProcess`
