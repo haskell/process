@@ -85,8 +85,11 @@ extern ProcHandle runInteractiveProcess( wchar_t *cmd,
                                          HANDLE *hJob,
                                          HANDLE *hIOcpPort );
 
+typedef void(*setterDef)(DWORD, HANDLE);
+typedef HANDLE(*getterDef)(DWORD);
+
 extern int terminateJob( ProcHandle handle );
-extern int waitForJobCompletion( HANDLE hJob, HANDLE ioPort, DWORD timeout, int *pExitCode );
+extern int waitForJobCompletion( HANDLE hJob, HANDLE ioPort, DWORD timeout, int *pExitCode, setterDef set, getterDef get );
 
 #endif
 

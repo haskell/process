@@ -792,8 +792,9 @@ waitForProcess (ProcHandle handle, int *pret)
     return -1;
 }
 
+
 int
-waitForJobCompletion (HANDLE hJob, HANDLE ioPort, DWORD timeout, int *pExitCode)
+waitForJobCompletion ( HANDLE hJob, HANDLE ioPort, DWORD timeout, int *pExitCode, setterDef set, getterDef get )
 {
     DWORD CompletionCode;
     ULONG_PTR CompletionKey;
@@ -813,15 +814,23 @@ waitForJobCompletion (HANDLE hJob, HANDLE ioPort, DWORD timeout, int *pExitCode)
         switch (CompletionCode)
         {
             case JOB_OBJECT_MSG_NEW_PROCESS:
+            {
                 // A new child process is born.
-                break;
+                // Retrieve and save the process handle from the process id.
+                // We'll need it for later but we can't retrieve it after the
+                // process has exited.
+                DWORD pid    = (DWORD)(uintptr_t)Overlapped;
+                HANDLE pHwnd = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, TRUE, pid);
+                set(pid, pHwnd);
+            }
+            break;
             case JOB_OBJECT_MSG_ABNORMAL_EXIT_PROCESS:
             case JOB_OBJECT_MSG_EXIT_PROCESS:
             {
                 // A child process has just exited.
                 // Read exit code, We assume the last process to exit
                 // is the process whose exit code we're interested in.
-                HANDLE pHwnd = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, TRUE, (DWORD)(uintptr_t)Overlapped);
+                HANDLE pHwnd = get((DWORD)(uintptr_t)Overlapped);
                 if (GetExitCodeProcess(pHwnd, (DWORD *)pExitCode) == 0)
                 {
                     maperrno();

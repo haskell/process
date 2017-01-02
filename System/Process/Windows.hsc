@@ -22,6 +22,7 @@ import System.Process.Common
 import Control.Concurrent
 import Control.Exception
 import Data.Bits
+import Data.Maybe
 import Foreign.C
 import Foreign.Marshal
 import Foreign.Ptr
@@ -197,13 +198,31 @@ waitForJobCompletion :: PHANDLE
                      -> CUInt
                      -> IO (Maybe CInt)
 waitForJobCompletion job io timeout =
-            alloca $ \p_exitCode -> do ret <- c_waitForJobCompletion job io timeout p_exitCode
-                                       if ret == 0
-                                          then Just <$> peek p_exitCode
-                                          else return Nothing
+            alloca $ \p_exitCode -> do
+              items <- newMVar $ []
+              setter <- mkSetter (insertItem items)
+              getter <- mkGetter (getItem items)
+              ret <- c_waitForJobCompletion job io timeout p_exitCode setter getter
+              if ret == 0
+                 then Just <$> peek p_exitCode
+                 else return Nothing
+
+insertItem :: Eq k => MVar [(k, v)] -> k -> v -> IO ()
+insertItem env_ k v = modifyMVar_ env_ (return . ((k, v):))
+
+getItem :: Eq k => MVar [(k, v)] -> k -> IO v
+getItem env_ k = withMVar env_ (\m -> return $ fromJust $ lookup k m)
 
 -- ----------------------------------------------------------------------------
 -- Interface to C bits
+
+type SetterDef = CUInt -> Ptr () -> IO ()
+type GetterDef = CUInt -> IO (Ptr ())
+
+foreign import ccall "wrapper"
+  mkSetter :: SetterDef -> IO (FunPtr SetterDef)
+foreign import ccall "wrapper"
+  mkGetter :: GetterDef -> IO (FunPtr GetterDef)
 
 foreign import WINDOWS_CCONV unsafe "TerminateJobObject"
   c_terminateJobObject
@@ -217,6 +236,8 @@ foreign import ccall interruptible "waitForJobCompletion" -- NB. safe - can bloc
         -> PHANDLE
         -> CUInt
         -> Ptr CInt
+        -> FunPtr (SetterDef)
+        -> FunPtr (GetterDef)
         -> IO CInt
 
 foreign import ccall unsafe "runInteractiveProcess"
