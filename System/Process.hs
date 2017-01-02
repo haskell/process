@@ -43,7 +43,6 @@ module System.Process (
     readCreateProcessWithExitCode,
     readProcessWithExitCode,
     withCreateProcess,
-    executeAndWait,
 
     -- ** Related utilities
     showCommandForUser,
@@ -116,7 +115,8 @@ proc cmd args = CreateProcess { cmdspec = RawCommand cmd args,
                                 create_new_console = False,
                                 new_session = False,
                                 child_group = Nothing,
-                                child_user = Nothing }
+                                child_user = Nothing,
+                                use_process_jobs = False }
 
 -- | Construct a 'CreateProcess' record for passing to 'createProcess',
 -- representing a command to be passed to the shell.
@@ -134,7 +134,8 @@ shell str = CreateProcess { cmdspec = ShellCommand str,
                             create_new_console = False,
                             new_session = False,
                             child_group = Nothing,
-                            child_user = Nothing }
+                            child_user = Nothing,
+                            use_process_jobs = False }
 
 {- |
 This is the most general way to spawn an external process.  The
@@ -191,7 +192,7 @@ createProcess cp = do
   maybeCloseStd (std_in  cp)
   maybeCloseStd (std_out cp)
   maybeCloseStd (std_err cp)
-  return r
+  return $ unwrapHandles r
  where
   maybeCloseStd :: StdStream -> IO ()
   maybeCloseStd (UseHandle hdl)
@@ -229,7 +230,7 @@ withCreateProcess_
   -> (Maybe Handle -> Maybe Handle -> Maybe Handle -> ProcessHandle -> IO a)
   -> IO a
 withCreateProcess_ fun c action =
-    C.bracketOnError (createProcess_ fun c) cleanupProcess
+    C.bracketOnError (unwrapHandles <$> createProcess_ fun c) cleanupProcess
                      (\(m_in, m_out, m_err, ph) -> action m_in m_out m_err ph)
 
 
@@ -268,18 +269,16 @@ cleanupProcess (mb_stdin, mb_stdout, mb_stderr,
 --
 -- @since 1.2.0.0
 spawnProcess :: FilePath -> [String] -> IO ProcessHandle
-spawnProcess cmd args = do
-    (_,_,_,p) <- createProcess_ "spawnProcess" (proc cmd args)
-    return p
+spawnProcess cmd args =
+    procHandle <$> createProcess_ "spawnProcess" (proc cmd args)
 
 -- | Creates a new process to run the specified shell command.
 -- It does not wait for the program to finish, but returns the 'ProcessHandle'.
 --
 -- @since 1.2.0.0
 spawnCommand :: String -> IO ProcessHandle
-spawnCommand cmd = do
-    (_,_,_,p) <- createProcess_ "spawnCommand" (shell cmd)
-    return p
+spawnCommand cmd =
+    procHandle <$> createProcess_ "spawnCommand" (shell cmd)
 
 
 -- ----------------------------------------------------------------------------
@@ -595,8 +594,9 @@ waitForProcess ph@(ProcessHandle _ delegating_ctlc) = do
           throwErrnoIfMinus1Retry_ "waitForProcess" (c_waitForProcess h pret)
           modifyProcessHandle ph $ \p_' ->
             case p_' of
-              ClosedHandle e -> return (p_',e)
-              OpenHandle ph' -> do
+              ClosedHandle e  -> return (p_',e)
+              OpenExtHandle{} -> error "waitForProcess handle mismatch."
+              OpenHandle ph'  -> do
                 closePHANDLE ph'
                 code <- peek pret
                 let e = if (code == 0)
@@ -606,6 +606,10 @@ waitForProcess ph@(ProcessHandle _ delegating_ctlc) = do
         when delegating_ctlc $
           endDelegateControlC e
         return e
+    OpenExtHandle _ job iocp -> do
+        maybe (ExitFailure (-1)) mkExitCode <$> waitForJobCompletion job iocp timeout_Infinite
+      where mkExitCode code | code == 0 = ExitSuccess
+                            | otherwise = ExitFailure $ fromIntegral code
 
 
 -- ----------------------------------------------------------------------------
@@ -625,7 +629,8 @@ getProcessExitCode ph@(ProcessHandle _ delegating_ctlc) = do
   (m_e, was_open) <- modifyProcessHandle ph $ \p_ ->
     case p_ of
       ClosedHandle e -> return (p_, (Just e, False))
-      OpenHandle h ->
+      open -> do
+        let h = getHandle open
         alloca $ \pExitCode -> do
             res <- throwErrnoIfMinus1Retry "getProcessExitCode" $
                         c_getProcessExitCode h pExitCode
@@ -641,6 +646,10 @@ getProcessExitCode ph@(ProcessHandle _ delegating_ctlc) = do
     Just e | was_open && delegating_ctlc -> endDelegateControlC e
     _                                    -> return ()
   return m_e
+    where getHandle :: ProcessHandle__ -> PHANDLE
+          getHandle (OpenHandle        h) = h
+          getHandle (ClosedHandle      _) = error "getHandle: handle closed."
+          getHandle (OpenExtHandle h _ _) = h
 
 
 -- ----------------------------------------------------------------------------
@@ -665,8 +674,9 @@ terminateProcess :: ProcessHandle -> IO ()
 terminateProcess ph = do
   withProcessHandle ph $ \p_ ->
     case p_ of
-      ClosedHandle _ -> return ()
-      OpenHandle h -> do
+      ClosedHandle  _ -> return ()
+      OpenExtHandle{} -> terminateJob ph 1 >> return ()
+      OpenHandle    h -> do
         throwErrnoIfMinus1Retry_ "terminateProcess" $ c_terminateProcess h
         return ()
         -- does not close the handle, we might want to try terminating it
@@ -715,9 +725,8 @@ runCommand
   :: String
   -> IO ProcessHandle
 
-runCommand string = do
-  (_,_,_,ph) <- createProcess_ "runCommand" (shell string)
-  return ph
+runCommand string =
+  procHandle <$> createProcess_ "runCommand" (shell string)
 
 
 -- ----------------------------------------------------------------------------
@@ -747,8 +756,7 @@ runProcess
   -> IO ProcessHandle
 
 runProcess cmd args mb_cwd mb_env mb_stdin mb_stdout mb_stderr = do
-  (_,_,_,ph) <-
-      createProcess_ "runProcess"
+  r <- createProcess_ "runProcess"
          (proc cmd args){ cwd = mb_cwd,
                           env = mb_env,
                           std_in  = mbToStd mb_stdin,
@@ -757,7 +765,7 @@ runProcess cmd args mb_cwd mb_env mb_stdin mb_stdout mb_stderr = do
   maybeClose mb_stdin
   maybeClose mb_stdout
   maybeClose mb_stderr
-  return ph
+  return $ procHandle r
  where
   maybeClose :: Maybe Handle -> IO ()
   maybeClose (Just  hdl)
@@ -816,7 +824,7 @@ runInteractiveProcess1
   -> IO (Handle,Handle,Handle,ProcessHandle)
 runInteractiveProcess1 fun cmd = do
   (mb_in, mb_out, mb_err, p) <-
-      createProcess_ fun
+      unwrapHandles <$> createProcess_ fun
            cmd{ std_in  = CreatePipe,
                 std_out = CreatePipe,
                 std_err = CreatePipe }
@@ -853,7 +861,7 @@ when the process died as the result of a signal.
 -}
 system :: String -> IO ExitCode
 system "" = ioException (ioeSetErrorString (mkIOError InvalidArgument "system" Nothing Nothing) "null command")
-system str = executeAndWait "system" (shell str) { delegate_ctlc = True }
+system str = procHandle <$> createProcess_ "system" (shell str) { delegate_ctlc = True } >>= waitForProcess
 
 
 --TODO: in a later release {-# DEPRECATED rawSystem "Use 'callProcess' (or 'spawnProcess' and 'waitForProcess') instead" #-}
@@ -867,22 +875,4 @@ It will therefore behave more portably between operating systems than 'system'.
 The return codes and possible failures are the same as for 'system'.
 -}
 rawSystem :: String -> [String] -> IO ExitCode
-rawSystem cmd args = executeAndWait "rawSystem" (proc cmd args) { delegate_ctlc = True }
-
--- ---------------------------------------------------------------------------
--- executeAndWait
-
--- | Create a new process and wait for it's termination.
---
--- @since 1.4.?.?
-executeAndWait :: String -> CreateProcess -> IO ExitCode
-executeAndWait name proc_ = do
-#if defined(WINDOWS)
-  (_,_,_,_,Just job,Just iocp) <- createProcessExt_ name True proc_
-  maybe (ExitFailure (-1)) mkExitCode <$> waitForJobCompletion job iocp timeout_Infinite
-    where mkExitCode code | code == 0 = ExitSuccess
-                          | otherwise = ExitFailure $ fromIntegral code
-#else
-  (_,_,_,p) <- createProcess_ name proc_
-  waitForProcess p
-#endif
+rawSystem cmd args = procHandle <$> createProcess_ "rawSystem" (proc cmd args) { delegate_ctlc = True } >>= waitForProcess

@@ -24,13 +24,14 @@ module System.Process.Internals (
     PHANDLE, closePHANDLE, mkProcessHandle,
     modifyProcessHandle, withProcessHandle,
     CreateProcess(..),
-    CmdSpec(..), StdStream(..),
+    CmdSpec(..), StdStream(..), ProcRetHandles (..),
     createProcess_,
     runGenProcess_, --deprecated
     fdToHandle,
     startDelegateControlC,
     endDelegateControlC,
     stopDelegateControlC,
+    unwrapHandles,
 #ifndef WINDOWS
     pPrPr_disableITimers, c_execvpe,
     ignoreSignal, defaultSignal,
@@ -44,7 +45,6 @@ module System.Process.Internals (
     createPipe,
     createPipeFd,
     interruptProcessGroupOf,
-    createProcessExt_,
     ) where
 
 import Foreign.C
@@ -70,24 +70,8 @@ import System.Process.Posix
 -- * This function takes an extra @String@ argument to be used in creating
 --   error messages.
 --
--- This function has been available from the "System.Process.Internals" module
--- for some time, and is part of the "System.Process" module since version
--- 1.2.1.0.
---
--- @since 1.2.1.0
-createProcess_
-  :: String                     -- ^ function name (for error messages)
-  -> CreateProcess
-  -> IO (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)
-createProcess_ = createProcess_Internal
-{-# INLINE createProcess_ #-}
-
--- ----------------------------------------------------------------------------
--- | This function is almost identical to
--- 'createProcess_'. The only differences are:
---
--- * A boolean argument can be given in order to create an I/O cp port to monitor
---   a process tree's progress on Windows.
+-- * 'use_process_jobs' can set in CreateProcess since 1.4.?.? in order to create
+--   an I/O completion port to monitor a process tree's progress on Windows.
 --
 -- The function also returns two new handles:
 --   * an I/O Completion Port handle on which events
@@ -97,21 +81,18 @@ createProcess_ = createProcess_Internal
 --
 --  On POSIX platforms these two new handles will always be Nothing
 --
--- @since 1.4.?.?
-createProcessExt_
-  :: String   -- ^ function name (for error messages)
-  -> Bool     -- ^ Use I/O CP port for monitoring
+--
+-- This function has been available from the "System.Process.Internals" module
+-- for some time, and is part of the "System.Process" module since version
+-- 1.2.1.0.
+--
+-- @since 1.2.1.0
+createProcess_
+  :: String                     -- ^ function name (for error messages)
   -> CreateProcess
-  -> IO (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle,
-         Maybe ProcessHandle, Maybe ProcessHandle)
-#ifdef WINDOWS
-createProcessExt_ = createProcess_Internal_ext
-#else
-createProcessExt_ name _ proc_
-  = do (hndStdInput, hndStdOutput, hndStdError, ph) <- createProcess_ nme proc_
-        return ((hndStdInput, hndStdOutput, hndStdError, ph, Nothing, Nothing)
-#endif
-{-# INLINE createProcessExt_ #-}
+  -> IO ProcRetHandles
+createProcess_ = createProcess_Internal
+{-# INLINE createProcess_ #-}
 
 -- ------------------------------------------------------------------------
 -- Escaping commands for shells
@@ -172,6 +153,10 @@ translate :: String -> String
 translate = translateInternal
 {-# INLINE translate #-}
 
+-- ---------------------------------------------------------------------------
+-- unwrapHandles
+unwrapHandles :: ProcRetHandles -> (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)
+unwrapHandles r = (hStdInput r, hStdOutput r, hStdError r, procHandle r)
 
 -- ----------------------------------------------------------------------------
 -- Deprecated / compat
@@ -186,8 +171,8 @@ runGenProcess_
  -> IO (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)
 -- On Windows, setting delegate_ctlc has no impact
 runGenProcess_ fun c (Just sig) (Just sig') | isDefaultSignal sig && sig == sig'
-                         = createProcess_ fun c { delegate_ctlc = True }
-runGenProcess_ fun c _ _ = createProcess_ fun c
+                         = unwrapHandles <$> createProcess_ fun c { delegate_ctlc = True }
+runGenProcess_ fun c _ _ = unwrapHandles <$> createProcess_ fun c
 
 -- ---------------------------------------------------------------------------
 -- createPipe

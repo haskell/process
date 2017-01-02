@@ -4,7 +4,6 @@ module System.Process.Windows
     ( mkProcessHandle
     , translateInternal
     , createProcess_Internal
-    , createProcess_Internal_ext
     , withCEnvironment
     , closePHANDLE
     , startDelegateControlC
@@ -60,23 +59,22 @@ throwErrnoIfBadPHandle = throwErrnoIfNull
 
 -- On Windows, we have to close this HANDLE when it is no longer required,
 -- hence we add a finalizer to it
-mkProcessHandle :: PHANDLE -> IO ProcessHandle
-mkProcessHandle h = do
-   m <- newMVar (OpenHandle h)
+mkProcessHandle :: PHANDLE -> PHANDLE -> PHANDLE -> IO ProcessHandle
+mkProcessHandle h job io = do
+   m <- if job == nullPtr && io == nullPtr
+           then newMVar (OpenHandle h)
+           else newMVar (OpenExtHandle h job io)
    _ <- mkWeakMVar m (processHandleFinaliser m)
    return (ProcessHandle m False)
-
-mkProcessHandle' :: PHANDLE -> IO (Maybe ProcessHandle)
-mkProcessHandle' h = do
-  if h /= nullPtr
-     then Just <$> mkProcessHandle h
-     else return $ Nothing
 
 processHandleFinaliser :: MVar ProcessHandle__ -> IO ()
 processHandleFinaliser m =
    modifyMVar_ m $ \p_ -> do
         case p_ of
-          OpenHandle ph -> closePHANDLE ph
+          OpenHandle ph           -> closePHANDLE ph
+          OpenExtHandle ph job io -> closePHANDLE ph
+                                  >> closePHANDLE job
+                                  >> closePHANDLE io
           _ -> return ()
         return (error "closed process handle")
 
@@ -91,21 +89,9 @@ foreign import WINDOWS_CCONV unsafe "CloseHandle"
 createProcess_Internal
   :: String                     -- ^ function name (for error messages)
   -> CreateProcess
-  -> IO (Maybe Handle, Maybe Handle,
-         Maybe Handle, ProcessHandle)
-createProcess_Internal fun cp
- = do (hndStdInput, hndStdOutput, hndStdError, ph, _, _) <- createProcess_Internal_ext fun False cp
-      return (hndStdInput, hndStdOutput, hndStdError, ph)
+  -> IO ProcRetHandles
 
-createProcess_Internal_ext
-  :: String                     -- ^ function name (for error messages)
-  -> Bool                       -- ^ use job to manage process tree
-  -> CreateProcess
-  -> IO (Maybe Handle, Maybe Handle,
-         Maybe Handle, ProcessHandle,
-         Maybe ProcessHandle, Maybe ProcessHandle)
-
-createProcess_Internal_ext fun useJob CreateProcess{ cmdspec = cmdsp,
+createProcess_Internal fun CreateProcess{ cmdspec = cmdsp,
                                     cwd = mb_cwd,
                                     env = mb_env,
                                     std_in = mb_stdin,
@@ -116,7 +102,8 @@ createProcess_Internal_ext fun useJob CreateProcess{ cmdspec = cmdsp,
                                     delegate_ctlc = _ignored,
                                     detach_console = mb_detach_console,
                                     create_new_console = mb_create_new_console,
-                                    new_session = mb_new_session }
+                                    new_session = mb_new_session,
+                                    use_process_jobs = use_job }
  = do
   let lenPtr = sizeOf (undefined :: WordPtr)
   (cmd, cmdline) <- commandToProcess cmdsp
@@ -154,7 +141,7 @@ createProcess_Internal_ext fun useJob CreateProcess{ cmdspec = cmdsp,
                                 .|.(if mb_detach_console then RUN_PROCESS_DETACHED else 0)
                                 .|.(if mb_create_new_console then RUN_PROCESS_NEW_CONSOLE else 0)
                                 .|.(if mb_new_session then RUN_PROCESS_NEW_SESSION else 0))
-                                useJob
+                                use_job
                                 hJob
                                 hIOcpPort
 
@@ -162,10 +149,14 @@ createProcess_Internal_ext fun useJob CreateProcess{ cmdspec = cmdsp,
      hndStdOutput <- mbPipe mb_stdout pfdStdOutput ReadMode
      hndStdError  <- mbPipe mb_stderr pfdStdError  ReadMode
 
-     ph     <- mkProcessHandle proc_handle
-     phJob  <- mkProcessHandle' =<< peek hJob
-     phIOCP <- mkProcessHandle' =<< peek hIOcpPort
-     return (hndStdInput, hndStdOutput, hndStdError, ph, phJob, phIOCP)
+     phJob  <- peek hJob
+     phIOCP <- peek hIOcpPort
+     ph     <- mkProcessHandle proc_handle phJob phIOCP
+     return ProcRetHandles { hStdInput  = hndStdInput
+                           , hStdOutput = hndStdOutput
+                           , hStdError  = hndStdError
+                           , procHandle = ph
+                           }
 
 {-# NOINLINE runInteractiveProcess_lock #-}
 runInteractiveProcess_lock :: MVar ()
@@ -194,26 +185,22 @@ terminateJob :: ProcessHandle -> CUInt -> IO Bool
 terminateJob jh ecode =
     withProcessHandle jh $ \p_ -> do
         case p_ of
-            ClosedHandle _ -> return False
-            OpenHandle   h -> c_terminateJobObject h ecode
+            ClosedHandle        _ -> return False
+            OpenHandle          _ -> return False
+            OpenExtHandle _ job _ -> c_terminateJobObject job ecode
 
 timeout_Infinite :: CUInt
 timeout_Infinite = 0xFFFFFFFF
 
-waitForJobCompletion :: ProcessHandle
-                     -> ProcessHandle
+waitForJobCompletion :: PHANDLE
+                     -> PHANDLE
                      -> CUInt
                      -> IO (Maybe CInt)
-waitForJobCompletion jh ioh timeout =
-    withProcessHandle jh  $ \p_  ->
-    withProcessHandle ioh $ \io_ ->
-        case (p_, io_) of
-          (OpenHandle job, OpenHandle io) ->
+waitForJobCompletion job io timeout =
             alloca $ \p_exitCode -> do ret <- c_waitForJobCompletion job io timeout p_exitCode
                                        if ret == 0
                                           then Just <$> peek p_exitCode
                                           else return Nothing
-          _ -> return Nothing
 
 -- ----------------------------------------------------------------------------
 -- Interface to C bits
@@ -355,15 +342,18 @@ interruptProcessGroupOfInternal ph = do
     withProcessHandle ph $ \p_ -> do
         case p_ of
             ClosedHandle _ -> return ()
-            OpenHandle h -> do
+            _ -> do let h = case p_ of
+                              OpenHandle x        -> x
+                              OpenExtHandle x _ _ -> x
+                              _                   -> error "interruptProcessGroupOfInternal"
 #if mingw32_HOST_OS
-                pid <- getProcessId h
-                generateConsoleCtrlEvent cTRL_BREAK_EVENT pid
+                    pid <- getProcessId h
+                    generateConsoleCtrlEvent cTRL_BREAK_EVENT pid
 -- We can't use an #elif here, because MIN_VERSION_unix isn't defined
 -- on Windows, so on Windows cpp fails:
 -- error: missing binary operator before token "("
 #else
-                pgid <- getProcessGroupIDOf h
-                signalProcessGroup sigINT pgid
+                    pgid <- getProcessGroupIDOf h
+                    signalProcessGroup sigINT pgid
 #endif
-                return ()
+                    return ()
