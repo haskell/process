@@ -10,8 +10,8 @@
 
 * New exposed `withCreateProcess`
 * Derive `Show` and `Eq` for `CreateProcess`, `CmdSpec`, and `StdStream`
-* Add support for monitoring process tree for termination with `createProcess_Internal_ext`
-  , `terminateJob`, `waitForJobCompletion` and a new generic function `executeAndWait`.
+* Add support for monitoring process tree for termination with the parameter `use_process_jobs`
+  in `CreateProcess` on Windows. Also added a function `terminateJob` to kill entire process tree.
 
 ## 1.4.2.0 *January 2016*
 
