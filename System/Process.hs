@@ -192,7 +192,7 @@ createProcess cp = do
   maybeCloseStd (std_in  cp)
   maybeCloseStd (std_out cp)
   maybeCloseStd (std_err cp)
-  return $ unwrapHandles r
+  return r
  where
   maybeCloseStd :: StdStream -> IO ()
   maybeCloseStd (UseHandle hdl)
@@ -230,7 +230,7 @@ withCreateProcess_
   -> (Maybe Handle -> Maybe Handle -> Maybe Handle -> ProcessHandle -> IO a)
   -> IO a
 withCreateProcess_ fun c action =
-    C.bracketOnError (unwrapHandles <$> createProcess_ fun c) cleanupProcess
+    C.bracketOnError (createProcess_ fun c) cleanupProcess
                      (\(m_in, m_out, m_err, ph) -> action m_in m_out m_err ph)
 
 
@@ -269,16 +269,18 @@ cleanupProcess (mb_stdin, mb_stdout, mb_stderr,
 --
 -- @since 1.2.0.0
 spawnProcess :: FilePath -> [String] -> IO ProcessHandle
-spawnProcess cmd args =
-    procHandle <$> createProcess_ "spawnProcess" (proc cmd args)
+spawnProcess cmd args = do
+    (_,_,_,p) <- createProcess_ "spawnProcess" (proc cmd args)
+    return p
 
 -- | Creates a new process to run the specified shell command.
 -- It does not wait for the program to finish, but returns the 'ProcessHandle'.
 --
 -- @since 1.2.0.0
 spawnCommand :: String -> IO ProcessHandle
-spawnCommand cmd =
-    procHandle <$> createProcess_ "spawnCommand" (shell cmd)
+spawnCommand cmd = do
+    (_,_,_,p) <- createProcess_ "spawnCommand" (shell cmd)
+    return p
 
 
 -- ----------------------------------------------------------------------------
@@ -725,8 +727,9 @@ runCommand
   :: String
   -> IO ProcessHandle
 
-runCommand string =
-  procHandle <$> createProcess_ "runCommand" (shell string)
+runCommand string = do
+  (_,_,_,ph) <- createProcess_ "runCommand" (shell string)
+  return ph
 
 
 -- ----------------------------------------------------------------------------
@@ -756,7 +759,8 @@ runProcess
   -> IO ProcessHandle
 
 runProcess cmd args mb_cwd mb_env mb_stdin mb_stdout mb_stderr = do
-  r <- createProcess_ "runProcess"
+  (_,_,_,ph) <-
+      createProcess_ "runProcess"
          (proc cmd args){ cwd = mb_cwd,
                           env = mb_env,
                           std_in  = mbToStd mb_stdin,
@@ -765,7 +769,7 @@ runProcess cmd args mb_cwd mb_env mb_stdin mb_stdout mb_stderr = do
   maybeClose mb_stdin
   maybeClose mb_stdout
   maybeClose mb_stderr
-  return $ procHandle r
+  return ph
  where
   maybeClose :: Maybe Handle -> IO ()
   maybeClose (Just  hdl)
@@ -824,7 +828,7 @@ runInteractiveProcess1
   -> IO (Handle,Handle,Handle,ProcessHandle)
 runInteractiveProcess1 fun cmd = do
   (mb_in, mb_out, mb_err, p) <-
-      unwrapHandles <$> createProcess_ fun
+      createProcess_ fun
            cmd{ std_in  = CreatePipe,
                 std_out = CreatePipe,
                 std_err = CreatePipe }
@@ -861,7 +865,9 @@ when the process died as the result of a signal.
 -}
 system :: String -> IO ExitCode
 system "" = ioException (ioeSetErrorString (mkIOError InvalidArgument "system" Nothing Nothing) "null command")
-system str = procHandle <$> createProcess_ "system" (shell str) { delegate_ctlc = True } >>= waitForProcess
+system str = do
+  (_,_,_,p) <- createProcess_ "system" (shell str) { delegate_ctlc = True }
+  waitForProcess p
 
 
 --TODO: in a later release {-# DEPRECATED rawSystem "Use 'callProcess' (or 'spawnProcess' and 'waitForProcess') instead" #-}
@@ -875,4 +881,6 @@ It will therefore behave more portably between operating systems than 'system'.
 The return codes and possible failures are the same as for 'system'.
 -}
 rawSystem :: String -> [String] -> IO ExitCode
-rawSystem cmd args = procHandle <$> createProcess_ "rawSystem" (proc cmd args) { delegate_ctlc = True } >>= waitForProcess
+rawSystem cmd args = do
+  (_,_,_,p) <- createProcess_ "rawSystem" (proc cmd args) { delegate_ctlc = True }
+  waitForProcess p

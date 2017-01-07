@@ -90,8 +90,8 @@ import System.Process.Posix
 createProcess_
   :: String                     -- ^ function name (for error messages)
   -> CreateProcess
-  -> IO ProcRetHandles
-createProcess_ = createProcess_Internal
+  -> IO (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)
+createProcess_ msg proc_ = unwrapHandles <$> createProcess_Internal msg proc_
 {-# INLINE createProcess_ #-}
 
 -- ------------------------------------------------------------------------
@@ -171,8 +171,8 @@ runGenProcess_
  -> IO (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)
 -- On Windows, setting delegate_ctlc has no impact
 runGenProcess_ fun c (Just sig) (Just sig') | isDefaultSignal sig && sig == sig'
-                         = unwrapHandles <$> createProcess_ fun c { delegate_ctlc = True }
-runGenProcess_ fun c _ _ = unwrapHandles <$> createProcess_ fun c
+                         = createProcess_ fun c { delegate_ctlc = True }
+runGenProcess_ fun c _ _ = createProcess_ fun c
 
 -- ---------------------------------------------------------------------------
 -- createPipe
