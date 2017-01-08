@@ -295,7 +295,8 @@ interruptProcessGroupOfInternal
 interruptProcessGroupOfInternal ph = do
     withProcessHandle ph $ \p_ -> do
         case p_ of
-            ClosedHandle _ -> return ()
-            OpenHandle h -> do
+            OpenExtHandle{} -> return ()
+            ClosedHandle  _ -> return ()
+            OpenHandle    h -> do
                 pgid <- getProcessGroupIDOf h
                 signalProcessGroup sigINT pgid
