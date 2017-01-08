@@ -91,7 +91,7 @@ createProcess_
   :: String                     -- ^ function name (for error messages)
   -> CreateProcess
   -> IO (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)
-createProcess_ msg proc_ = unwrapHandles <$> createProcess_Internal msg proc_
+createProcess_ msg proc_ = unwrapHandles `fmap` createProcess_Internal msg proc_
 {-# INLINE createProcess_ #-}
 
 -- ------------------------------------------------------------------------
