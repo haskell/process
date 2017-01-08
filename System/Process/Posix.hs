@@ -169,7 +169,7 @@ createProcess_Internal fun
      return ProcRetHandles { hStdInput    = hndStdInput
                            , hStdOutput   = hndStdOutput
                            , hStdError    = hndStdError
-                           , procHandle   = ph]
+                           , procHandle   = ph
                            }
 
 {-# NOINLINE runInteractiveProcess_lock #-}
