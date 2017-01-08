@@ -609,10 +609,13 @@ waitForProcess ph@(ProcessHandle _ delegating_ctlc) = do
           endDelegateControlC e
         return e
     OpenExtHandle _ job iocp -> do
-        maybe (ExitFailure (-1)) mkExitCode <$> waitForJobCompletion job iocp timeout_Infinite
+#if defined(WINDOWS)
+        maybe (ExitFailure (-1)) mkExitCode `fmap` waitForJobCompletion job iocp timeout_Infinite
       where mkExitCode code | code == 0 = ExitSuccess
                             | otherwise = ExitFailure $ fromIntegral code
-
+#else
+        error "OpenExtHandle should not happen on POSIX."
+#endif
 
 -- ----------------------------------------------------------------------------
 -- getProcessExitCode
@@ -677,7 +680,11 @@ terminateProcess ph = do
   withProcessHandle ph $ \p_ ->
     case p_ of
       ClosedHandle  _ -> return ()
+#if defined(WINDOWS)
       OpenExtHandle{} -> terminateJob ph 1 >> return ()
+#else
+      OpenExtHandle{} -> error "terminateProcess with OpenExtHandle should not happen on POSIX."
+#endif
       OpenHandle    h -> do
         throwErrnoIfMinus1Retry_ "terminateProcess" $ c_terminateProcess h
         return ()
