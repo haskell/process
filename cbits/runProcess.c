@@ -685,6 +685,9 @@ runInteractiveProcess (wchar_t *cmd, wchar_t *workingDirectory,
         {
             goto cleanup_err;
         }
+    } else {
+        *hJob      = NULL;
+        *hIOcpPort = NULL;
     }
 
     if (!CreateProcess(NULL, cmd, NULL, NULL, inherit, dwFlags, environment, workingDirectory, &sInfo, &pInfo))
