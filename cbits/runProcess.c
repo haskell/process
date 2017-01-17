@@ -553,6 +553,38 @@ createCompletionPort (HANDLE hJob)
     return ioPort;
 }
 
+/* Note [Windows exec interaction]
+
+   The basic issue that process jobs tried to solve is this:
+
+   Say you have two programs A and B. Now A calls B. There are two ways to do this.
+
+   1) You can use the normal CreateProcess API, which is what normal Windows code do.
+      Using this approach, the current waitForProcess works absolutely fine.
+   2) You can call the emulated POSIX function _exec, which of course is supposed to
+      allow the child process to replace the parent.
+
+    With approach 2) waitForProcess falls apart because the Win32's process model does
+    not allow this the same way as linux. _exec is emulated by first making a call to
+    CreateProcess to spawn B and then immediately exiting from A. So you have two
+    different processes.
+
+    waitForProcess is waiting on the termination of A. Because A is immediately killed,
+    waitForProcess will return even though B is still running. This is why for instance
+    the GHC testsuite on Windows had lots of file locked errors.
+
+    This approach creates a new Job and assigned A to the job, but also all future
+    processes spawned by A. This allows us to listen in on events, such as, when all
+    processes in the job are finished, but also allows us to propagate exit codes from
+    _exec calls.
+
+    The only reason we need this at all is because we don't interact with just actual
+    native code on Windows, and instead have a lot of ported POSIX code.
+
+    The Job handle is returned to the user because Jobs have additional benefits as well,
+    such as allowing you to specify resource limits on the to be spawned process.
+ */
+
 ProcHandle
 runInteractiveProcess (wchar_t *cmd, wchar_t *workingDirectory,
                        wchar_t *environment,
@@ -668,8 +700,9 @@ runInteractiveProcess (wchar_t *cmd, wchar_t *workingDirectory,
         dwFlags |= CREATE_NEW_CONSOLE;
     }
 
-    // If we're going to use a job object, then we have to create
-    // the thread suspended.
+    /* If we're going to use a job object, then we have to create
+       the thread suspended.
+       See Note [Windows exec interaction].  */
     if (useJobObject)
     {
         dwFlags |= CREATE_SUSPENDED;
