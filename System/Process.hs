@@ -178,7 +178,8 @@ Note that @Handle@s provided for @std_in@, @std_out@, or @std_err@ via the
 @UseHandle@ constructor will be closed by calling this function. This is not
 always the desired behavior. In cases where you would like to leave the
 @Handle@ open after spawning the child process, please use 'createProcess_'
-instead.
+instead. All created @Handle@s are initially in text mode; if you need them
+to be in binary mode then use 'hSetBinaryMode'.
 
 -}
 createProcess
