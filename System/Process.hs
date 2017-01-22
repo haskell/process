@@ -774,8 +774,7 @@ runProcess cmd args mb_cwd mb_env mb_stdin mb_stdout mb_stderr = do
 
 {- | Runs a command using the shell, and returns 'Handle's that may
      be used to communicate with the process via its @stdin@, @stdout@,
-     and @stderr@ respectively. The 'Handle's are initially in binary
-     mode; if you need them to be in text mode then use 'hSetBinaryMode'.
+     and @stderr@ respectively.
 -}
 runInteractiveCommand
   :: String
@@ -797,9 +796,6 @@ runInteractiveCommand string =
 
 >   (inp,out,err,pid) <- runInteractiveProcess "..."
 >   forkIO (hPutStr inp str)
-
-    The 'Handle's are initially in binary mode; if you need them to be
-    in text mode then use 'hSetBinaryMode'.
 -}
 runInteractiveProcess
   :: FilePath                   -- ^ Filename of the executable (see 'RawCommand' for details)
