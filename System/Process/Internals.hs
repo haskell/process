@@ -32,13 +32,13 @@ module System.Process.Internals (
     endDelegateControlC,
     stopDelegateControlC,
     unwrapHandles,
-#ifndef WINDOWS
-    pPrPr_disableITimers, c_execvpe,
-    ignoreSignal, defaultSignal,
-#else
+#ifdef WINDOWS
     terminateJob,
     waitForJobCompletion,
     timeout_Infinite,
+#else
+    pPrPr_disableITimers, c_execvpe,
+    ignoreSignal, defaultSignal,
 #endif
     withFilePathException, withCEnvironment,
     translate,
@@ -70,7 +70,7 @@ import System.Process.Posix
 -- * This function takes an extra @String@ argument to be used in creating
 --   error messages.
 --
--- * 'use_process_jobs' can set in CreateProcess since 1.4.?.? in order to create
+-- * 'use_process_jobs' can be set in CreateProcess since 1.5.0.0 in order to create
 --   an I/O completion port to monitor a process tree's progress on Windows.
 --
 -- The function also returns two new handles:

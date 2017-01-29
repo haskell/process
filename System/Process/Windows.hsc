@@ -44,16 +44,9 @@ import System.Win32.Process (getProcessId)
 
 -- The double hash is used so that hsc does not process this include file
 ##include "processFlags.h"
+#include "windows_cconv.h"
 
 #include <fcntl.h>     /* for _O_BINARY */
-
-##if defined(i386_HOST_ARCH)
-## define WINDOWS_CCONV stdcall
-##elif defined(x86_64_HOST_ARCH)
-## define WINDOWS_CCONV ccall
-##else
-## error Unknown mingw32 arch
-##endif
 
 throwErrnoIfBadPHandle :: String -> IO PHANDLE -> IO PHANDLE
 throwErrnoIfBadPHandle = throwErrnoIfNull

@@ -596,8 +596,8 @@ waitForProcess ph@(ProcessHandle _ delegating_ctlc) = do
           throwErrnoIfMinus1Retry_ "waitForProcess" (c_waitForProcess h pret)
           modifyProcessHandle ph $ \p_' ->
             case p_' of
-              ClosedHandle e  -> return (p_',e)
-              OpenExtHandle{} -> error "waitForProcess handle mismatch."
+              ClosedHandle e  -> return (p_', e)
+              OpenExtHandle{} -> return (p_', ExitFailure (-1))
               OpenHandle ph'  -> do
                 closePHANDLE ph'
                 code <- peek pret
@@ -608,13 +608,13 @@ waitForProcess ph@(ProcessHandle _ delegating_ctlc) = do
         when delegating_ctlc $
           endDelegateControlC e
         return e
-    OpenExtHandle _ job iocp -> do
+    OpenExtHandle _ job iocp ->
 #if defined(WINDOWS)
         maybe (ExitFailure (-1)) mkExitCode `fmap` waitForJobCompletion job iocp timeout_Infinite
       where mkExitCode code | code == 0 = ExitSuccess
                             | otherwise = ExitFailure $ fromIntegral code
 #else
-        error "OpenExtHandle should not happen on POSIX."
+        return $ ExitFailure (-1)
 #endif
 
 -- ----------------------------------------------------------------------------
@@ -635,14 +635,14 @@ getProcessExitCode ph@(ProcessHandle _ delegating_ctlc) = do
     case p_ of
       ClosedHandle e -> return (p_, (Just e, False))
       open -> do
-        let h = getHandle open
         alloca $ \pExitCode -> do
-            res <- throwErrnoIfMinus1Retry "getProcessExitCode" $
-                        c_getProcessExitCode h pExitCode
-            code <- peek pExitCode
+            res <- let getCode h = throwErrnoIfMinus1Retry "getProcessExitCode" $
+                                       c_getProcessExitCode h pExitCode
+                   in maybe (return 0) getCode $ getHandle open
             if res == 0
               then return (p_, (Nothing, False))
               else do
+                   code <- peek pExitCode
                    closePHANDLE h
                    let e  | code == 0 = ExitSuccess
                           | otherwise = ExitFailure (fromIntegral code)
@@ -651,10 +651,10 @@ getProcessExitCode ph@(ProcessHandle _ delegating_ctlc) = do
     Just e | was_open && delegating_ctlc -> endDelegateControlC e
     _                                    -> return ()
   return m_e
-    where getHandle :: ProcessHandle__ -> PHANDLE
-          getHandle (OpenHandle        h) = h
-          getHandle (ClosedHandle      _) = error "getHandle: handle closed."
-          getHandle (OpenExtHandle h _ _) = h
+    where getHandle :: ProcessHandle__ -> Maybe PHANDLE
+          getHandle (OpenHandle        h) = Just h
+          getHandle (ClosedHandle      _) = Nothing
+          getHandle (OpenExtHandle h _ _) = Just h
 
 
 -- ----------------------------------------------------------------------------

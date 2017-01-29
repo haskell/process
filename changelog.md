@@ -5,13 +5,13 @@
 * Bug fix: Don't close already closed pipes
   [#81](https://github.com/haskell/process/pull/81)
 * Relax version bounds of Win32 to allow 2.5.
+* Add support for monitoring process tree for termination with the parameter `use_process_jobs`
+  in `CreateProcess` on Windows. Also added a function `terminateJob` to kill entire process tree.
 
 ## 1.4.3.0 *December 2016*
 
 * New exposed `withCreateProcess`
 * Derive `Show` and `Eq` for `CreateProcess`, `CmdSpec`, and `StdStream`
-* Add support for monitoring process tree for termination with the parameter `use_process_jobs`
-  in `CreateProcess` on Windows. Also added a function `terminateJob` to kill entire process tree.
 
 ## 1.4.2.0 *January 2016*
 

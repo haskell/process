@@ -101,11 +101,11 @@ data CreateProcess = CreateProcess{
                                            --
                                            --   @since 1.4.0.0
   use_process_jobs :: Bool                 -- ^ On Windows systems this flag indicates that we should wait for the entire process tree
-                                           --   to finish before unblocking. On POSIX system this flag is ignored.
+                                           --   to finish before unblocking. On POSIX systems this flag is ignored.
                                            --
                                            --   Default: @False@
                                            --
-                                           --   @since 1.x.x.x
+                                           --   @since 1.5.0.0
  } deriving (Show, Eq)
 
 -- | contains the handles returned by a call to createProcess_Internal
