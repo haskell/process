@@ -636,17 +636,19 @@ getProcessExitCode ph@(ProcessHandle _ delegating_ctlc) = do
       ClosedHandle e -> return (p_, (Just e, False))
       open -> do
         alloca $ \pExitCode -> do
-            res <- let getCode h = throwErrnoIfMinus1Retry "getProcessExitCode" $
-                                       c_getProcessExitCode h pExitCode
-                   in maybe (return 0) getCode $ getHandle open
-            if res == 0
-              then return (p_, (Nothing, False))
-              else do
-                   code <- peek pExitCode
-                   closePHANDLE h
-                   let e  | code == 0 = ExitSuccess
-                          | otherwise = ExitFailure (fromIntegral code)
-                   return (ClosedHandle e, (Just e, True))
+          case getHandle open of
+            Nothing -> return (p_, (Nothing, False))
+            Just h  -> do
+                res <- throwErrnoIfMinus1Retry "getProcessExitCode" $
+                                        c_getProcessExitCode h pExitCode
+                code <- peek pExitCode
+                if res == 0
+                   then return (p_, (Nothing, False))
+                   else do
+                        closePHANDLE h
+                        let e  | code == 0 = ExitSuccess
+                               | otherwise = ExitFailure (fromIntegral code)
+                        return (ClosedHandle e, (Just e, True))
   case m_e of
     Just e | was_open && delegating_ctlc -> endDelegateControlC e
     _                                    -> return ()
