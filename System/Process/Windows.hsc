@@ -1,4 +1,5 @@
-{-# LANGUAGE CPP #-}
+{-# LANGUAGE CPP, ForeignFunctionInterface #-}
+{-# LANGUAGE InterruptibleFFI #-}
 module System.Process.Windows
     ( mkProcessHandle
     , translateInternal
@@ -12,12 +13,16 @@ module System.Process.Windows
     , createPipeInternal
     , createPipeInternalFd
     , interruptProcessGroupOfInternal
+    , terminateJob
+    , waitForJobCompletion
+    , timeout_Infinite
     ) where
 
 import System.Process.Common
 import Control.Concurrent
 import Control.Exception
 import Data.Bits
+import Data.Maybe
 import Foreign.C
 import Foreign.Marshal
 import Foreign.Ptr
@@ -42,14 +47,24 @@ import System.Win32.Process (getProcessId)
 
 #include <fcntl.h>     /* for _O_BINARY */
 
+##if defined(i386_HOST_ARCH)
+## define WINDOWS_CCONV stdcall
+##elif defined(x86_64_HOST_ARCH)
+## define WINDOWS_CCONV ccall
+##else
+## error Unknown mingw32 arch
+##endif
+
 throwErrnoIfBadPHandle :: String -> IO PHANDLE -> IO PHANDLE
 throwErrnoIfBadPHandle = throwErrnoIfNull
 
 -- On Windows, we have to close this HANDLE when it is no longer required,
 -- hence we add a finalizer to it
-mkProcessHandle :: PHANDLE -> IO ProcessHandle
-mkProcessHandle h = do
-   m <- newMVar (OpenHandle h)
+mkProcessHandle :: PHANDLE -> PHANDLE -> PHANDLE -> IO ProcessHandle
+mkProcessHandle h job io = do
+   m <- if job == nullPtr && io == nullPtr
+           then newMVar (OpenHandle h)
+           else newMVar (OpenExtHandle h job io)
    _ <- mkWeakMVar m (processHandleFinaliser m)
    return (ProcessHandle m False)
 
@@ -57,22 +72,17 @@ processHandleFinaliser :: MVar ProcessHandle__ -> IO ()
 processHandleFinaliser m =
    modifyMVar_ m $ \p_ -> do
         case p_ of
-          OpenHandle ph -> closePHANDLE ph
+          OpenHandle ph           -> closePHANDLE ph
+          OpenExtHandle ph job io -> closePHANDLE ph
+                                  >> closePHANDLE job
+                                  >> closePHANDLE io
           _ -> return ()
         return (error "closed process handle")
 
 closePHANDLE :: PHANDLE -> IO ()
 closePHANDLE ph = c_CloseHandle ph
 
-foreign import
-#if defined(i386_HOST_ARCH)
-  stdcall
-#elif defined(x86_64_HOST_ARCH)
-  ccall
-#else
-#error "Unknown architecture"
-#endif
-  unsafe "CloseHandle"
+foreign import WINDOWS_CCONV unsafe "CloseHandle"
   c_CloseHandle
         :: PHANDLE
         -> IO ()
@@ -80,26 +90,30 @@ foreign import
 createProcess_Internal
   :: String                     -- ^ function name (for error messages)
   -> CreateProcess
-  -> IO (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)
+  -> IO ProcRetHandles
 
 createProcess_Internal fun CreateProcess{ cmdspec = cmdsp,
-                                  cwd = mb_cwd,
-                                  env = mb_env,
-                                  std_in = mb_stdin,
-                                  std_out = mb_stdout,
-                                  std_err = mb_stderr,
-                                  close_fds = mb_close_fds,
-                                  create_group = mb_create_group,
-                                  delegate_ctlc = _ignored,
-                                  detach_console = mb_detach_console,
-                                  create_new_console = mb_create_new_console,
-                                  new_session = mb_new_session }
+                                    cwd = mb_cwd,
+                                    env = mb_env,
+                                    std_in = mb_stdin,
+                                    std_out = mb_stdout,
+                                    std_err = mb_stderr,
+                                    close_fds = mb_close_fds,
+                                    create_group = mb_create_group,
+                                    delegate_ctlc = _ignored,
+                                    detach_console = mb_detach_console,
+                                    create_new_console = mb_create_new_console,
+                                    new_session = mb_new_session,
+                                    use_process_jobs = use_job }
  = do
+  let lenPtr = sizeOf (undefined :: WordPtr)
   (cmd, cmdline) <- commandToProcess cmdsp
   withFilePathException cmd $
-   alloca $ \ pfdStdInput  ->
-   alloca $ \ pfdStdOutput ->
-   alloca $ \ pfdStdError  ->
+   alloca $ \ pfdStdInput           ->
+   alloca $ \ pfdStdOutput          ->
+   alloca $ \ pfdStdError           ->
+   allocaBytes lenPtr $ \ hJob      ->
+   allocaBytes lenPtr $ \ hIOcpPort ->
    maybeWith withCEnvironment mb_env $ \pEnv ->
    maybeWith withCWString mb_cwd $ \pWorkDir -> do
    withCWString cmdline $ \pcmdline -> do
@@ -128,13 +142,22 @@ createProcess_Internal fun CreateProcess{ cmdspec = cmdsp,
                                 .|.(if mb_detach_console then RUN_PROCESS_DETACHED else 0)
                                 .|.(if mb_create_new_console then RUN_PROCESS_NEW_CONSOLE else 0)
                                 .|.(if mb_new_session then RUN_PROCESS_NEW_SESSION else 0))
+                                use_job
+                                hJob
+                                hIOcpPort
 
      hndStdInput  <- mbPipe mb_stdin  pfdStdInput  WriteMode
      hndStdOutput <- mbPipe mb_stdout pfdStdOutput ReadMode
      hndStdError  <- mbPipe mb_stderr pfdStdError  ReadMode
 
-     ph <- mkProcessHandle proc_handle
-     return (hndStdInput, hndStdOutput, hndStdError, ph)
+     phJob  <- peek hJob
+     phIOCP <- peek hIOcpPort
+     ph     <- mkProcessHandle proc_handle phJob phIOCP
+     return ProcRetHandles { hStdInput  = hndStdInput
+                           , hStdOutput = hndStdOutput
+                           , hStdError  = hndStdError
+                           , procHandle = ph
+                           }
 
 {-# NOINLINE runInteractiveProcess_lock #-}
 runInteractiveProcess_lock :: MVar ()
@@ -155,6 +178,68 @@ stopDelegateControlC = return ()
 
 -- End no-op functions
 
+
+-- ----------------------------------------------------------------------------
+-- Interface to C I/O CP bits
+
+terminateJob :: ProcessHandle -> CUInt -> IO Bool
+terminateJob jh ecode =
+    withProcessHandle jh $ \p_ -> do
+        case p_ of
+            ClosedHandle        _ -> return False
+            OpenHandle          _ -> return False
+            OpenExtHandle _ job _ -> c_terminateJobObject job ecode
+
+timeout_Infinite :: CUInt
+timeout_Infinite = 0xFFFFFFFF
+
+waitForJobCompletion :: PHANDLE
+                     -> PHANDLE
+                     -> CUInt
+                     -> IO (Maybe CInt)
+waitForJobCompletion job io timeout =
+            alloca $ \p_exitCode -> do
+              items <- newMVar $ []
+              setter <- mkSetter (insertItem items)
+              getter <- mkGetter (getItem items)
+              ret <- c_waitForJobCompletion job io timeout p_exitCode setter getter
+              if ret == 0
+                 then Just <$> peek p_exitCode
+                 else return Nothing
+
+insertItem :: Eq k => MVar [(k, v)] -> k -> v -> IO ()
+insertItem env_ k v = modifyMVar_ env_ (return . ((k, v):))
+
+getItem :: Eq k => MVar [(k, v)] -> k -> IO v
+getItem env_ k = withMVar env_ (\m -> return $ fromJust $ lookup k m)
+
+-- ----------------------------------------------------------------------------
+-- Interface to C bits
+
+type SetterDef = CUInt -> Ptr () -> IO ()
+type GetterDef = CUInt -> IO (Ptr ())
+
+foreign import ccall "wrapper"
+  mkSetter :: SetterDef -> IO (FunPtr SetterDef)
+foreign import ccall "wrapper"
+  mkGetter :: GetterDef -> IO (FunPtr GetterDef)
+
+foreign import WINDOWS_CCONV unsafe "TerminateJobObject"
+  c_terminateJobObject
+        :: PHANDLE
+        -> CUInt
+        -> IO Bool
+
+foreign import ccall interruptible "waitForJobCompletion" -- NB. safe - can block
+  c_waitForJobCompletion
+        :: PHANDLE
+        -> PHANDLE
+        -> CUInt
+        -> Ptr CInt
+        -> FunPtr (SetterDef)
+        -> FunPtr (GetterDef)
+        -> IO CInt
+
 foreign import ccall unsafe "runInteractiveProcess"
   c_runInteractiveProcess
         :: CWString
@@ -166,7 +251,10 @@ foreign import ccall unsafe "runInteractiveProcess"
         -> Ptr FD
         -> Ptr FD
         -> Ptr FD
-        -> CInt                         -- flags
+        -> CInt          -- flags
+        -> Bool          -- useJobObject
+        -> Ptr PHANDLE       -- Handle to Job
+        -> Ptr PHANDLE       -- Handle to I/O Completion Port
         -> IO PHANDLE
 
 commandToProcess
@@ -275,15 +363,18 @@ interruptProcessGroupOfInternal ph = do
     withProcessHandle ph $ \p_ -> do
         case p_ of
             ClosedHandle _ -> return ()
-            OpenHandle h -> do
+            _ -> do let h = case p_ of
+                              OpenHandle x        -> x
+                              OpenExtHandle x _ _ -> x
+                              _                   -> error "interruptProcessGroupOfInternal"
 #if mingw32_HOST_OS
-                pid <- getProcessId h
-                generateConsoleCtrlEvent cTRL_BREAK_EVENT pid
+                    pid <- getProcessId h
+                    generateConsoleCtrlEvent cTRL_BREAK_EVENT pid
 -- We can't use an #elif here, because MIN_VERSION_unix isn't defined
 -- on Windows, so on Windows cpp fails:
 -- error: missing binary operator before token "("
 #else
-                pgid <- getProcessGroupIDOf h
-                signalProcessGroup sigINT pgid
+                    pgid <- getProcessGroupIDOf h
+                    signalProcessGroup sigINT pgid
 #endif
-                return ()
+                    return ()

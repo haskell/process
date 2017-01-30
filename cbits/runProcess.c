@@ -510,12 +510,87 @@ mkAnonPipe (HANDLE* pHandleIn, BOOL isInheritableIn,
     return TRUE;
 }
 
+static HANDLE
+createJob ()
+{
+    HANDLE hJob = CreateJobObject (NULL, NULL);
+    JOBOBJECT_EXTENDED_LIMIT_INFORMATION jeli;
+    ZeroMemory(&jeli, sizeof(JOBOBJECT_EXTENDED_LIMIT_INFORMATION));
+    // Configure all child processes associated with the job to terminate when the
+    // Last process in the job terminates. This prevent half dead processes.
+    jeli.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+
+    if (SetInformationJobObject (hJob, JobObjectExtendedLimitInformation,
+                                 &jeli, sizeof(JOBOBJECT_EXTENDED_LIMIT_INFORMATION)))
+    {
+        return hJob;
+    }
+
+    maperrno();
+    return NULL;
+}
+
+static HANDLE
+createCompletionPort (HANDLE hJob)
+{
+    HANDLE ioPort = CreateIoCompletionPort (INVALID_HANDLE_VALUE, NULL, 0, 1);
+    if (!ioPort)
+    {
+        // Something failed. Error is in GetLastError, let caller handler it.
+        return NULL;
+    }
+
+    JOBOBJECT_ASSOCIATE_COMPLETION_PORT Port;
+    Port.CompletionKey = hJob;
+    Port.CompletionPort = ioPort;
+    if (!SetInformationJobObject(hJob,
+        JobObjectAssociateCompletionPortInformation,
+        &Port, sizeof(Port))) {
+        // Something failed. Error is in GetLastError, let caller handler it.
+        return NULL;
+    }
+
+    return ioPort;
+}
+
+/* Note [Windows exec interaction]
+
+   The basic issue that process jobs tried to solve is this:
+
+   Say you have two programs A and B. Now A calls B. There are two ways to do this.
+
+   1) You can use the normal CreateProcess API, which is what normal Windows code do.
+      Using this approach, the current waitForProcess works absolutely fine.
+   2) You can call the emulated POSIX function _exec, which of course is supposed to
+      allow the child process to replace the parent.
+
+    With approach 2) waitForProcess falls apart because the Win32's process model does
+    not allow this the same way as linux. _exec is emulated by first making a call to
+    CreateProcess to spawn B and then immediately exiting from A. So you have two
+    different processes.
+
+    waitForProcess is waiting on the termination of A. Because A is immediately killed,
+    waitForProcess will return even though B is still running. This is why for instance
+    the GHC testsuite on Windows had lots of file locked errors.
+
+    This approach creates a new Job and assigned A to the job, but also all future
+    processes spawned by A. This allows us to listen in on events, such as, when all
+    processes in the job are finished, but also allows us to propagate exit codes from
+    _exec calls.
+
+    The only reason we need this at all is because we don't interact with just actual
+    native code on Windows, and instead have a lot of ported POSIX code.
+
+    The Job handle is returned to the user because Jobs have additional benefits as well,
+    such as allowing you to specify resource limits on the to be spawned process.
+ */
+
 ProcHandle
 runInteractiveProcess (wchar_t *cmd, wchar_t *workingDirectory,
                        wchar_t *environment,
                        int fdStdIn, int fdStdOut, int fdStdErr,
                        int *pfdStdInput, int *pfdStdOutput, int *pfdStdError,
-                       int flags)
+                       int flags, bool useJobObject, HANDLE *hJob, HANDLE *hIOcpPort)
 {
     STARTUPINFO sInfo;
     PROCESS_INFORMATION pInfo;
@@ -534,6 +609,7 @@ runInteractiveProcess (wchar_t *cmd, wchar_t *workingDirectory,
     ZeroMemory(&sInfo, sizeof(sInfo));
     sInfo.cb = sizeof(sInfo);
     sInfo.dwFlags = STARTF_USESTDHANDLES;
+    ZeroMemory(&pInfo, sizeof(pInfo));
 
     if (fdStdIn == -1) {
         if (!mkAnonPipe(&hStdInputRead,  TRUE, &hStdInputWrite,  FALSE))
@@ -624,10 +700,47 @@ runInteractiveProcess (wchar_t *cmd, wchar_t *workingDirectory,
         dwFlags |= CREATE_NEW_CONSOLE;
     }
 
+    /* If we're going to use a job object, then we have to create
+       the thread suspended.
+       See Note [Windows exec interaction].  */
+    if (useJobObject)
+    {
+        dwFlags |= CREATE_SUSPENDED;
+        *hJob = createJob();
+        if (!*hJob)
+        {
+            goto cleanup_err;
+        }
+
+        // Create the completion port and attach it to the job
+        *hIOcpPort = createCompletionPort(*hJob);
+        if (!*hIOcpPort)
+        {
+            goto cleanup_err;
+        }
+    } else {
+        *hJob      = NULL;
+        *hIOcpPort = NULL;
+    }
+
     if (!CreateProcess(NULL, cmd, NULL, NULL, inherit, dwFlags, environment, workingDirectory, &sInfo, &pInfo))
     {
             goto cleanup_err;
     }
+
+    if (useJobObject && hJob && *hJob)
+    {
+        // Then associate the process and the job;
+        if (!AssignProcessToJobObject (*hJob, pInfo.hProcess))
+        {
+            goto cleanup_err;
+        }
+
+        // And now that we've associated the new process with the job
+        // we can actively resume it.
+        ResumeThread (pInfo.hThread);
+    }
+
     CloseHandle(pInfo.hThread);
 
     // Close the ends of the pipes that were inherited by the
@@ -650,6 +763,9 @@ cleanup_err:
     if (hStdOutputWrite != INVALID_HANDLE_VALUE) CloseHandle(hStdOutputWrite);
     if (hStdErrorRead   != INVALID_HANDLE_VALUE) CloseHandle(hStdErrorRead);
     if (hStdErrorWrite  != INVALID_HANDLE_VALUE) CloseHandle(hStdErrorWrite);
+    if (useJobObject && hJob      && *hJob     ) CloseHandle(*hJob);
+    if (useJobObject && hIOcpPort && *hIOcpPort) CloseHandle(*hIOcpPort);
+
     maperrno();
     return NULL;
 }
@@ -657,7 +773,17 @@ cleanup_err:
 int
 terminateProcess (ProcHandle handle)
 {
-    if (!TerminateProcess((HANDLE) handle, 1)) {
+    if (!TerminateProcess ((HANDLE) handle, 1)) {
+        maperrno();
+        return -1;
+    }
+    return 0;
+}
+
+int
+terminateJob (ProcHandle handle)
+{
+    if (!TerminateJobObject ((HANDLE)handle, 1)) {
         maperrno();
         return -1;
     }
@@ -700,6 +826,72 @@ waitForProcess (ProcHandle handle, int *pret)
 
     maperrno();
     return -1;
+}
+
+
+int
+waitForJobCompletion ( HANDLE hJob, HANDLE ioPort, DWORD timeout, int *pExitCode, setterDef set, getterDef get )
+{
+    DWORD CompletionCode;
+    ULONG_PTR CompletionKey;
+    LPOVERLAPPED Overlapped;
+    *pExitCode = 0;
+
+    // We have to loop here. It's a blocking call, but
+    // we get notified on each completion event. So if it's
+    // not one we care for we should just block again.
+    // If all processes are finished before this call is made
+    // then the initial call will return false.
+    // List of events we can listen to:
+    // https://msdn.microsoft.com/en-us/library/windows/desktop/ms684141(v=vs.85).aspx
+    while (GetQueuedCompletionStatus (ioPort, &CompletionCode,
+           &CompletionKey, &Overlapped, timeout)) {
+
+        switch (CompletionCode)
+        {
+            case JOB_OBJECT_MSG_NEW_PROCESS:
+            {
+                // A new child process is born.
+                // Retrieve and save the process handle from the process id.
+                // We'll need it for later but we can't retrieve it after the
+                // process has exited.
+                DWORD pid    = (DWORD)(uintptr_t)Overlapped;
+                HANDLE pHwnd = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, TRUE, pid);
+                set(pid, pHwnd);
+            }
+            break;
+            case JOB_OBJECT_MSG_ABNORMAL_EXIT_PROCESS:
+            case JOB_OBJECT_MSG_EXIT_PROCESS:
+            {
+                // A child process has just exited.
+                // Read exit code, We assume the last process to exit
+                // is the process whose exit code we're interested in.
+                HANDLE pHwnd = get((DWORD)(uintptr_t)Overlapped);
+                if (GetExitCodeProcess(pHwnd, (DWORD *)pExitCode) == 0)
+                {
+                    maperrno();
+                    return 1;
+                }
+            }
+            break;
+            case JOB_OBJECT_MSG_ACTIVE_PROCESS_ZERO:
+                // All processes in the tree are done.
+                return 0;
+            default:
+                break;
+        }
+    }
+
+    // Check to see if a timeout has occurred or that the
+    // all processes in the job were finished by the time we
+    // got to the loop.
+    if (Overlapped == NULL && (HANDLE)CompletionKey != hJob)
+    {
+        // Timeout occurred.
+        return -1;
+    }
+
+    return 0;
 }
 
 #endif /* Win32 */

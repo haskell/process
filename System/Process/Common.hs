@@ -6,6 +6,7 @@ module System.Process.Common
     , StdStream (..)
     , ProcessHandle(..)
     , ProcessHandle__(..)
+    , ProcRetHandles (..)
     , withFilePathException
     , PHANDLE
     , modifyProcessHandle
@@ -94,12 +95,26 @@ data CreateProcess = CreateProcess{
                                            --   Default: @Nothing@
                                            --
                                            --   @since 1.4.0.0
-  child_user :: Maybe UserID               -- ^ Use posix setuid to set child process's user id; does nothing on other platforms.
+  child_user :: Maybe UserID,              -- ^ Use posix setuid to set child process's user id; does nothing on other platforms.
                                            --
                                            --   Default: @Nothing@
                                            --
                                            --   @since 1.4.0.0
+  use_process_jobs :: Bool                 -- ^ On Windows systems this flag indicates that we should wait for the entire process tree
+                                           --   to finish before unblocking. On POSIX systems this flag is ignored.
+                                           --
+                                           --   Default: @False@
+                                           --
+                                           --   @since 1.5.0.0
  } deriving (Show, Eq)
+
+-- | contains the handles returned by a call to createProcess_Internal
+data ProcRetHandles
+  = ProcRetHandles { hStdInput      :: Maybe Handle
+                   , hStdOutput     :: Maybe Handle
+                   , hStdError      :: Maybe Handle
+                   , procHandle     :: ProcessHandle
+                   }
 
 data CmdSpec
   = ShellCommand String
@@ -154,8 +169,14 @@ data StdStream
      None of the process-creation functions in this library wait for
      termination: they all return a 'ProcessHandle' which may be used
      to wait for the process later.
+
+     On Windows a second wait method can be used to block for event
+     completion. This requires two handles. A process job handle and
+     a events handle to monitor.
 -}
-data ProcessHandle__ = OpenHandle PHANDLE | ClosedHandle ExitCode
+data ProcessHandle__ = OpenHandle PHANDLE
+                     | OpenExtHandle PHANDLE PHANDLE PHANDLE
+                     | ClosedHandle ExitCode
 data ProcessHandle = ProcessHandle !(MVar ProcessHandle__) !Bool
 
 withFilePathException :: FilePath -> IO a -> IO a

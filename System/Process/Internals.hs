@@ -24,14 +24,19 @@ module System.Process.Internals (
     PHANDLE, closePHANDLE, mkProcessHandle,
     modifyProcessHandle, withProcessHandle,
     CreateProcess(..),
-    CmdSpec(..), StdStream(..),
+    CmdSpec(..), StdStream(..), ProcRetHandles (..),
     createProcess_,
     runGenProcess_, --deprecated
     fdToHandle,
     startDelegateControlC,
     endDelegateControlC,
     stopDelegateControlC,
-#ifndef WINDOWS
+    unwrapHandles,
+#ifdef WINDOWS
+    terminateJob,
+    waitForJobCompletion,
+    timeout_Infinite,
+#else
     pPrPr_disableITimers, c_execvpe,
     ignoreSignal, defaultSignal,
 #endif
@@ -57,7 +62,6 @@ import System.Process.Posix
 #endif
 
 -- ----------------------------------------------------------------------------
-
 -- | This function is almost identical to
 -- 'System.Process.createProcess'. The only differences are:
 --
@@ -65,6 +69,18 @@ import System.Process.Posix
 --
 -- * This function takes an extra @String@ argument to be used in creating
 --   error messages.
+--
+-- * 'use_process_jobs' can be set in CreateProcess since 1.5.0.0 in order to create
+--   an I/O completion port to monitor a process tree's progress on Windows.
+--
+-- The function also returns two new handles:
+--   * an I/O Completion Port handle on which events
+--     will be signaled.
+--   * a Job handle which can be used to kill all running
+--     processes.
+--
+--  On POSIX platforms these two new handles will always be Nothing
+--
 --
 -- This function has been available from the "System.Process.Internals" module
 -- for some time, and is part of the "System.Process" module since version
@@ -75,7 +91,7 @@ createProcess_
   :: String                     -- ^ function name (for error messages)
   -> CreateProcess
   -> IO (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)
-createProcess_ = createProcess_Internal
+createProcess_ msg proc_ = unwrapHandles `fmap` createProcess_Internal msg proc_
 {-# INLINE createProcess_ #-}
 
 -- ------------------------------------------------------------------------
@@ -137,6 +153,10 @@ translate :: String -> String
 translate = translateInternal
 {-# INLINE translate #-}
 
+-- ---------------------------------------------------------------------------
+-- unwrapHandles
+unwrapHandles :: ProcRetHandles -> (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)
+unwrapHandles r = (hStdInput r, hStdOutput r, hStdError r, procHandle r)
 
 -- ----------------------------------------------------------------------------
 -- Deprecated / compat

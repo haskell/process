@@ -100,7 +100,7 @@ withCEnvironment envir act =
 createProcess_Internal
     :: String
     -> CreateProcess
-    -> IO (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)
+    -> IO ProcRetHandles
 createProcess_Internal fun
                    CreateProcess{ cmdspec = cmdsp,
                                   cwd = mb_cwd,
@@ -166,7 +166,11 @@ createProcess_Internal fun
      hndStdError  <- mbPipe mb_stderr pfdStdError  ReadMode
 
      ph <- mkProcessHandle proc_handle mb_delegate_ctlc
-     return (hndStdInput, hndStdOutput, hndStdError, ph)
+     return ProcRetHandles { hStdInput    = hndStdInput
+                           , hStdOutput   = hndStdOutput
+                           , hStdError    = hndStdError
+                           , procHandle   = ph
+                           }
 
 {-# NOINLINE runInteractiveProcess_lock #-}
 runInteractiveProcess_lock :: MVar ()
@@ -291,7 +295,8 @@ interruptProcessGroupOfInternal
 interruptProcessGroupOfInternal ph = do
     withProcessHandle ph $ \p_ -> do
         case p_ of
-            ClosedHandle _ -> return ()
-            OpenHandle h -> do
+            OpenExtHandle{} -> return ()
+            ClosedHandle  _ -> return ()
+            OpenHandle    h -> do
                 pgid <- getProcessGroupIDOf h
                 signalProcessGroup sigINT pgid
