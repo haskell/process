@@ -71,12 +71,14 @@ main = do
     do -- multithreaded waitForProcess
       (_, _, _, p) <- createProcess (proc "sleep" ["0.1"])
       me1 <- newEmptyMVar
-      forkIO . void $ waitForProcess p >>= putMVar me1
+      _ <- forkIO . void $ waitForProcess p >>= putMVar me1
       -- check for race / deadlock between waitForProcess and getProcessExitCode
       e3 <- getProcessExitCode p
       e2 <- waitForProcess p
       e1 <- readMVar me1
-      unless (isNothing e3 && e1 == ExitSuccess && e2 == ExitSuccess)
+      unless (isNothing e3)
+            $ error $ "unexpected exit " ++ show e3
+      unless (e1 == ExitSuccess && e2 == ExitSuccess)
             $ error "sleep exited with non-zero exit code!"
 
     putStrLn "Tests passed successfully"
