@@ -590,6 +590,7 @@ waitForProcess ph@(ProcessHandle _ delegating_ctlc _) = lockWaitpid $ do
     ClosedHandle e -> return e
     OpenHandle h  -> do
         e <- alloca $ \pret -> do
+          -- don't hold the MVar while we call c_waitForProcess...
           throwErrnoIfMinus1Retry_ "waitForProcess" (c_waitForProcess h pret)
           modifyProcessHandle ph $ \p_' ->
             case p_' of
@@ -613,7 +614,13 @@ waitForProcess ph@(ProcessHandle _ delegating_ctlc _) = lockWaitpid $ do
 #else
         return $ ExitFailure (-1)
 #endif
-  where lockWaitpid m = withMVar (waitpidLock ph) $ \() -> m
+  where
+    -- If more than one thread calls `waitpid` at a time, `waitpid` will
+    -- return the exit code to one of them and (-1) to the rest of them,
+    -- causing an exception to be thrown.
+    -- Cf. https://github.com/haskell/process/issues/46, and
+    -- https://github.com/haskell/process/pull/58 for further discussion
+    lockWaitpid m = withMVar (waitpidLock ph) $ \() -> m
 
 -- ----------------------------------------------------------------------------
 -- getProcessExitCode
