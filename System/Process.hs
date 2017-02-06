@@ -608,12 +608,13 @@ waitForProcess ph@(ProcessHandle _ delegating_ctlc) = do
         when delegating_ctlc $
           endDelegateControlC e
         return e
-    OpenExtHandle _ job iocp ->
 #if defined(WINDOWS)
+    OpenExtHandle _ job iocp ->
         maybe (ExitFailure (-1)) mkExitCode `fmap` waitForJobCompletion job iocp timeout_Infinite
       where mkExitCode code | code == 0 = ExitSuccess
                             | otherwise = ExitFailure $ fromIntegral code
 #else
+    OpenExtHandle _ _job _iocp ->
         return $ ExitFailure (-1)
 #endif
 
