@@ -77,7 +77,7 @@ import System.Process.Internals
 
 import Control.Concurrent
 import Control.DeepSeq (rnf)
-import Control.Exception (SomeException, mask, try, throwIO)
+import Control.Exception (SomeException, mask, bracket, try, throwIO)
 import qualified Control.Exception as C
 import Control.Monad
 import Data.Maybe
@@ -635,7 +635,7 @@ when the process died as the result of a signal.
 -}
 
 getProcessExitCode :: ProcessHandle -> IO (Maybe ExitCode)
-getProcessExitCode ph@(ProcessHandle _ delegating_ctlc _) = do
+getProcessExitCode ph@(ProcessHandle _ delegating_ctlc _) = tryLockWaitpid $ do
   (m_e, was_open) <- modifyProcessHandle ph $ \p_ ->
     case p_ of
       ClosedHandle e -> return (p_, (Just e, False))
@@ -663,6 +663,23 @@ getProcessExitCode ph@(ProcessHandle _ delegating_ctlc _) = do
           getHandle (ClosedHandle      _) = Nothing
           getHandle (OpenExtHandle h _ _) = Just h
 
+          -- If somebody is currently holding the waitpid lock, we don't want to
+          -- accidentally remove the pid from the process table.
+          -- Try acquiring the waitpid lock. If it is held, we are done
+          -- since that means the process is still running and we can return
+          -- `Nothing`. If it is not held, acquire it so we can run the
+          -- (non-blocking) call to `waitpid` without worrying about any
+          -- other threads calling it at the same time.
+          tryLockWaitpid :: IO (Maybe ExitCode) -> IO (Maybe ExitCode)
+          tryLockWaitpid action = bracket acquire release between
+            where
+              acquire   = tryTakeMVar (waitpidLock ph)
+              release m = case m of
+                Nothing -> return ()
+                Just () -> putMVar (waitpidLock ph) ()
+              between m = case m of
+                Nothing -> return Nothing
+                Just () -> do     action
 
 -- ----------------------------------------------------------------------------
 -- terminateProcess
