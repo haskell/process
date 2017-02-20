@@ -679,7 +679,7 @@ getProcessExitCode ph@(ProcessHandle _ delegating_ctlc _) = tryLockWaitpid $ do
                 Just () -> putMVar (waitpidLock ph) ()
               between m = case m of
                 Nothing -> return Nothing
-                Just () -> do     action
+                Just () -> action
 
 -- ----------------------------------------------------------------------------
 -- terminateProcess
