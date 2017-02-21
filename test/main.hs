@@ -1,10 +1,12 @@
 import Control.Exception
-import Control.Monad (unless)
+import Control.Monad (unless, void)
 import System.Exit
 import System.IO.Error
 import System.Directory (getCurrentDirectory, setCurrentDirectory)
 import System.Process
+import Control.Concurrent
 import Data.List (isInfixOf)
+import Data.Maybe (isNothing)
 import System.IO (hClose, openBinaryTempFile)
 import qualified Data.ByteString as S
 import qualified Data.ByteString.Char8 as S8
@@ -65,6 +67,19 @@ main = do
             $ error $ "Unexpected exit code " ++ show ec
         unless (bs == res')
             $ error $ "Unexpected result: " ++ show res'
+
+    do -- multithreaded waitForProcess
+      (_, _, _, p) <- createProcess (proc "sleep" ["0.1"])
+      me1 <- newEmptyMVar
+      _ <- forkIO . void $ waitForProcess p >>= putMVar me1
+      -- check for race / deadlock between waitForProcess and getProcessExitCode
+      e3 <- getProcessExitCode p
+      e2 <- waitForProcess p
+      e1 <- readMVar me1
+      unless (isNothing e3)
+            $ error $ "unexpected exit " ++ show e3
+      unless (e1 == ExitSuccess && e2 == ExitSuccess)
+            $ error "sleep exited with non-zero exit code!"
 
     putStrLn "Tests passed successfully"
 

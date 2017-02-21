@@ -66,7 +66,8 @@ mkProcessHandle h job io = do
            then newMVar (OpenHandle h)
            else newMVar (OpenExtHandle h job io)
    _ <- mkWeakMVar m (processHandleFinaliser m)
-   return (ProcessHandle m False)
+   l <- newMVar ()
+   return (ProcessHandle m False l)
 
 processHandleFinaliser :: MVar ProcessHandle__ -> IO ()
 processHandleFinaliser m =

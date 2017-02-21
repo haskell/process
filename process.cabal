@@ -82,3 +82,5 @@ test-suite test
                , bytestring
                , directory
                , process
+  ghc-options: -threaded
+               -with-rtsopts "-N"

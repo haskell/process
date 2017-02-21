@@ -77,7 +77,7 @@ import System.Process.Internals
 
 import Control.Concurrent
 import Control.DeepSeq (rnf)
-import Control.Exception (SomeException, mask, try, throwIO)
+import Control.Exception (SomeException, mask, bracket, try, throwIO)
 import qualified Control.Exception as C
 import Control.Monad
 import Data.Maybe
@@ -237,7 +237,7 @@ withCreateProcess_ fun c action =
 cleanupProcess :: (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)
                -> IO ()
 cleanupProcess (mb_stdin, mb_stdout, mb_stderr,
-                ph@(ProcessHandle _ delegating_ctlc)) = do
+                ph@(ProcessHandle _ delegating_ctlc _)) = do
     terminateProcess ph
     -- Note, it's important that other threads that might be reading/writing
     -- these handles also get killed off, since otherwise they might be holding
@@ -258,7 +258,7 @@ cleanupProcess (mb_stdin, mb_stdout, mb_stderr,
     _ <- forkIO (waitForProcess (resetCtlcDelegation ph) >> return ())
     return ()
   where
-    resetCtlcDelegation (ProcessHandle m _) = ProcessHandle m False
+    resetCtlcDelegation (ProcessHandle m _ l) = ProcessHandle m False l
 
 -- ----------------------------------------------------------------------------
 -- spawnProcess/spawnCommand
@@ -584,15 +584,13 @@ detail.
 waitForProcess
   :: ProcessHandle
   -> IO ExitCode
-waitForProcess ph@(ProcessHandle _ delegating_ctlc) = do
+waitForProcess ph@(ProcessHandle _ delegating_ctlc _) = lockWaitpid $ do
   p_ <- modifyProcessHandle ph $ \p_ -> return (p_,p_)
   case p_ of
     ClosedHandle e -> return e
     OpenHandle h  -> do
-        -- don't hold the MVar while we call c_waitForProcess...
-        -- (XXX but there's a small race window here during which another
-        -- thread could close the handle or call waitForProcess)
         e <- alloca $ \pret -> do
+          -- don't hold the MVar while we call c_waitForProcess...
           throwErrnoIfMinus1Retry_ "waitForProcess" (c_waitForProcess h pret)
           modifyProcessHandle ph $ \p_' ->
             case p_' of
@@ -617,6 +615,13 @@ waitForProcess ph@(ProcessHandle _ delegating_ctlc) = do
     OpenExtHandle _ _job _iocp ->
         return $ ExitFailure (-1)
 #endif
+  where
+    -- If more than one thread calls `waitpid` at a time, `waitpid` will
+    -- return the exit code to one of them and (-1) to the rest of them,
+    -- causing an exception to be thrown.
+    -- Cf. https://github.com/haskell/process/issues/46, and
+    -- https://github.com/haskell/process/pull/58 for further discussion
+    lockWaitpid m = withMVar (waitpidLock ph) $ \() -> m
 
 -- ----------------------------------------------------------------------------
 -- getProcessExitCode
@@ -631,7 +636,7 @@ when the process died as the result of a signal.
 -}
 
 getProcessExitCode :: ProcessHandle -> IO (Maybe ExitCode)
-getProcessExitCode ph@(ProcessHandle _ delegating_ctlc) = do
+getProcessExitCode ph@(ProcessHandle _ delegating_ctlc _) = tryLockWaitpid $ do
   (m_e, was_open) <- modifyProcessHandle ph $ \p_ ->
     case p_ of
       ClosedHandle e -> return (p_, (Just e, False))
@@ -659,6 +664,23 @@ getProcessExitCode ph@(ProcessHandle _ delegating_ctlc) = do
           getHandle (ClosedHandle      _) = Nothing
           getHandle (OpenExtHandle h _ _) = Just h
 
+          -- If somebody is currently holding the waitpid lock, we don't want to
+          -- accidentally remove the pid from the process table.
+          -- Try acquiring the waitpid lock. If it is held, we are done
+          -- since that means the process is still running and we can return
+          -- `Nothing`. If it is not held, acquire it so we can run the
+          -- (non-blocking) call to `waitpid` without worrying about any
+          -- other threads calling it at the same time.
+          tryLockWaitpid :: IO (Maybe ExitCode) -> IO (Maybe ExitCode)
+          tryLockWaitpid action = bracket acquire release between
+            where
+              acquire   = tryTakeMVar (waitpidLock ph)
+              release m = case m of
+                Nothing -> return ()
+                Just () -> putMVar (waitpidLock ph) ()
+              between m = case m of
+                Nothing -> return Nothing
+                Just () -> action
 
 -- ----------------------------------------------------------------------------
 -- terminateProcess

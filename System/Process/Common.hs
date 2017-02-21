@@ -177,7 +177,11 @@ data StdStream
 data ProcessHandle__ = OpenHandle PHANDLE
                      | OpenExtHandle PHANDLE PHANDLE PHANDLE
                      | ClosedHandle ExitCode
-data ProcessHandle = ProcessHandle !(MVar ProcessHandle__) !Bool
+data ProcessHandle
+  = ProcessHandle { phandle          :: !(MVar ProcessHandle__)
+                  , mb_delegate_ctlc :: !Bool
+                  , waitpidLock      :: !(MVar ())
+                  }
 
 withFilePathException :: FilePath -> IO a -> IO a
 withFilePathException fpath act = handle mapEx act
@@ -188,13 +192,13 @@ modifyProcessHandle
         :: ProcessHandle
         -> (ProcessHandle__ -> IO (ProcessHandle__, a))
         -> IO a
-modifyProcessHandle (ProcessHandle m _) io = modifyMVar m io
+modifyProcessHandle (ProcessHandle m _ _) io = modifyMVar m io
 
 withProcessHandle
         :: ProcessHandle
         -> (ProcessHandle__ -> IO a)
         -> IO a
-withProcessHandle (ProcessHandle m _) io = withMVar m io
+withProcessHandle (ProcessHandle m _ _) io = withMVar m io
 
 fd_stdin, fd_stdout, fd_stderr :: FD
 fd_stdin  = 0
