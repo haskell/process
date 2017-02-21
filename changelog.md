@@ -2,6 +2,10 @@
 
 ## Unreleased changes
 
+* Fix: waitForProcess race condition
+  [#46](https://github.com/haskell/process/issues/46)
+  [#58](https://github.com/haskell/process/pull/58)
+
 ## 1.5.0.0 *February 2017*
 
 * Bug fix: Don't close already closed pipes
