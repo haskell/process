@@ -1,5 +1,7 @@
 # Changelog for [`process` package](http://hackage.haskell.org/package/process)
 
+## Unreleased changes
+
 ## 1.6.0.0 *February 2017*
 
 * Fix: waitForProcess race condition
