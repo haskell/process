@@ -9,6 +9,8 @@ module System.Process.Common
     , ProcRetHandles (..)
     , withFilePathException
     , PHANDLE
+    , GroupID
+    , UserID
     , modifyProcessHandle
     , withProcessHandle
     , fd_stdin
