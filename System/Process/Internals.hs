@@ -22,6 +22,13 @@
 module System.Process.Internals (
     ProcessHandle(..), ProcessHandle__(..),
     PHANDLE, closePHANDLE, mkProcessHandle,
+#ifdef WINDOWS
+    CGid(..),
+#else
+    CGid,
+#endif
+    GroupID,
+    UserID,
     modifyProcessHandle, withProcessHandle,
     CreateProcess(..),
     CmdSpec(..), StdStream(..), ProcRetHandles (..),

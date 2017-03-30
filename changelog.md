@@ -2,6 +2,10 @@
 
 ## Unreleased changes
 
+* Expose `CGid`, `GroupID`, and `UserID` from `System.Process.Internals`
+  [#90](https://github.com/haskell/process/issues/90)
+  [#91](https://github.com/haskell/process/pull/91)
+
 ## 1.6.0.0 *February 2017*
 
 * Fix: waitForProcess race condition
