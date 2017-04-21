@@ -40,7 +40,7 @@ import System.Posix.Signals as Sig
 import qualified System.Posix.IO as Posix
 import System.Posix.Process (getProcessGroupIDOf)
 
-import System.Process.Common
+import System.Process.Common hiding (mb_delegate_ctlc)
 
 #include "HsProcessConfig.h"
 #include "processFlags.h"
