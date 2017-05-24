@@ -199,7 +199,6 @@ createProcess cp = do
     | hdl /= stdin && hdl /= stdout && hdl /= stderr = hClose hdl
   maybeCloseStd _ = return ()
 
-{-
 -- | A 'C.bracket'-style resource handler for 'createProcess'.
 --
 -- Does automatic cleanup when the action finishes. If there is an exception
@@ -214,7 +213,6 @@ createProcess cp = do
 -- >   ...
 --
 -- @since 1.4.3.0
--}
 withCreateProcess
   :: CreateProcess
   -> (Maybe Handle -> Maybe Handle -> Maybe Handle -> ProcessHandle -> IO a)
