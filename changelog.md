@@ -1,5 +1,7 @@
 # Changelog for [`process` package](http://hackage.haskell.org/package/process)
 
+## Unreleased changes
+
 ## 1.6.1.1 *July 2017*
 
 * Expose `CGid`, `GroupID`, and `UserID` from `System.Process.Internals`
