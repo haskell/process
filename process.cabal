@@ -1,5 +1,5 @@
 name:          process
-version:       1.6.0.0
+version:       1.6.1.0
 -- NOTE: Don't forget to update ./changelog.md
 license:       BSD3
 license-file:  LICENSE
