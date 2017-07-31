@@ -2,7 +2,7 @@
 
 ## Unreleased changes
 
-## 1.6.1.1 *July 2017*
+## 1.6.1.0 *July 2017*
 
 * Expose `CGid`, `GroupID`, and `UserID` from `System.Process.Internals`
   [#90](https://github.com/haskell/process/issues/90)
