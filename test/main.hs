@@ -81,6 +81,17 @@ main = do
       unless (e1 == ExitSuccess && e2 == ExitSuccess)
             $ error "sleep exited with non-zero exit code!"
 
+    do
+      putStrLn "interrupt masked waitForProcess"
+      (_, _, _, p) <- createProcess (proc "sleep" ["0.1"])
+      mec <- newEmptyMVar
+      tid <- mask_ . forkIO $ waitForProcess p >>= putMVar mec
+      killThread tid
+      eec <- try (takeMVar mec)
+      case eec of
+        Left BlockedIndefinitelyOnMVar -> return ()
+        Right ec -> error "waitForProcess not interrupted"
+
     putStrLn "Tests passed successfully"
 
 withCurrentDirectory :: FilePath -> IO a -> IO a

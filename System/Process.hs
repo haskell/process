@@ -77,7 +77,7 @@ import System.Process.Internals
 
 import Control.Concurrent
 import Control.DeepSeq (rnf)
-import Control.Exception (SomeException, mask, bracket, try, throwIO)
+import Control.Exception (SomeException, mask, allowInterrupt, bracket, try, throwIO)
 import qualified Control.Exception as C
 import Control.Monad
 import Data.Maybe
@@ -589,7 +589,7 @@ waitForProcess ph@(ProcessHandle _ delegating_ctlc _) = lockWaitpid $ do
     OpenHandle h  -> do
         e <- alloca $ \pret -> do
           -- don't hold the MVar while we call c_waitForProcess...
-          throwErrnoIfMinus1Retry_ "waitForProcess" (c_waitForProcess h pret)
+          throwErrnoIfMinus1Retry_ "waitForProcess" (allowInterrupt >> c_waitForProcess h pret)
           modifyProcessHandle ph $ \p_' ->
             case p_' of
               ClosedHandle e  -> return (p_', e)
