@@ -2,6 +2,9 @@
 
 ## Unreleased changes
 
+* Allow async exceptions to be delivered to masked thread calling `waitForProcess`
+  [#101](https://github.com/haskell/process/pull/101)
+
 ## 1.6.1.0 *July 2017*
 
 * Expose `CGid`, `GroupID`, and `UserID` from `System.Process.Internals`

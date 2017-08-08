@@ -1,5 +1,5 @@
 import Control.Exception
-import Control.Monad (unless, void)
+import Control.Monad (guard, unless, void)
 import System.Exit
 import System.IO.Error
 import System.Directory (getCurrentDirectory, setCurrentDirectory)
@@ -81,6 +81,19 @@ main = do
       unless (e1 == ExitSuccess && e2 == ExitSuccess)
             $ error "sleep exited with non-zero exit code!"
 
+    do
+      putStrLn "interrupt masked waitForProcess"
+      (_, _, _, p) <- createProcess (proc "sleep" ["1.0"])
+      mec <- newEmptyMVar
+      tid <- mask_ . forkIO $
+          (waitForProcess p >>= putMVar mec . Just)
+              `catchThreadKilled` putMVar mec Nothing
+      killThread tid
+      eec <- takeMVar mec
+      case eec of
+        Nothing -> return ()
+        Just ec -> error $ "waitForProcess not interrupted: sleep exited with " ++ show ec
+
     putStrLn "Tests passed successfully"
 
 withCurrentDirectory :: FilePath -> IO a -> IO a
@@ -90,3 +103,6 @@ withCurrentDirectory new inner = do
     (setCurrentDirectory new)
     (setCurrentDirectory orig)
     inner
+
+catchThreadKilled :: IO a -> IO a -> IO a
+catchThreadKilled f g = catchJust (\e -> guard (e == ThreadKilled)) f (\() -> g)
