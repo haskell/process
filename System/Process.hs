@@ -209,7 +209,7 @@ createProcess cp = do
 --
 -- e.g.
 --
--- > withCreateProcess (proc cmd args) { ... }  $ \_ _ _ ph -> do
+-- > withCreateProcess (proc cmd args) { ... }  $ \stdin stdout stderr ph -> do
 -- >   ...
 --
 -- @since 1.4.3.0
