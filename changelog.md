@@ -4,6 +4,7 @@
 
 * Allow async exceptions to be delivered to masked thread calling `waitForProcess`
   [#101](https://github.com/haskell/process/pull/101)
+* Update Win32 package version to 2.6.x
 
 ## 1.6.1.0 *July 2017*
 
