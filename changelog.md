@@ -1,6 +1,6 @@
 # Changelog for [`process` package](http://hackage.haskell.org/package/process)
 
-## Unreleased changes
+## 1.6.2.0 *October 2017*
 
 * Allow async exceptions to be delivered to masked thread calling `waitForProcess`
   [#101](https://github.com/haskell/process/pull/101)
