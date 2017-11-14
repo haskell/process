@@ -5,9 +5,10 @@ import System.IO.Error
 import System.Directory (getCurrentDirectory, setCurrentDirectory)
 import System.Process
 import Control.Concurrent
+import Data.Char (isDigit)
 import Data.List (isInfixOf)
 import Data.Maybe (isNothing)
-import System.IO (hClose, openBinaryTempFile)
+import System.IO (hClose, openBinaryTempFile, hGetContents)
 import qualified Data.ByteString as S
 import qualified Data.ByteString.Char8 as S8
 import System.Directory (getTemporaryDirectory, removeFile)
@@ -93,6 +94,18 @@ main = do
       case eec of
         Nothing -> return ()
         Just ec -> error $ "waitForProcess not interrupted: sleep exited with " ++ show ec
+
+    putStrLn "testing getPid"
+    do
+      (_, Just out, _, p) <- createProcess $ (proc "sh" ["-c", "echo $$"]) {std_out = CreatePipe}
+      pid <- getPid p
+      line <- hGetContents out
+      putStrLn $ " queried PID: " ++ show pid
+      putStrLn $ " PID reported by stdout: " ++ show line
+      _ <- waitForProcess p
+      hClose out
+      let numStdoutPid = read (takeWhile isDigit line) :: Pid
+      unless (Just numStdoutPid == pid) $ error "subprocess reported unexpected PID"
 
     putStrLn "Tests passed successfully"
 

@@ -2,6 +2,11 @@
 
 ## Unreleased changes
 
+## 1.6.3.0 *November 2017*
+
+* Added `getPid` and export of platform specific `Pid` type
+  [#109](https://github.com/haskell/process/pull/109)
+
 ## 1.6.2.0 *October 2017*
 
 * Allow async exceptions to be delivered to masked thread calling `waitForProcess`
