@@ -2,6 +2,9 @@
 
 ## Unreleased changes
 
+* Bug fix: On Windows ignore ERROR_ACCESS_DENIED for TerminateProcess() if the process did terminate
+  [#110](https://github.com/haskell/process/issues/110)
+
 ## 1.6.4.0 *July 2018*
 
 * Bug fix: Don't leak pipes on failure

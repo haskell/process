@@ -786,6 +786,25 @@ int
 terminateProcess (ProcHandle handle)
 {
     if (!TerminateProcess ((HANDLE) handle, 1)) {
+        DWORD e = GetLastError();
+        DWORD exitCode;
+        /*
+        This is a crude workaround that is taken from libuv. For some reason
+        TerminateProcess() can fail with ERROR_ACCESS_DENIED if the process
+        already terminated. This situation can be detected by using
+        GetExitCodeProcess() to check if the exit code is availble. Unfortunately
+        this function succeeds and gives exit code 259 (STILL_ACTIVE) if the
+        process is still running. So there is no way to ditinguish a process
+        that exited with 259 and a process that did not exit because we had
+        insufficient access to terminate it.
+        One would expect WaitForSingleObject() to be the solid solution. But this
+        function does return WAIT_TIMEOUT in that situation. Even if called
+        after GetExitCodeProcess().
+        */
+        if (e == ERROR_ACCESS_DENIED && GetExitCodeProcess((HANDLE) handle, &exitCode) && exitCode != STILL_ACTIVE)
+            return 0;
+
+        SetLastError(e);
         maperrno();
         return -1;
     }
