@@ -46,6 +46,8 @@ module System.Process (
 
     -- ** Related utilities
     showCommandForUser,
+    Pid,
+    getPid,
 
     -- ** Control-C handling on Unix
     -- $ctlc-handling
@@ -87,12 +89,24 @@ import System.Exit      ( ExitCode(..) )
 import System.IO
 import System.IO.Error (mkIOError, ioeSetErrorString)
 
--- Provide the data constructors for CPid on GHC 7.4 and later
-#if !defined(WINDOWS) && MIN_VERSION_base(4,5,0)
+#if defined(WINDOWS)
+import System.Win32.Process (getProcessId, ProcessId)
+#else
 import System.Posix.Types (CPid (..))
 #endif
 
 import GHC.IO.Exception ( ioException, IOErrorType(..), IOException(..) )
+
+-- | The platform specific type for a process identifier.
+--
+-- This is always an integral type. Width and signedness are platform specific.
+--
+-- @since 1.6.3.0
+#if defined(WINDOWS)
+type Pid = ProcessId
+#else
+type Pid = CPid
+#endif
 
 -- ----------------------------------------------------------------------------
 -- createProcess
@@ -560,6 +574,31 @@ ignoreSigPipe = C.handle $ \e -> case e of
 --   into @\/bin\/sh@ (on Unix systems) or @CMD.EXE@ (on Windows).
 showCommandForUser :: FilePath -> [String] -> String
 showCommandForUser cmd args = unwords (map translate (cmd : args))
+
+
+-- ----------------------------------------------------------------------------
+-- getPid
+
+-- | Returns the PID (process ID) of a subprocess.
+--
+-- 'Nothing' is returned if the handle was already closed. Otherwise a
+-- PID is returned that remains valid as long as the handle is open.
+-- The operating system may reuse the PID as soon as the last handle to
+-- the process is closed.
+--
+-- @since 1.6.3.0
+getPid :: ProcessHandle -> IO (Maybe Pid)
+getPid (ProcessHandle mh _ _) = do
+  p_ <- readMVar mh
+  case p_ of
+#ifdef WINDOWS
+    OpenHandle h -> do
+      pid <- getProcessId h
+      return $ Just pid
+#else
+    OpenHandle pid -> return $ Just pid
+#endif
+    _ -> return Nothing
 
 
 -- ----------------------------------------------------------------------------
