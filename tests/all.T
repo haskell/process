@@ -27,7 +27,10 @@ test('T4198',
      compile_and_run,
      [''])
 
-test('T3994', only_ways(['threaded1','threaded2']), compile_and_run, [''])
+test('T3994', [only_ways(['threaded1','threaded2']),
+               extra_files(['T3994app.hs']),
+               pre_cmd('$MAKE -s --no-print-directory T3994app')],
+     compile_and_run, [''])
 test('T4889', normal, compile_and_run, [''])
 
 test('process009', when(opsys('mingw32'), skip), compile_and_run, [''])

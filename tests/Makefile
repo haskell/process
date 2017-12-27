@@ -10,3 +10,6 @@ include $(TOP)/mk/test.mk
 process007_fd:
 	'$(TEST_HC)' -optc='-Wall' -no-hs-main -no-auto-link-packages process007_fd.c -o process007_fd
 
+.PHONY: T3994app
+T3994app:
+	'$(TEST_HC)' $(TEST_HC_OPTS) T3994app.hs -threaded
