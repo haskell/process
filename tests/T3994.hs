@@ -5,7 +5,7 @@ import System.IO
 import System.Process
 
 main :: IO ()
-main = do (_,Just hout,_,p) <- createProcess (proc "T3994app" ["start", "10000"])
+main = do (_,Just hout,_,p) <- createProcess (proc "./T3994app" ["start", "10000"])
                             { std_out = CreatePipe, create_group = True }
           start <- hGetLine hout
           putStrLn start
