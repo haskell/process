@@ -1,8 +1,6 @@
 # Changelog for [`process` package](http://hackage.haskell.org/package/process)
 
-## Unreleased changes
-
-## 1.6.3.0 *November 2017*
+## 1.6.3.0 *January 2018*
 
 * Added `getPid` and export of platform specific `Pid` type
   [#109](https://github.com/haskell/process/pull/109)
