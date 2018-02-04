@@ -728,8 +728,10 @@ getProcessExitCode ph@(ProcessHandle _ delegating_ctlc _) = tryLockWaitpid $ do
 -- has indeed terminated, use 'getProcessExitCode'.
 --
 -- On Unix systems, 'terminateProcess' sends the process the SIGTERM signal.
--- On Windows systems, the Win32 @TerminateProcess@ function is called, passing
--- an exit code of 1.
+-- On Windows systems, if `use_process_jobs` is `True` then the Win32 @TerminateJobObject@
+-- function is called to kill all processes associated with the job and passing the
+-- exit code of 1 to each of them. Otherwise if `use_process_jobs` is `False` then the
+-- Win32 @TerminateProcess@ function is called, passing an exit code of 1.
 --
 -- Note: on Windows, if the process was a shell command created by
 -- 'createProcess' with 'shell', or created by 'runCommand' or
