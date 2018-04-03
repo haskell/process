@@ -2,6 +2,9 @@
 
 ## Unreleased changes
 
+* Bug fix: Don't leak pipes on failure
+  [#122](https://github.com/haskell/process/issues/122)
+
 ## 1.6.3.0 *January 2018*
 
 * Added `getPid` and export of platform specific `Pid` type

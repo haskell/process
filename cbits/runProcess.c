@@ -111,6 +111,18 @@ runInteractiveProcess (char *const args[],
     r = pipe(forkCommunicationFds);
     if (r == -1) {
         *failed_doing = "runInteractiveProcess: pipe";
+        if (fdStdIn == -1) {
+            close(fdStdInput[0]);
+            close(fdStdInput[1]);
+        }
+        if (fdStdOut == -1) {
+            close(fdStdOutput[0]);
+            close(fdStdOutput[1]);
+        }
+        if (fdStdErr == -1) {
+            close(fdStdError[0]);
+            close(fdStdError[1]);
+        }
         return -1;
     }
 
