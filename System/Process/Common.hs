@@ -55,6 +55,9 @@ import System.Win32.DebugApi (PHANDLE)
 import System.Posix.Types
 #endif
 
+#ifdef ghcjs_HOST_OS
+type PHANDLE = CPid
+#else
 #ifdef WINDOWS
 -- Define some missing types for Windows compatibility. Note that these values
 -- will never actually be used, as the setuid/setgid system calls are not
@@ -66,7 +69,7 @@ type UserID = CGid
 #else
 type PHANDLE = CPid
 #endif
-
+#endif
 data CreateProcess = CreateProcess{
   cmdspec      :: CmdSpec,                 -- ^ Executable & arguments, or shell command.  If 'cwd' is 'Nothing', relative paths are resolved with respect to the current working directory.  If 'cwd' is provided, it is implementation-dependent whether relative paths are resolved with respect to 'cwd' or the current working directory, so absolute paths should be used to ensure portability.
   cwd          :: Maybe FilePath,          -- ^ Optional path to the working directory for the new process

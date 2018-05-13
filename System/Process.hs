@@ -6,6 +6,10 @@
 #endif
 {-# LANGUAGE InterruptibleFFI #-}
 
+#ifdef ghcjs_HOST_OS
+{-# LANGUAGE JavaScriptFFI #-}
+#endif
+
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  System.Process
@@ -759,6 +763,22 @@ terminateProcess ph = do
 -- ----------------------------------------------------------------------------
 -- Interface to C bits
 
+#if defined(ghcjs_HOST_OS)
+
+foreign import javascript unsafe
+  "h$process_terminateProcess($1)"
+  c_terminateProcess :: PHANDLE -> IO CInt
+
+foreign import javascript unsafe
+  "h$process_getProcessExitCode($1,$2_1,$2_2)"
+  c_getProcessExitCode :: PHANDLE -> Ptr CInt -> IO CInt
+
+foreign import javascript interruptible
+  "h$process_waitForProcess($1,$2_1,$2_2,$c);"
+  c_waitForProcess :: PHANDLE -> Ptr CInt -> IO CInt
+
+#else
+
 foreign import ccall unsafe "terminateProcess"
   c_terminateProcess
         :: PHANDLE
@@ -776,6 +796,7 @@ foreign import ccall interruptible "waitForProcess" -- NB. safe - can block
         -> Ptr CInt
         -> IO CInt
 
+#endif
 
 -- ----------------------------------------------------------------------------
 -- Old deprecated variants

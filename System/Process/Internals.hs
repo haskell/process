@@ -3,6 +3,10 @@
 {-# LANGUAGE Trustworthy #-}
 {-# LANGUAGE InterruptibleFFI #-}
 
+#ifdef ghcjs_HOST_OS
+{-# LANGUAGE ForeignFunctionInterface, JavaScriptFFI, UnliftedFFITypes, MagicHash #-}
+#endif
+
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  System.Process.Internals
@@ -39,6 +43,7 @@ module System.Process.Internals (
     endDelegateControlC,
     stopDelegateControlC,
     unwrapHandles,
+#if !defined ghcjs_HOST_OS
 #ifdef WINDOWS
     terminateJob,
     waitForJobCompletion,
@@ -46,6 +51,7 @@ module System.Process.Internals (
 #else
     pPrPr_disableITimers, c_execvpe,
     ignoreSignal, defaultSignal,
+#endif
 #endif
     withFilePathException, withCEnvironment,
     translate,
@@ -62,10 +68,93 @@ import System.Posix.Internals (FD)
 
 import System.Process.Common
 
+#ifdef ghcjs_HOST_OS
+import Control.Applicative
+import Control.Concurrent.MVar
+import GHCJS.Prim
+import System.Exit
+import System.IO.Error
+import qualified GHC.IO.FD as FD
+import GHC.IO.Handle.FD (mkHandleFromFD)
+import GHC.IO.Device (IODeviceType(..))
+import GHC.IO.Encoding (getLocaleEncoding)
+import Foreign.Ptr (Ptr, nullPtr)
+import Foreign.Marshal.Utils (withMany)
+import Foreign.Marshal.Array (withArray0)
+
+mkProcessHandle :: PHANDLE -> Bool -> IO ProcessHandle
+mkProcessHandle p mb_delegate_ctlc = do
+  m <- newMVar (OpenHandle p)
+  ml <- newMVar ()
+  return (ProcessHandle m mb_delegate_ctlc ml)
+
+closePHANDLE :: PHANDLE -> IO ()
+closePHANDLE _ = return ()
+
+startDelegateControlC :: IO ()
+startDelegateControlC = return ()
+
+stopDelegateControlC :: IO ()
+stopDelegateControlC = return ()
+
+endDelegateControlC :: ExitCode -> IO ()
+endDelegateControlC _ = return ()
+
+isDefaultSignal :: CLong -> Bool
+isDefaultSignal _ = True
+
+interruptProcessGroupOfInternal
+    :: ProcessHandle    -- ^ A process in the process group
+    -> IO ()
+interruptProcessGroupOfInternal ph =
+  error "System.Process.interruptProcessGroupOfInternal: not yet supported for GHCJS"
+
+translateInternal :: String -> String
+translateInternal = id
+
+createPipeInternal :: IO (Handle, Handle)
+createPipeInternal = error "System.Process.createPipeInternal: not yet supported on GHCJS"
+
+createPipeInternalFd :: IO (FD, FD)
+createPipeInternalFd = error "System.Process.createPipeInternalFd: not yet supported on GHCJS"
+
+withCEnvironment :: [(String,String)] -> (Ptr CString  -> IO a) -> IO a
+withCEnvironment envir act =
+  let env' = map (\(name, val) -> name ++ ('=':val)) envir
+  in withMany withCString env' (\pEnv -> withArray0 nullPtr pEnv act)
+
+{- -- fixme does ghcjs need anything special?
+mbFd :: String -> FD -> StdStream -> IO FD
+mbFd _ _std CreatePipe = return (-1)
+mbFd _fun std Inherit  = return std
+mbFd fun _std (UseHandle hdl) =
+  withHandle fun hdl $ \x@Handle__{haDevice=dev,..} ->
+    case cast dev of
+      Just fd -> return (x, fd)
+      Nothing -> ioError (mkIOError illegalOperationErrorType "createProcess" (Just hdl) Nothing
+                   `ioeSetErrorString` "handle is not a file descriptor")
+
+-}
+
+commandToProcess :: CmdSpec -> IO (FilePath, [String])
+commandToProcess (ShellCommand xs) = do
+  r <- js_commandToProcess (toJSString xs) jsNull
+  if isNull r
+    then ioError (mkIOError doesNotExistErrorType "commandToProcess" Nothing Nothing)
+    else (\(x:xs) -> (x,xs)) <$> fromJSStrings r
+commandToProcess (RawCommand cmd args) = do
+  r <- js_commandToProcess (toJSString cmd) =<< toJSStrings args
+  if isNull r
+    then ioError (mkIOError doesNotExistErrorType "commandToProcess" Nothing Nothing)
+    else (\(x:xs) -> (x,xs)) <$> fromJSStrings r
+
+#else
 #ifdef WINDOWS
 import System.Process.Windows
 #else
 import System.Process.Posix
+#endif
+
 #endif
 
 -- ----------------------------------------------------------------------------
@@ -98,7 +187,68 @@ createProcess_
   :: String                     -- ^ function name (for error messages)
   -> CreateProcess
   -> IO (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)
+#ifdef ghcjs_HOST_OS
+createProcess_ fun CreateProcess{ cmdspec = cmdsp,
+                                  cwd = mb_cwd,
+                                  env = mb_env,
+                                  std_in = mb_stdin,
+                                  std_out = mb_stdout,
+                                  std_err = mb_stderr,
+                                  close_fds = mb_close_fds,
+                                  create_group = mb_create_group,
+                                  delegate_ctlc = mb_delegate_ctlc }
+ = do
+  (cmd,args) <- commandToProcess cmdsp
+  withFilePathException cmd $ do
+     fdin  <- mbFd fun fd_stdin  mb_stdin
+     fdout <- mbFd fun fd_stdout mb_stdout
+     fderr <- mbFd fun fd_stderr mb_stderr
+     env'  <- maybe (return jsNull) (toJSStrings . concatMap (\(x,y) -> [x,y])) mb_env
+     let cwd' = maybe jsNull toJSString mb_cwd
+     let c1 = toJSString cmd
+     c2 <- case args of
+               [] -> return jsNull
+               _  -> toJSStrings args
+
+     r <- js_runInteractiveProcess c1 c2 cwd' env' fdin fdout fderr
+         mb_close_fds mb_create_group mb_delegate_ctlc
+
+     proc_handle <- fromIntegral . fromJSInt <$> getProp r "pid"
+     fds@[fdin_r, fdout_r, fderr_r] <- map (stdFD . fromIntegral) <$> (fromJSInts =<< getProp r "fds")
+
+     hndStdInput  <- mbPipe_GHCJS mb_stdin  fdin_r  WriteMode
+     hndStdOutput <- mbPipe_GHCJS mb_stdout fdout_r ReadMode
+     hndStdError  <- mbPipe_GHCJS mb_stderr fderr_r ReadMode
+
+     ph <- mkProcessHandle proc_handle mb_delegate_ctlc
+     return (hndStdInput, hndStdOutput, hndStdError, ph)
+
+mbPipe_GHCJS :: StdStream -> FD.FD -> IOMode -> IO (Maybe Handle)
+mbPipe_GHCJS CreatePipe fd mode = do
+{-  (fD,fd_type) <- FD.mkFD (fromIntegral fd) mode
+                       (Just (Stream,0,0)) -- avoid calling fstat()
+                       False {-is_socket-}
+                       False {-non-blocking-} -}
+  enc <- getLocaleEncoding
+  fmap Just (mkHandleFromFD fd Stream ("fd: " ++ show fd) mode False {-is_socket-} (Just enc))
+mbPipe_GHCJS _ _ _ = return Nothing
+
+
+stdFD :: CInt -> FD.FD
+stdFD fd = FD.FD { FD.fdFD = fd,
+#ifdef mingw32_HOST_OS
+                FD.fdIsSocket_ = 0
+#else
+                FD.fdIsNonBlocking = 0
+   -- We don't set non-blocking mode on standard handles, because it may
+   -- confuse other applications attached to the same TTY/pipe
+   -- see Note [nonblock]
+#endif
+                  }
+
+#else
 createProcess_ msg proc_ = unwrapHandles `fmap` createProcess_Internal msg proc_
+#endif
 {-# INLINE createProcess_ #-}
 
 -- ------------------------------------------------------------------------
@@ -164,6 +314,46 @@ translate = translateInternal
 -- unwrapHandles
 unwrapHandles :: ProcRetHandles -> (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)
 unwrapHandles r = (hStdInput r, hStdOutput r, hStdError r, procHandle r)
+
+#if defined(ghcjs_HOST_OS)
+
+type JSArray  = JSVal
+type JSObject = JSVal
+type JSString = JSVal
+
+fromJSStrings :: JSVal -> IO [String]
+fromJSStrings x = fmap (map fromJSString) (fromJSArray x)
+
+fromJSInts :: JSVal -> IO [Int]
+fromJSInts x = map fromJSInt <$> fromJSArray x
+
+toJSStrings :: [String] -> IO JSVal
+toJSStrings xs = toJSArray (map toJSString xs)
+
+throwErrnoIfJSNull :: String -> IO JSVal -> IO JSVal
+throwErrnoIfJSNull msg m = do
+  r <- m
+  if isNull r then throwErrno msg
+              else return r
+
+foreign import javascript safe
+  "h$process_runInteractiveProcess($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)"
+  js_runInteractiveProcess :: JSString     -- ^ $1 command or program
+                           -> JSArray      -- ^ $2 arguments, null if it's a raw command
+                           -> JSString     -- ^ $3 working dir, null for current
+                           -> JSArray      -- ^ $4 environment, null for existing
+                           -> CInt         -- ^ $5 stdin fd
+                           -> CInt         -- ^ $6 stdout fd
+                           -> CInt         -- ^ $7 stderr fd
+                           -> Bool         -- ^ $8 close handles
+                           -> Bool         -- ^ $9
+                           -> Bool         -- ^ $10 delegate ctrl-c
+                           -> IO JSVal     -- ^ process handle
+
+foreign import javascript safe
+  "h$process_commandToProcess($1,$2)"
+  js_commandToProcess :: JSString -> JSArray -> IO JSArray
+#endif
 
 -- ----------------------------------------------------------------------------
 -- Deprecated / compat
