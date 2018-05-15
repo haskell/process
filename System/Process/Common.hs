@@ -44,7 +44,7 @@ import GHC.IO.Handle.Internals
 import GHC.IO.Handle.Types hiding (ClosedHandle)
 import System.IO.Error
 import Data.Typeable
-import GHC.IO.IOMode
+import System.IO (IOMode)
 
 -- We do a minimal amount of CPP here to provide uniform data types across
 -- Windows and POSIX.
