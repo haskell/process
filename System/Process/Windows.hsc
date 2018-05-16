@@ -34,7 +34,7 @@ import GHC.IO.Exception
 import GHC.IO.Handle.FD
 import GHC.IO.Handle.Types hiding (ClosedHandle)
 import System.IO.Error
-import GHC.IO.IOMode
+import System.IO (IOMode(..))
 
 import System.Directory         ( doesFileExist )
 import System.Environment       ( getEnv )
