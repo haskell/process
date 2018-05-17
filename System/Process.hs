@@ -43,6 +43,7 @@ module System.Process (
     readCreateProcessWithExitCode,
     readProcessWithExitCode,
     withCreateProcess,
+    cleanupProcess,
 
     -- ** Related utilities
     showCommandForUser,
@@ -245,7 +246,10 @@ withCreateProcess_ fun c action =
     C.bracketOnError (createProcess_ fun c) cleanupProcess
                      (\(m_in, m_out, m_err, ph) -> action m_in m_out m_err ph)
 
-
+-- | Cleans up the process.
+-- 
+-- This function is meant to be invoked from any application level cleanup 
+-- handler. It terminates the process, and closes any 'CreatePipe' 'handle's.
 cleanupProcess :: (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)
                -> IO ()
 cleanupProcess (mb_stdin, mb_stdout, mb_stderr,
