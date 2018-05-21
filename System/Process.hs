@@ -250,6 +250,8 @@ withCreateProcess_ fun c action =
 -- 
 -- This function is meant to be invoked from any application level cleanup 
 -- handler. It terminates the process, and closes any 'CreatePipe' 'handle's.
+-- 
+-- @since 1.6.4.0
 cleanupProcess :: (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)
                -> IO ()
 cleanupProcess (mb_stdin, mb_stdout, mb_stderr,

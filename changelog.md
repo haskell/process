@@ -4,6 +4,8 @@
 
 * Bug fix: Don't leak pipes on failure
   [#122](https://github.com/haskell/process/issues/122)
+* Expose `cleanupProcess` from `System.Process` 
+  [#130](https://github.com/haskell/process/pull/130)
 
 ## 1.6.3.0 *January 2018*
 
