@@ -25,6 +25,9 @@ environment:
   - ARGS: "--resolver nightly"
 
 test_script:
+# Generate the configure script. This took way too long to figure out
+# correctly.
+- c:\msys64\usr\bin\bash -lc "cd /c/process && autoreconf -i"
 
 # Install toolchain, but do it silently due to lots of output
 - stack %ARGS% setup > nul
