@@ -6,6 +6,7 @@
   [#122](https://github.com/haskell/process/issues/122)
 * Expose `cleanupProcess` from `System.Process` 
   [#130](https://github.com/haskell/process/pull/130)
+* Drop support for GHC before 7.10.3
 
 ## 1.6.3.0 *January 2018*
 

@@ -16,8 +16,6 @@ environment:
     STACK_ROOT: "c:\\sr"
 
   matrix:
-  - ARGS: "--resolver lts-2"
-  - ARGS: "--resolver lts-3"
   - ARGS: "--resolver lts-6"
   - ARGS: "--resolver lts-7"
   - ARGS: "--resolver lts-9"
