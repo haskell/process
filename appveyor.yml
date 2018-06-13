@@ -15,15 +15,21 @@ environment:
   global:
     STACK_ROOT: "c:\\sr"
 
-test_script:
+  matrix:
+  - ARGS: "--resolver lts-6"
+  - ARGS: "--resolver lts-7"
+  - ARGS: "--resolver lts-9"
+  - ARGS: "--resolver lts-11"
+  - ARGS: "--resolver nightly"
 
+test_script:
 # Generate the configure script. This took way too long to figure out
 # correctly.
 - c:\msys64\usr\bin\bash -lc "cd /c/process && autoreconf -i"
 
 # Install toolchain, but do it silently due to lots of output
-- stack setup > nul
+- stack %ARGS% setup > nul
 
 # The ugly echo "" hack is to avoid complaints about 0 being an invalid file
 # descriptor
-- echo "" | stack --no-terminal test --pedantic
+- echo "" | stack %ARGS% --no-terminal test --pedantic

@@ -208,7 +208,7 @@ waitForJobCompletion job io timeout =
                  then Just <$> peek p_exitCode
                  else return Nothing
 
-insertItem :: Eq k => MVar [(k, v)] -> k -> v -> IO ()
+insertItem :: MVar [(k, v)] -> k -> v -> IO ()
 insertItem env_ k v = modifyMVar_ env_ (return . ((k, v):))
 
 getItem :: Eq k => MVar [(k, v)] -> k -> IO v
