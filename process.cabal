@@ -47,8 +47,6 @@ library
         RecordWildCards
         Trustworthy
         Safe
-    if impl(ghc<7.10.3)
-        buildable: False
 
     exposed-modules:
         System.Cmd
