@@ -1,5 +1,7 @@
 # Changelog for [`process` package](http://hackage.haskell.org/package/process)
 
+## Unreleased changes
+
 ## 1.6.4.0 *July 2018*
 
 * Bug fix: Don't leak pipes on failure
