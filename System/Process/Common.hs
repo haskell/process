@@ -159,7 +159,17 @@ data StdStream
                              -- @Handle@ will use the default encoding
                              -- and newline translation mode (just
                              -- like @Handle@s created by @openFile@).
-  | NoStream                 -- ^ No stream handle will be passed
+  | NoStream                 -- ^ Close the stream's file descriptor without
+                             -- passing a Handle. On POSIX systems this may
+                             -- lead to strange behavior in the child process
+                             -- because attempting to read or write after the
+                             -- file has been closed throws an error. This
+                             -- should only be used with child processes that
+                             -- don't use the file descriptor at all. If you
+                             -- wish to ignore the child process's output you
+                             -- should either create a pipe and drain it
+                             -- manually or pass a @Handle@ that writes to
+                             -- @\/dev\/null@.
   deriving (Eq, Show)
 
 -- ----------------------------------------------------------------------------
