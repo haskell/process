@@ -454,25 +454,30 @@ readCreateProcess cp input = do
                     std_out = CreatePipe
                   }
     (ex, output) <- withCreateProcess_ "readCreateProcess" cp_opts $
-      \(Just inh) (Just outh) _ ph -> do
+      \mb_inh mb_outh _ ph ->
+        case (mb_inh, mb_outh) of
+          (Just inh, Just outh) -> do
 
-        -- fork off a thread to start consuming the output
-        output  <- hGetContents outh
-        withForkWait (C.evaluate $ rnf output) $ \waitOut -> do
+            -- fork off a thread to start consuming the output
+            output  <- hGetContents outh
+            withForkWait (C.evaluate $ rnf output) $ \waitOut -> do
 
-          -- now write any input
-          unless (null input) $
-            ignoreSigPipe $ hPutStr inh input
-          -- hClose performs implicit hFlush, and thus may trigger a SIGPIPE
-          ignoreSigPipe $ hClose inh
+              -- now write any input
+              unless (null input) $
+                ignoreSigPipe $ hPutStr inh input
+              -- hClose performs implicit hFlush, and thus may trigger a SIGPIPE
+              ignoreSigPipe $ hClose inh
 
-          -- wait on the output
-          waitOut
-          hClose outh
+              -- wait on the output
+              waitOut
+              hClose outh
 
-        -- wait on the process
-        ex <- waitForProcess ph
-        return (ex, output)
+            -- wait on the process
+            ex <- waitForProcess ph
+            return (ex, output)
+
+          (Nothing,_) -> error "readCreateProcess: Failed to get a stdin handle."
+          (_,Nothing) -> error "readCreateProcess: Failed to get a stdout handle."
 
     case ex of
      ExitSuccess   -> return output
@@ -523,32 +528,37 @@ readCreateProcessWithExitCode cp input = do
                     std_err = CreatePipe
                   }
     withCreateProcess_ "readCreateProcessWithExitCode" cp_opts $
-      \(Just inh) (Just outh) (Just errh) ph -> do
+      \mb_inh mb_outh mb_errh ph ->
+        case (mb_inh, mb_outh, mb_errh) of
+          (Just inh, Just outh, Just errh) -> do
 
-        out <- hGetContents outh
-        err <- hGetContents errh
+            out <- hGetContents outh
+            err <- hGetContents errh
 
-        -- fork off threads to start consuming stdout & stderr
-        withForkWait  (C.evaluate $ rnf out) $ \waitOut ->
-         withForkWait (C.evaluate $ rnf err) $ \waitErr -> do
+            -- fork off threads to start consuming stdout & stderr
+            withForkWait  (C.evaluate $ rnf out) $ \waitOut ->
+             withForkWait (C.evaluate $ rnf err) $ \waitErr -> do
 
-          -- now write any input
-          unless (null input) $
-            ignoreSigPipe $ hPutStr inh input
-          -- hClose performs implicit hFlush, and thus may trigger a SIGPIPE
-          ignoreSigPipe $ hClose inh
+              -- now write any input
+              unless (null input) $
+                ignoreSigPipe $ hPutStr inh input
+              -- hClose performs implicit hFlush, and thus may trigger a SIGPIPE
+              ignoreSigPipe $ hClose inh
 
-          -- wait on the output
-          waitOut
-          waitErr
+              -- wait on the output
+              waitOut
+              waitErr
 
-          hClose outh
-          hClose errh
+              hClose outh
+              hClose errh
 
-        -- wait on the process
-        ex <- waitForProcess ph
+            -- wait on the process
+            ex <- waitForProcess ph
+            return (ex, out, err)
 
-        return (ex, out, err)
+          (Nothing,_,_) -> error "readCreateProcessWithExitCode: Failed to get a stdin handle."
+          (_,Nothing,_) -> error "readCreateProcessWithExitCode: Failed to get a stdout handle."
+          (_,_,Nothing) -> error "readCreateProcessWithExitCode: Failed to get a stderr handle."
 
 -- | Fork a thread while doing something else, but kill it if there's an
 -- exception.
