@@ -1,5 +1,5 @@
 test('process001', extra_clean(['process001.out']), compile_and_run, [''])
-test('process002', extra_clean(['process002.out']), compile_and_run, [''])
+test('process002', [fragile_for(16547, ['threaded2']), extra_clean(['process002.out'])], compile_and_run, [''])
 test('process003', omit_ways(['ghci']), compile_and_run, [''])
 test('process004', normalise_exe, compile_and_run, [''])
 test('T1780', normal, compile_and_run, [''])
