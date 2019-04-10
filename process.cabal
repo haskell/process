@@ -16,7 +16,7 @@ description:
     which uses this package internally. It features better binary
     support, easier concurrency, and a more composable API. You can
     read more about it at
-    <https://haskell-lang.org/library/typed-process>.
+    <https://github.com/fpco/typed-process/#readme>.
 
 extra-source-files:
     aclocal.m4
