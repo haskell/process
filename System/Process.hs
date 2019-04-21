@@ -491,7 +491,7 @@ readCreateProcess cp input = do
              CreateProcess { cmdspec = RawCommand _ args' } -> args'
 
 
--- | @readProcessWithExitCode@ is like @readProcess@ but with two differences:
+-- | @readProcessWithExitCode@ is like 'readProcess' but with two differences:
 --
 --  * it returns the 'ExitCode' of the process, and does not throw any
 --    exception if the code is not 'ExitSuccess'.
