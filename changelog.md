@@ -1,5 +1,7 @@
 # Changelog for [`process` package](http://hackage.haskell.org/package/process)
 
+## Unreleased changes
+
 ## 1.6.5.1 *June 2019*
 
 * Version bound bumps
