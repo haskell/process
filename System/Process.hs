@@ -404,8 +404,8 @@ processFailedException fun cmd args exit_code =
 -- @readProcess@, the forked process will be terminated and @readProcess@ will
 -- wait (block) until the process has been terminated.
 --
--- Output is returned strictly, so this is not suitable for
--- interactive applications.
+-- Output is returned strictly, so this is not suitable for launching processes
+-- that require interaction over the standard file streams.
 --
 -- This function throws an 'IOError' if the process 'ExitCode' is
 -- anything other than 'ExitSuccess'. If instead you want to get the
