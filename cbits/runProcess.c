@@ -33,6 +33,10 @@ static long max_fd = 0;
 extern void blockUserSignals(void);
 extern void unblockUserSignals(void);
 
+// These are arbitrarily chosen -- JP
+#define forkSetgidFailed 124
+#define forkSetuidFailed 125
+
 // See #1593.  The convention for the exit code when
 // exec() fails seems to be 127 (gleened from C's
 // system()), but there's no equivalent convention for
@@ -40,9 +44,8 @@ extern void unblockUserSignals(void);
 #define forkChdirFailed 126
 #define forkExecFailed  127
 
-// These are arbitrarily chosen -- JP
-#define forkSetgidFailed 124
-#define forkSetuidFailed 125
+#define forkGetpwuidFailed 128
+#define forkInitgroupsFailed 129
 
 __attribute__((__noreturn__))
 static void childFailed(int pipe, int failCode) {
@@ -182,6 +185,23 @@ runInteractiveProcess (char *const args[],
         }
 
         if ( childUser) {
+            // Using setuid properly first requires that we initgroups.
+            // However, to do this we must know the username of the user we are
+            // switching to.
+            struct passwd pw;
+            struct passwd *res = NULL;
+            int buf_len = sysconf(_SC_GETPW_R_SIZE_MAX);
+            char *buf = malloc(buf_len);
+            gid_t suppl_gid = childGroup ? *childGroup : getgid();
+            if ( getpwuid_r(*childUser, &pw, buf, buf_len, &res) != 0) {
+                childFailed(forkCommunicationFds[1], forkGetpwuidFailed);
+            }
+            if ( res == NULL ) {
+                childFailed(forkCommunicationFds[1], forkGetpwuidFailed);
+            }
+            if ( initgroups(res->pw_name, suppl_gid) != 0) {
+                childFailed(forkCommunicationFds[1], forkInitgroupsFailed);
+            }
             if ( setuid( *childUser) != 0) {
                 // ERROR
                 childFailed(forkCommunicationFds[1], forkSetuidFailed);
@@ -329,6 +349,12 @@ runInteractiveProcess (char *const args[],
             break;
         case forkSetuidFailed:
             *failed_doing = "runInteractiveProcess: setuid";
+            break;
+        case forkGetpwuidFailed:
+            *failed_doing = "runInteractiveProcess: getpwuid";
+            break;
+        case forkInitgroupsFailed:
+            *failed_doing = "runInteractiveProcess: initgroups";
             break;
         default:
             *failed_doing = "runInteractiveProcess: unknown";
