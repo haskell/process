@@ -329,6 +329,7 @@ runInteractiveProcess (char *const args[],
             break;
         case forkSetuidFailed:
             *failed_doing = "runInteractiveProcess: setuid";
+            break;
         default:
             *failed_doing = "runInteractiveProcess: unknown";
             break;
