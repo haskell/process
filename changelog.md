@@ -2,6 +2,11 @@
 
 ## Unreleased changes
 
+* Fix a potential privilege escalation issue (or, more precisely, privileges
+  not being dropped when this was the user's intent) where the groups of the
+  spawning process's user would be incorrectly retained due to a missing call to
+  `initgroups` [#149].
+
 ## 1.6.5.1 *June 2019*
 
 * Version bound bumps

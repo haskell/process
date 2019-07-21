@@ -21,6 +21,10 @@
 
 #include <unistd.h>
 #include <sys/types.h>
+#if !(defined(_MSC_VER) || defined(__MINGW32__) || defined(_WIN32))
+#include <pwd.h>
+#include <grp.h>
+#endif
 
 #ifdef HAVE_FCNTL_H
 #include <fcntl.h>
