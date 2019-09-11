@@ -6,6 +6,9 @@
   not being dropped when this was the user's intent) where the groups of the
   spawning process's user would be incorrectly retained due to a missing call to
   `initgroups` [#149].
+* Bug fix: Prevent stripping undecodable bytes from environment variables
+  when in a non-unicode locale.
+  [#152](https://github.com/haskell/process/issues/152)
 
 ## 1.6.5.1 *June 2019*
 

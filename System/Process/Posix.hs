@@ -93,7 +93,7 @@ translateInternal str
 withCEnvironment :: [(String,String)] -> (Ptr CString  -> IO a) -> IO a
 withCEnvironment envir act =
   let env' = map (\(name, val) -> name ++ ('=':val)) envir
-  in withMany withCString env' (\pEnv -> withArray0 nullPtr pEnv act)
+  in withMany withFilePath env' (\pEnv -> withArray0 nullPtr pEnv act)
 
 -- -----------------------------------------------------------------------------
 -- POSIX runProcess with signal handling in the child
