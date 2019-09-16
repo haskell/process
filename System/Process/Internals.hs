@@ -46,6 +46,7 @@ module System.Process.Internals (
 #else
     pPrPr_disableITimers, c_execvpe,
     ignoreSignal, defaultSignal,
+    runInteractiveProcess_lock,
 #endif
     withFilePathException, withCEnvironment,
     translate,

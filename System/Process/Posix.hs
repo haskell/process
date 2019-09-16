@@ -17,6 +17,7 @@ module System.Process.Posix
     , createPipeInternal
     , createPipeInternalFd
     , interruptProcessGroupOfInternal
+    , runInteractiveProcess_lock
     ) where
 
 import Control.Concurrent
