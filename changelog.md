@@ -1,6 +1,6 @@
 # Changelog for [`process` package](http://hackage.haskell.org/package/process)
 
-## Unreleased changes
+## 1.6.5.2 *September 2019*
 
 * Fix a potential privilege escalation issue (or, more precisely, privileges
   not being dropped when this was the user's intent) where the groups of the
@@ -9,6 +9,8 @@
 * Bug fix: Prevent stripping undecodable bytes from environment variables
   when in a non-unicode locale.
   [#152](https://github.com/haskell/process/issues/152)
+* Expose `runInteractiveProcess_lock` in `System.Process.Internals`
+  [#154](https://github.com/haskell/process/pull/154)
 
 ## 1.6.5.1 *June 2019*
 
