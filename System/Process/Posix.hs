@@ -17,6 +17,7 @@ module System.Process.Posix
     , createPipeInternal
     , createPipeInternalFd
     , interruptProcessGroupOfInternal
+    , runInteractiveProcess_lock
     ) where
 
 import Control.Concurrent
@@ -138,10 +139,7 @@ createProcess_Internal fun
      when mb_delegate_ctlc
        startDelegateControlC
 
-     -- runInteractiveProcess() blocks signals around the fork().
-     -- Since blocking/unblocking of signals is a global state
-     -- operation, we better ensure mutual exclusion of calls to
-     -- runInteractiveProcess().
+     -- See the comment on runInteractiveProcess_lock
      proc_handle <- withMVar runInteractiveProcess_lock $ \_ ->
                          c_runInteractiveProcess pargs pWorkDir pEnv
                                 fdin fdout fderr
@@ -174,6 +172,15 @@ createProcess_Internal fun
                            }
 
 {-# NOINLINE runInteractiveProcess_lock #-}
+-- | 'runInteractiveProcess' blocks signals around the fork().
+-- Since blocking/unblocking of signals is a global state operation, we need to
+-- ensure mutual exclusion of calls to 'runInteractiveProcess'.
+-- This lock is exported so that other libraries which also need to fork()
+-- (and also need to make the same global state changes) can protect their changes
+-- with the same lock.
+-- See https://github.com/haskell/process/pull/154.
+--
+-- @since 1.6.6.0
 runInteractiveProcess_lock :: MVar ()
 runInteractiveProcess_lock = unsafePerformIO $ newMVar ()
 
