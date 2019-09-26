@@ -179,6 +179,8 @@ createProcess_Internal fun
 -- (and also need to make the same global state changes) can protect their changes
 -- with the same lock.
 -- See https://github.com/haskell/process/pull/154.
+--
+-- @since 1.6.6.0
 runInteractiveProcess_lock :: MVar ()
 runInteractiveProcess_lock = unsafePerformIO $ newMVar ()
 
