@@ -1,6 +1,6 @@
 # Changelog for [`process` package](http://hackage.haskell.org/package/process)
 
-## 1.6.6.0 *September 2019*
+## 1.6.6.0 *October 2019*
 
 * Fix a potential privilege escalation issue (or, more precisely, privileges
   not being dropped when this was the user's intent) where the groups of the
