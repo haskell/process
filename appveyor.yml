@@ -23,6 +23,7 @@ environment:
   - ARGS: "--resolver lts-12"
   - ARGS: "--resolver lts-13"
   - ARGS: "--resolver nightly"
+  - ARGS: "--resolver nightly Win32-2.8.3.0 process"
 
 test_script:
 # Generate the configure script. This took way too long to figure out

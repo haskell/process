@@ -55,7 +55,7 @@ library
     other-modules: System.Process.Common
     if os(windows)
         other-modules: System.Process.Windows
-        build-depends: Win32 >=2.2 && < 2.7
+        build-depends: Win32 >=2.2 && < 2.9
         extra-libraries: kernel32
         cpp-options: -DWINDOWS
     else
