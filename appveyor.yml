@@ -23,14 +23,12 @@ environment:
   - ARGS: "--resolver lts-12"
   - ARGS: "--resolver lts-13"
   - ARGS: "--resolver nightly"
+  - ARGS: "--stack-yaml stack-new-win32.yaml"
 
 test_script:
 # Generate the configure script. This took way too long to figure out
 # correctly.
 - c:\msys64\usr\bin\bash -lc "cd /c/process && autoreconf -i"
-
-# Install toolchain, but do it silently due to lots of output
-- stack %ARGS% setup > nul
 
 # The ugly echo "" hack is to avoid complaints about 0 being an invalid file
 # descriptor
