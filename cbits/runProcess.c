@@ -903,7 +903,8 @@ waitForJobCompletion ( HANDLE hJob, HANDLE ioPort, DWORD timeout, int *pExitCode
     // List of events we can listen to:
     // https://msdn.microsoft.com/en-us/library/windows/desktop/ms684141(v=vs.85).aspx
     while (GetQueuedCompletionStatus (ioPort, &CompletionCode,
-           &CompletionKey, &Overlapped, timeout)) {
+                                      &CompletionKey, &Overlapped, timeout)
+           && (HANDLE)CompletionKey == hJob) {
 
         switch (CompletionCode)
         {
@@ -930,6 +931,10 @@ waitForJobCompletion ( HANDLE hJob, HANDLE ioPort, DWORD timeout, int *pExitCode
                     maperrno();
                     return 1;
                 }
+
+                // Check to see if the child has actually exited.
+                if (*(DWORD *)pExitCode == STILL_ACTIVE)
+                  waitForProcess ((ProcHandle)pHwnd, pExitCode);
             }
             break;
             case JOB_OBJECT_MSG_ACTIVE_PROCESS_ZERO:

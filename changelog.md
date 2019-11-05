@@ -2,6 +2,10 @@
 
 ## Unreleased changes
 
+* Fix a race condition on Windows that happens when you use process jobs and one of
+  the child processes terminates but doesn't release its resources immediately.
+  Control returns to the caller too soon in this scenario. See [#159](https://github.com/haskell/process/pull/159)
+
 ## 1.6.6.0 *October 2019*
 
 * Fix a potential privilege escalation issue (or, more precisely, privileges
@@ -29,7 +33,7 @@
 
 * Bug fix: Don't leak pipes on failure
   [#122](https://github.com/haskell/process/issues/122)
-* Expose `cleanupProcess` from `System.Process` 
+* Expose `cleanupProcess` from `System.Process`
   [#130](https://github.com/haskell/process/pull/130)
 * Drop support for GHC before 7.10.3
 
