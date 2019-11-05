@@ -903,8 +903,11 @@ waitForJobCompletion ( HANDLE hJob, HANDLE ioPort, DWORD timeout, int *pExitCode
     // List of events we can listen to:
     // https://msdn.microsoft.com/en-us/library/windows/desktop/ms684141(v=vs.85).aspx
     while (GetQueuedCompletionStatus (ioPort, &CompletionCode,
-                                      &CompletionKey, &Overlapped, timeout)
-           && (HANDLE)CompletionKey == hJob) {
+                                      &CompletionKey, &Overlapped, timeout)) {
+
+        // If event wasn't meant of us, keep listening.
+        if ((HANDLE)CompletionKey != hJob)
+          continue;
 
         switch (CompletionCode)
         {
