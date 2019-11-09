@@ -1,6 +1,6 @@
 test('process001', extra_clean(['process001.out']), compile_and_run, [''])
-test('process002', [fragile_for(16547, ['threaded2']), extra_clean(['process002.out'])], compile_and_run, [''])
-test('process003', [fragile_for(17245, ['threaded2']), omit_ways(['ghci'])], compile_and_run, [''])
+test('process002', [fragile_for(16547, concurrent_ways), extra_clean(['process002.out'])], compile_and_run, [''])
+test('process003', [fragile_for(17245, concurrent_ways), omit_ways(['ghci'])], compile_and_run, [''])
 test('process004', normalise_exe, compile_and_run, [''])
 test('T1780', normal, compile_and_run, [''])
 test('process005', omit_ways(['ghci']), compile_and_run, [''])
