@@ -1,6 +1,6 @@
 # Changelog for [`process` package](http://hackage.haskell.org/package/process)
 
-## Unreleased changes
+## 1.6.7.0 *November 2019*
 
 * Fix a race condition on Windows that happens when you use process jobs and one of
   the child processes terminates but doesn't release its resources immediately.
