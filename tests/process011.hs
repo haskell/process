@@ -2,7 +2,7 @@ import System.Process
 import System.IO
 import Control.Exception
 import Control.Concurrent
-import Data.List
+import Data.List (intercalate)
 
 -- Test control-C delegation (#2301)
 
