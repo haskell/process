@@ -188,7 +188,7 @@ To create a pipe from which to read the output of @ls@:
 To also set the directory in which to run @ls@:
 
 >   (_, Just hout, _, _) <-
->       createProcess (proc "ls" []){ cwd = Just "\home\bob",
+>       createProcess (proc "ls" []){ cwd = Just "/home/bob",
 >                                     std_out = CreatePipe }
 
 Note that @Handle@s provided for @std_in@, @std_out@, or @std_err@ via the
