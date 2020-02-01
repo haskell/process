@@ -957,7 +957,7 @@ waitForJobCompletion ( HANDLE hJob, HANDLE ioPort, DWORD timeout, int *pExitCode
         return -1;
     }
 
-    return 0;
+    return 2;
 }
 
 #endif /* Win32 */
