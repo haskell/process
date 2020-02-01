@@ -186,8 +186,15 @@ data StdStream
      completion. This requires two handles. A process job handle and
      a events handle to monitor.
 -}
-data ProcessHandle__ = OpenHandle PHANDLE
-                     | OpenExtHandle PHANDLE PHANDLE PHANDLE
+data ProcessHandle__ = OpenHandle { phdlProcessHandle :: PHANDLE }
+                     | OpenExtHandle { phdlProcessHandle :: PHANDLE
+                                     -- ^ the process
+                                     , phdlJobHandle     :: PHANDLE
+                                     -- ^ the job containing the process and
+                                     -- its subprocesses
+                                     , phdlIocpHandle    :: PHANDLE
+                                     -- ^ the job's IO Completion Port
+                                     }
                      | ClosedHandle ExitCode
 data ProcessHandle
   = ProcessHandle { phandle          :: !(MVar ProcessHandle__)
