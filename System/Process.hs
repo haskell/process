@@ -642,28 +642,35 @@ waitForProcess ph@(ProcessHandle _ delegating_ctlc _) = lockWaitpid $ do
   case p_ of
     ClosedHandle e -> return e
     OpenHandle h  -> do
-        e <- alloca $ \pret -> do
-          -- don't hold the MVar while we call c_waitForProcess...
-          throwErrnoIfMinus1Retry_ "waitForProcess" (allowInterrupt >> c_waitForProcess h pret)
-          modifyProcessHandle ph $ \p_' ->
-            case p_' of
-              ClosedHandle e  -> return (p_', e)
-              OpenExtHandle{} -> return (p_', ExitFailure (-1))
-              OpenHandle ph'  -> do
-                closePHANDLE ph'
-                code <- peek pret
-                let e = if (code == 0)
-                       then ExitSuccess
-                       else (ExitFailure (fromIntegral code))
-                return (ClosedHandle e, e)
-        when delegating_ctlc $
-          endDelegateControlC e
-        return e
+        -- don't hold the MVar while we call c_waitForProcess...
+        e <- waitForProcess' h
+        e' <- modifyProcessHandle ph $ \p_' ->
+          case p_' of
+            ClosedHandle e' -> return (p_', e')
+            OpenExtHandle{} -> fail "waitForProcess(OpenExtHandle): this cannot happen"
+            OpenHandle ph'  -> do
+              closePHANDLE ph'
+              when delegating_ctlc $
+                endDelegateControlC e
+              return (ClosedHandle e, e)
+        return e'
 #if defined(WINDOWS)
-    OpenExtHandle _ job iocp ->
-        maybe (ExitFailure (-1)) mkExitCode `fmap` waitForJobCompletion job iocp timeout_Infinite
-      where mkExitCode code | code == 0 = ExitSuccess
-                            | otherwise = ExitFailure $ fromIntegral code
+    OpenExtHandle h job iocp -> do
+        -- First wait for completion of the job...
+        code <- waitForJobCompletion job iocp timeout_Infinite
+        let e = maybe (ExitFailure (-1)) mkExitCode code
+        e' <- modifyProcessHandle ph $ \p_' ->
+          case p_' of
+            ClosedHandle e' -> return (p_', e')
+            OpenHandle{}    -> fail "waitForProcess(OpenHandle): this cannot happen"
+            OpenExtHandle ph' job' iocp'  -> do
+              closePHANDLE ph'
+              closePHANDLE job'
+              closePHANDLE iocp'
+              when delegating_ctlc $
+                endDelegateControlC e
+              return (ClosedHandle e, e)
+        return e
 #else
     OpenExtHandle _ _job _iocp ->
         return $ ExitFailure (-1)
@@ -675,6 +682,17 @@ waitForProcess ph@(ProcessHandle _ delegating_ctlc _) = lockWaitpid $ do
     -- Cf. https://github.com/haskell/process/issues/46, and
     -- https://github.com/haskell/process/pull/58 for further discussion
     lockWaitpid m = withMVar (waitpidLock ph) $ \() -> m
+
+    waitForProcess' :: PHANDLE -> IO ExitCode
+    waitForProcess' h = alloca $ \pret -> do
+      throwErrnoIfMinus1Retry_ "waitForProcess" (allowInterrupt >> c_waitForProcess h pret)
+      mkExitCode <$> peek pret
+
+    mkExitCode :: CInt -> ExitCode
+    mkExitCode code
+      | code == 0 = ExitSuccess
+      | otherwise = ExitFailure (fromIntegral code)
+
 
 -- ----------------------------------------------------------------------------
 -- getProcessExitCode
