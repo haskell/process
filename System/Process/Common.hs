@@ -192,8 +192,6 @@ data ProcessHandle__ = OpenHandle { phdlProcessHandle :: PHANDLE }
                                      , phdlJobHandle     :: PHANDLE
                                      -- ^ the job containing the process and
                                      -- its subprocesses
-                                     , phdlIocpHandle    :: PHANDLE
-                                     -- ^ the job's IO Completion Port
                                      }
                      | ClosedHandle ExitCode
 data ProcessHandle

@@ -655,24 +655,23 @@ waitForProcess ph@(ProcessHandle _ delegating_ctlc _) = lockWaitpid $ do
               return (ClosedHandle e, e)
         return e'
 #if defined(WINDOWS)
-    OpenExtHandle h job iocp -> do
+    OpenExtHandle h job -> do
         -- First wait for completion of the job...
-        code <- waitForJobCompletion job iocp timeout_Infinite
-        let e = maybe (ExitFailure (-1)) mkExitCode code
+        waitForJobCompletion job
+        e <- waitForProcess' h
         e' <- modifyProcessHandle ph $ \p_' ->
           case p_' of
             ClosedHandle e' -> return (p_', e')
             OpenHandle{}    -> fail "waitForProcess(OpenHandle): this cannot happen"
-            OpenExtHandle ph' job' iocp'  -> do
+            OpenExtHandle ph' job' -> do
               closePHANDLE ph'
               closePHANDLE job'
-              closePHANDLE iocp'
               when delegating_ctlc $
                 endDelegateControlC e
               return (ClosedHandle e, e)
-        return e
+        return e'
 #else
-    OpenExtHandle _ _job _iocp ->
+    OpenExtHandle _ _job ->
         return $ ExitFailure (-1)
 #endif
   where
@@ -733,7 +732,7 @@ getProcessExitCode ph@(ProcessHandle _ delegating_ctlc _) = tryLockWaitpid $ do
     where getHandle :: ProcessHandle__ -> Maybe PHANDLE
           getHandle (OpenHandle        h) = Just h
           getHandle (ClosedHandle      _) = Nothing
-          getHandle (OpenExtHandle h _ _) = Just h
+          getHandle (OpenExtHandle   h _) = Just h
 
           -- If somebody is currently holding the waitpid lock, we don't want to
           -- accidentally remove the pid from the process table.
