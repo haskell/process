@@ -54,12 +54,14 @@ module System.Process (
     -- $ctlc-handling
 
     -- * Process completion
+    -- ** Notes about @exec@ on Windows
+    -- $exec-on-windows
     waitForProcess,
     getProcessExitCode,
     terminateProcess,
     interruptProcessGroupOf,
 
-    -- Interprocess communication
+    -- * Interprocess communication
     createPipe,
     createPipeFd,
 
@@ -393,6 +395,32 @@ processFailedException fun cmd args exit_code =
 --
 -- For even more detail on this topic, see
 -- <http://www.cons.org/cracauer/sigint.html "Proper handling of SIGINT/SIGQUIT">.
+
+-- $exec-on-windows
+--
+-- Note that processes which use the POSIX @exec@ system call (e.g. @gcc@)
+-- require special care on Windows. Specifically, the @msvcrt@ C runtime used
+-- frequently on Windows emulates @exec@ in a non-POSIX compliant manner, where
+-- the caller will be terminated (with exit code 0) and execution will continue
+-- in a new process. As a result, on Windows it will appear as though a child
+-- process which has called @exec@ has terminated despite the fact that the
+-- process would still be running on a POSIX-compliant platform.
+--
+-- Since many programs do use @exec@, the @process@ library exposes the
+-- 'use_process_jobs' flag to make it possible to reliably detect when such a
+-- process completes. When this flag is set a 'ProcessHandle' will not be
+-- deemed to be \"finished\" until all processes spawned by it have
+-- terminated (except those spawned by the child with the
+-- @CREATE_BREAKAWAY_FROM_JOB@ @CreateProcess@ flag).
+--
+-- Note, however, that, because of platform limitations, the exit code returned
+-- by @waitForProcess@ and @getProcessExitCode@ cannot not be relied upon when
+-- the child uses @exec@, even when 'use_process_jobs' is used. Specifically,
+-- these functions will return the exit code of the *original child* (which
+-- always exits with code 0, since it called @exec@), not the exit code of the
+-- process which carried on with execution after @exec@. This is different from
+-- the behavior prescribed by POSIX but is the best approximation that can be
+-- realised under the restrictions of the Windows process model.
 
 -- -----------------------------------------------------------------------------
 

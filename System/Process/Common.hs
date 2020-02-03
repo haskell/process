@@ -103,7 +103,7 @@ data CreateProcess = CreateProcess{
                                            --
                                            --   @since 1.4.0.0
   use_process_jobs :: Bool                 -- ^ On Windows systems this flag indicates that we should wait for the entire process tree
-                                           --   to finish before unblocking. On POSIX systems this flag is ignored.
+                                           --   to finish before unblocking. On POSIX systems this flag is ignored. See $exec-on-windows for details.
                                            --
                                            --   Default: @False@
                                            --
