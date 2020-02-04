@@ -858,30 +858,48 @@ waitForProcess (ProcHandle handle, int *pret)
 int
 waitForJobCompletion ( HANDLE hJob )
 {
-    JOBOBJECT_BASIC_PROCESS_ID_LIST pid_list;
-    pid_list.NumberOfAssignedProcesses = 1;
+    int process_count = 16;
+    JOBOBJECT_BASIC_PROCESS_ID_LIST *pid_list = NULL;
 
     while (true) {
+      if (pid_list == NULL) {
+        pid_list = malloc(sizeof(JOBOBJECT_BASIC_PROCESS_ID_LIST) + sizeof(ULONG_PTR) * process_count);
+        pid_list->NumberOfAssignedProcesses = process_count;
+      }
+
       // Find a process in the job...
       bool success = QueryInformationJobObject(
           hJob,
           JobObjectBasicProcessIdList,
-          &pid_list,
+          pid_list,
           sizeof(JOBOBJECT_BASIC_PROCESS_ID_LIST),
           NULL);
 
-      if (pid_list.NumberOfProcessIdsInList == 0) {
+      if (!success && GetLastError() == ERROR_MORE_DATA) {
+        process_count *= 2;
+        free(pid_list);
+        pid_list = NULL;
+        continue;
+      } else if (!success) {
+        free(pid_list);
+        maperrno();
+        return false;
+      }
+      if (pid_list->NumberOfProcessIdsInList == 0) {
         // We're done
+        free(pid_list);
         return true;
       }
 
-      HANDLE pHwnd = OpenProcess(SYNCHRONIZE, TRUE, pid_list.ProcessIdList[0]);
+      HANDLE pHwnd = OpenProcess(SYNCHRONIZE, TRUE, pid_list->ProcessIdList[0]);
       if (pHwnd == NULL) {
         switch (GetLastError()) {
           case ERROR_INVALID_PARAMETER:
+          case ERROR_INVALID_HANDLE:
             // Presumably the process terminated; try again.
             continue;
           default:
+            free(pid_list);
             maperrno();
             return false;
         }
@@ -889,6 +907,7 @@ waitForJobCompletion ( HANDLE hJob )
 
       // Wait for it to finish...
       if (WaitForSingleObject(pHwnd, INFINITE) != WAIT_OBJECT_0) {
+        free(pid_list);
         maperrno();
         CloseHandle(pHwnd);
         return false;
