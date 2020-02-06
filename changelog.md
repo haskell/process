@@ -2,6 +2,10 @@
 
 ## Unreleased changes
 
+* Fix several bugs on Windows where use of process jobs would result
+  in the process being prematurely terminated. See
+  [#168](https://github.com/haskell/process/168).
+
 ## 1.6.7.0 *November 2019*
 
 * Fix a race condition on Windows that happens when you use process jobs and one of

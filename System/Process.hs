@@ -54,12 +54,14 @@ module System.Process (
     -- $ctlc-handling
 
     -- * Process completion
+    -- ** Notes about @exec@ on Windows
+    -- $exec-on-windows
     waitForProcess,
     getProcessExitCode,
     terminateProcess,
     interruptProcessGroupOf,
 
-    -- Interprocess communication
+    -- * Interprocess communication
     createPipe,
     createPipeFd,
 
@@ -394,6 +396,32 @@ processFailedException fun cmd args exit_code =
 -- For even more detail on this topic, see
 -- <http://www.cons.org/cracauer/sigint.html "Proper handling of SIGINT/SIGQUIT">.
 
+-- $exec-on-windows
+--
+-- Note that processes which use the POSIX @exec@ system call (e.g. @gcc@)
+-- require special care on Windows. Specifically, the @msvcrt@ C runtime used
+-- frequently on Windows emulates @exec@ in a non-POSIX compliant manner, where
+-- the caller will be terminated (with exit code 0) and execution will continue
+-- in a new process. As a result, on Windows it will appear as though a child
+-- process which has called @exec@ has terminated despite the fact that the
+-- process would still be running on a POSIX-compliant platform.
+--
+-- Since many programs do use @exec@, the @process@ library exposes the
+-- 'use_process_jobs' flag to make it possible to reliably detect when such a
+-- process completes. When this flag is set a 'ProcessHandle' will not be
+-- deemed to be \"finished\" until all processes spawned by it have
+-- terminated (except those spawned by the child with the
+-- @CREATE_BREAKAWAY_FROM_JOB@ @CreateProcess@ flag).
+--
+-- Note, however, that, because of platform limitations, the exit code returned
+-- by @waitForProcess@ and @getProcessExitCode@ cannot not be relied upon when
+-- the child uses @exec@, even when 'use_process_jobs' is used. Specifically,
+-- these functions will return the exit code of the *original child* (which
+-- always exits with code 0, since it called @exec@), not the exit code of the
+-- process which carried on with execution after @exec@. This is different from
+-- the behavior prescribed by POSIX but is the best approximation that can be
+-- realised under the restrictions of the Windows process model.
+
 -- -----------------------------------------------------------------------------
 
 -- | @readProcess@ forks an external process, reads its standard output
@@ -642,30 +670,36 @@ waitForProcess ph@(ProcessHandle _ delegating_ctlc _) = lockWaitpid $ do
   case p_ of
     ClosedHandle e -> return e
     OpenHandle h  -> do
-        e <- alloca $ \pret -> do
-          -- don't hold the MVar while we call c_waitForProcess...
-          throwErrnoIfMinus1Retry_ "waitForProcess" (allowInterrupt >> c_waitForProcess h pret)
-          modifyProcessHandle ph $ \p_' ->
-            case p_' of
-              ClosedHandle e  -> return (p_', e)
-              OpenExtHandle{} -> return (p_', ExitFailure (-1))
-              OpenHandle ph'  -> do
-                closePHANDLE ph'
-                code <- peek pret
-                let e = if (code == 0)
-                       then ExitSuccess
-                       else (ExitFailure (fromIntegral code))
-                return (ClosedHandle e, e)
-        when delegating_ctlc $
-          endDelegateControlC e
-        return e
+        -- don't hold the MVar while we call c_waitForProcess...
+        e <- waitForProcess' h
+        e' <- modifyProcessHandle ph $ \p_' ->
+          case p_' of
+            ClosedHandle e' -> return (p_', e')
+            OpenExtHandle{} -> fail "waitForProcess(OpenExtHandle): this cannot happen"
+            OpenHandle ph'  -> do
+              closePHANDLE ph'
+              when delegating_ctlc $
+                endDelegateControlC e
+              return (ClosedHandle e, e)
+        return e'
 #if defined(WINDOWS)
-    OpenExtHandle _ job iocp ->
-        maybe (ExitFailure (-1)) mkExitCode `fmap` waitForJobCompletion job iocp timeout_Infinite
-      where mkExitCode code | code == 0 = ExitSuccess
-                            | otherwise = ExitFailure $ fromIntegral code
+    OpenExtHandle h job -> do
+        -- First wait for completion of the job...
+        waitForJobCompletion job
+        e <- waitForProcess' h
+        e' <- modifyProcessHandle ph $ \p_' ->
+          case p_' of
+            ClosedHandle e' -> return (p_', e')
+            OpenHandle{}    -> fail "waitForProcess(OpenHandle): this cannot happen"
+            OpenExtHandle ph' job' -> do
+              closePHANDLE ph'
+              closePHANDLE job'
+              when delegating_ctlc $
+                endDelegateControlC e
+              return (ClosedHandle e, e)
+        return e'
 #else
-    OpenExtHandle _ _job _iocp ->
+    OpenExtHandle _ _job ->
         return $ ExitFailure (-1)
 #endif
   where
@@ -675,6 +709,17 @@ waitForProcess ph@(ProcessHandle _ delegating_ctlc _) = lockWaitpid $ do
     -- Cf. https://github.com/haskell/process/issues/46, and
     -- https://github.com/haskell/process/pull/58 for further discussion
     lockWaitpid m = withMVar (waitpidLock ph) $ \() -> m
+
+    waitForProcess' :: PHANDLE -> IO ExitCode
+    waitForProcess' h = alloca $ \pret -> do
+      throwErrnoIfMinus1Retry_ "waitForProcess" (allowInterrupt >> c_waitForProcess h pret)
+      mkExitCode <$> peek pret
+
+    mkExitCode :: CInt -> ExitCode
+    mkExitCode code
+      | code == 0 = ExitSuccess
+      | otherwise = ExitFailure (fromIntegral code)
+
 
 -- ----------------------------------------------------------------------------
 -- getProcessExitCode
@@ -715,7 +760,7 @@ getProcessExitCode ph@(ProcessHandle _ delegating_ctlc _) = tryLockWaitpid $ do
     where getHandle :: ProcessHandle__ -> Maybe PHANDLE
           getHandle (OpenHandle        h) = Just h
           getHandle (ClosedHandle      _) = Nothing
-          getHandle (OpenExtHandle h _ _) = Just h
+          getHandle (OpenExtHandle   h _) = Just h
 
           -- If somebody is currently holding the waitpid lock, we don't want to
           -- accidentally remove the pid from the process table.

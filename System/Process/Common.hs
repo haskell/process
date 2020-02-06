@@ -103,7 +103,7 @@ data CreateProcess = CreateProcess{
                                            --
                                            --   @since 1.4.0.0
   use_process_jobs :: Bool                 -- ^ On Windows systems this flag indicates that we should wait for the entire process tree
-                                           --   to finish before unblocking. On POSIX systems this flag is ignored.
+                                           --   to finish before unblocking. On POSIX systems this flag is ignored. See $exec-on-windows for details.
                                            --
                                            --   Default: @False@
                                            --
@@ -186,8 +186,13 @@ data StdStream
      completion. This requires two handles. A process job handle and
      a events handle to monitor.
 -}
-data ProcessHandle__ = OpenHandle PHANDLE
-                     | OpenExtHandle PHANDLE PHANDLE PHANDLE
+data ProcessHandle__ = OpenHandle { phdlProcessHandle :: PHANDLE }
+                     | OpenExtHandle { phdlProcessHandle :: PHANDLE
+                                     -- ^ the process
+                                     , phdlJobHandle     :: PHANDLE
+                                     -- ^ the job containing the process and
+                                     -- its subprocesses
+                                     }
                      | ClosedHandle ExitCode
 data ProcessHandle
   = ProcessHandle { phandle          :: !(MVar ProcessHandle__)

@@ -22,7 +22,6 @@ import System.Process.Common
 import Control.Concurrent
 import Control.Exception
 import Data.Bits
-import Data.Maybe
 import Foreign.C
 import Foreign.Marshal
 import Foreign.Ptr
@@ -60,11 +59,11 @@ throwErrnoIfBadPHandle = throwErrnoIfNull
 
 -- On Windows, we have to close this HANDLE when it is no longer required,
 -- hence we add a finalizer to it
-mkProcessHandle :: PHANDLE -> PHANDLE -> PHANDLE -> IO ProcessHandle
-mkProcessHandle h job io = do
-   m <- if job == nullPtr && io == nullPtr
+mkProcessHandle :: PHANDLE -> PHANDLE -> IO ProcessHandle
+mkProcessHandle h job = do
+   m <- if job == nullPtr
            then newMVar (OpenHandle h)
-           else newMVar (OpenExtHandle h job io)
+           else newMVar (OpenExtHandle h job)
    _ <- mkWeakMVar m (processHandleFinaliser m)
    l <- newMVar ()
    return (ProcessHandle m False l)
@@ -74,9 +73,8 @@ processHandleFinaliser m =
    modifyMVar_ m $ \p_ -> do
         case p_ of
           OpenHandle ph           -> closePHANDLE ph
-          OpenExtHandle ph job io -> closePHANDLE ph
+          OpenExtHandle ph job    -> closePHANDLE ph
                                   >> closePHANDLE job
-                                  >> closePHANDLE io
           _ -> return ()
         return (error "closed process handle")
 
@@ -114,7 +112,6 @@ createProcess_Internal fun CreateProcess{ cmdspec = cmdsp,
    alloca $ \ pfdStdOutput          ->
    alloca $ \ pfdStdError           ->
    allocaBytes lenPtr $ \ hJob      ->
-   allocaBytes lenPtr $ \ hIOcpPort ->
    maybeWith withCEnvironment mb_env $ \pEnv ->
    maybeWith withCWString mb_cwd $ \pWorkDir -> do
    withCWString cmdline $ \pcmdline -> do
@@ -145,15 +142,13 @@ createProcess_Internal fun CreateProcess{ cmdspec = cmdsp,
                                 .|.(if mb_new_session then RUN_PROCESS_NEW_SESSION else 0))
                                 use_job
                                 hJob
-                                hIOcpPort
 
      hndStdInput  <- mbPipe mb_stdin  pfdStdInput  WriteMode
      hndStdOutput <- mbPipe mb_stdout pfdStdOutput ReadMode
      hndStdError  <- mbPipe mb_stderr pfdStdError  ReadMode
 
      phJob  <- peek hJob
-     phIOCP <- peek hIOcpPort
-     ph     <- mkProcessHandle proc_handle phJob phIOCP
+     ph     <- mkProcessHandle proc_handle phJob
      return ProcRetHandles { hStdInput  = hndStdInput
                            , hStdOutput = hndStdOutput
                            , hStdError  = hndStdError
@@ -187,43 +182,20 @@ terminateJob :: ProcessHandle -> CUInt -> IO Bool
 terminateJob jh ecode =
     withProcessHandle jh $ \p_ -> do
         case p_ of
-            ClosedHandle        _ -> return False
-            OpenHandle          _ -> return False
-            OpenExtHandle _ job _ -> c_terminateJobObject job ecode
+            ClosedHandle      _ -> return False
+            OpenHandle        _ -> return False
+            OpenExtHandle _ job -> c_terminateJobObject job ecode
 
 timeout_Infinite :: CUInt
 timeout_Infinite = 0xFFFFFFFF
 
-waitForJobCompletion :: PHANDLE
-                     -> PHANDLE
-                     -> CUInt
-                     -> IO (Maybe CInt)
-waitForJobCompletion job io timeout =
-            alloca $ \p_exitCode -> do
-              items <- newMVar $ []
-              setter <- mkSetter (insertItem items)
-              getter <- mkGetter (getItem items)
-              ret <- c_waitForJobCompletion job io timeout p_exitCode setter getter
-              if ret == 0
-                 then Just <$> peek p_exitCode
-                 else return Nothing
-
-insertItem :: MVar [(k, v)] -> k -> v -> IO ()
-insertItem env_ k v = modifyMVar_ env_ (return . ((k, v):))
-
-getItem :: Eq k => MVar [(k, v)] -> k -> IO v
-getItem env_ k = withMVar env_ (\m -> return $ fromJust $ lookup k m)
+waitForJobCompletion :: PHANDLE -- ^ job handle
+                     -> IO ()
+waitForJobCompletion job =
+    throwErrnoIf_ not "waitForJobCompletion" $ c_waitForJobCompletion job
 
 -- ----------------------------------------------------------------------------
 -- Interface to C bits
-
-type SetterDef = CUInt -> Ptr () -> IO ()
-type GetterDef = CUInt -> IO (Ptr ())
-
-foreign import ccall "wrapper"
-  mkSetter :: SetterDef -> IO (FunPtr SetterDef)
-foreign import ccall "wrapper"
-  mkGetter :: GetterDef -> IO (FunPtr GetterDef)
 
 foreign import WINDOWS_CCONV unsafe "TerminateJobObject"
   c_terminateJobObject
@@ -234,12 +206,7 @@ foreign import WINDOWS_CCONV unsafe "TerminateJobObject"
 foreign import ccall interruptible "waitForJobCompletion" -- NB. safe - can block
   c_waitForJobCompletion
         :: PHANDLE
-        -> PHANDLE
-        -> CUInt
-        -> Ptr CInt
-        -> FunPtr (SetterDef)
-        -> FunPtr (GetterDef)
-        -> IO CInt
+        -> IO Bool
 
 foreign import ccall unsafe "runInteractiveProcess"
   c_runInteractiveProcess
@@ -255,7 +222,6 @@ foreign import ccall unsafe "runInteractiveProcess"
         -> CInt          -- flags
         -> Bool          -- useJobObject
         -> Ptr PHANDLE       -- Handle to Job
-        -> Ptr PHANDLE       -- Handle to I/O Completion Port
         -> IO PHANDLE
 
 commandToProcess
@@ -338,7 +304,7 @@ createPipeInternal = do
     (do readh <- fdToHandle readfd
         writeh <- fdToHandle writefd
         return (readh, writeh)) `onException` (close' readfd >> close' writefd)
-        
+
 createPipeInternalFd :: IO (FD, FD)
 createPipeInternalFd = do
     allocaArray 2 $ \ pfds -> do
@@ -365,9 +331,9 @@ interruptProcessGroupOfInternal ph = do
         case p_ of
             ClosedHandle _ -> return ()
             _ -> do let h = case p_ of
-                              OpenHandle x        -> x
-                              OpenExtHandle x _ _ -> x
-                              _                   -> error "interruptProcessGroupOfInternal"
+                              OpenHandle x      -> x
+                              OpenExtHandle x _ -> x
+                              _                 -> error "interruptProcessGroupOfInternal"
 #if mingw32_HOST_OS
                     pid <- getProcessId h
                     generateConsoleCtrlEvent cTRL_BREAK_EVENT pid

@@ -86,14 +86,13 @@ extern ProcHandle runInteractiveProcess( wchar_t *cmd,
                                          int *pfdStdError,
                                          int flags,
                                          bool useJobObject,
-                                         HANDLE *hJob,
-                                         HANDLE *hIOcpPort );
+                                         HANDLE *hJob );
 
 typedef void(*setterDef)(DWORD, HANDLE);
 typedef HANDLE(*getterDef)(DWORD);
 
 extern int terminateJob( ProcHandle handle );
-extern int waitForJobCompletion( HANDLE hJob, HANDLE ioPort, DWORD timeout, int *pExitCode, setterDef set, getterDef get );
+extern int waitForJobCompletion( HANDLE hJob );
 
 #endif
 

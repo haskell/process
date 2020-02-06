@@ -569,29 +569,6 @@ createJob ()
     return NULL;
 }
 
-static HANDLE
-createCompletionPort (HANDLE hJob)
-{
-    HANDLE ioPort = CreateIoCompletionPort (INVALID_HANDLE_VALUE, NULL, 0, 1);
-    if (!ioPort)
-    {
-        // Something failed. Error is in GetLastError, let caller handler it.
-        return NULL;
-    }
-
-    JOBOBJECT_ASSOCIATE_COMPLETION_PORT Port;
-    Port.CompletionKey = hJob;
-    Port.CompletionPort = ioPort;
-    if (!SetInformationJobObject(hJob,
-        JobObjectAssociateCompletionPortInformation,
-        &Port, sizeof(Port))) {
-        // Something failed. Error is in GetLastError, let caller handler it.
-        return NULL;
-    }
-
-    return ioPort;
-}
-
 /* Note [Windows exec interaction]
 
    The basic issue that process jobs tried to solve is this:
@@ -629,7 +606,7 @@ runInteractiveProcess (wchar_t *cmd, wchar_t *workingDirectory,
                        wchar_t *environment,
                        int fdStdIn, int fdStdOut, int fdStdErr,
                        int *pfdStdInput, int *pfdStdOutput, int *pfdStdError,
-                       int flags, bool useJobObject, HANDLE *hJob, HANDLE *hIOcpPort)
+                       int flags, bool useJobObject, HANDLE *hJob)
 {
     STARTUPINFO sInfo;
     PROCESS_INFORMATION pInfo;
@@ -750,16 +727,8 @@ runInteractiveProcess (wchar_t *cmd, wchar_t *workingDirectory,
         {
             goto cleanup_err;
         }
-
-        // Create the completion port and attach it to the job
-        *hIOcpPort = createCompletionPort(*hJob);
-        if (!*hIOcpPort)
-        {
-            goto cleanup_err;
-        }
     } else {
         *hJob      = NULL;
-        *hIOcpPort = NULL;
     }
 
     if (!CreateProcess(NULL, cmd, NULL, NULL, inherit, dwFlags, environment, workingDirectory, &sInfo, &pInfo))
@@ -803,7 +772,6 @@ cleanup_err:
     if (hStdErrorRead   != INVALID_HANDLE_VALUE) CloseHandle(hStdErrorRead);
     if (hStdErrorWrite  != INVALID_HANDLE_VALUE) CloseHandle(hStdErrorWrite);
     if (useJobObject && hJob      && *hJob     ) CloseHandle(*hJob);
-    if (useJobObject && hIOcpPort && *hIOcpPort) CloseHandle(*hIOcpPort);
 
     maperrno();
     return NULL;
@@ -886,78 +854,68 @@ waitForProcess (ProcHandle handle, int *pret)
     return -1;
 }
 
-
+// Returns true on success.
 int
-waitForJobCompletion ( HANDLE hJob, HANDLE ioPort, DWORD timeout, int *pExitCode, setterDef set, getterDef get )
+waitForJobCompletion ( HANDLE hJob )
 {
-    DWORD CompletionCode;
-    ULONG_PTR CompletionKey;
-    LPOVERLAPPED Overlapped;
-    *pExitCode = 0;
+    int process_count = 16;
+    JOBOBJECT_BASIC_PROCESS_ID_LIST *pid_list = NULL;
 
-    // We have to loop here. It's a blocking call, but
-    // we get notified on each completion event. So if it's
-    // not one we care for we should just block again.
-    // If all processes are finished before this call is made
-    // then the initial call will return false.
-    // List of events we can listen to:
-    // https://msdn.microsoft.com/en-us/library/windows/desktop/ms684141(v=vs.85).aspx
-    while (GetQueuedCompletionStatus (ioPort, &CompletionCode,
-                                      &CompletionKey, &Overlapped, timeout)) {
+    while (true) {
+      if (pid_list == NULL) {
+        pid_list = malloc(sizeof(JOBOBJECT_BASIC_PROCESS_ID_LIST) + sizeof(ULONG_PTR) * process_count);
+        pid_list->NumberOfAssignedProcesses = process_count;
+      }
 
-        // If event wasn't meant of us, keep listening.
-        if ((HANDLE)CompletionKey != hJob)
-          continue;
+      // Find a process in the job...
+      bool success = QueryInformationJobObject(
+          hJob,
+          JobObjectBasicProcessIdList,
+          pid_list,
+          sizeof(JOBOBJECT_BASIC_PROCESS_ID_LIST),
+          NULL);
 
-        switch (CompletionCode)
-        {
-            case JOB_OBJECT_MSG_NEW_PROCESS:
-            {
-                // A new child process is born.
-                // Retrieve and save the process handle from the process id.
-                // We'll need it for later but we can't retrieve it after the
-                // process has exited.
-                DWORD pid    = (DWORD)(uintptr_t)Overlapped;
-                HANDLE pHwnd = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, TRUE, pid);
-                set(pid, pHwnd);
-            }
-            break;
-            case JOB_OBJECT_MSG_ABNORMAL_EXIT_PROCESS:
-            case JOB_OBJECT_MSG_EXIT_PROCESS:
-            {
-                // A child process has just exited.
-                // Read exit code, We assume the last process to exit
-                // is the process whose exit code we're interested in.
-                HANDLE pHwnd = get((DWORD)(uintptr_t)Overlapped);
-                if (GetExitCodeProcess(pHwnd, (DWORD *)pExitCode) == 0)
-                {
-                    maperrno();
-                    return 1;
-                }
+      if (!success && GetLastError() == ERROR_MORE_DATA) {
+        process_count *= 2;
+        free(pid_list);
+        pid_list = NULL;
+        continue;
+      } else if (!success) {
+        free(pid_list);
+        maperrno();
+        return false;
+      }
+      if (pid_list->NumberOfProcessIdsInList == 0) {
+        // We're done
+        free(pid_list);
+        return true;
+      }
 
-                // Check to see if the child has actually exited.
-                if (*(DWORD *)pExitCode == STILL_ACTIVE)
-                  waitForProcess ((ProcHandle)pHwnd, pExitCode);
-            }
-            break;
-            case JOB_OBJECT_MSG_ACTIVE_PROCESS_ZERO:
-                // All processes in the tree are done.
-                return 0;
-            default:
-                break;
+      HANDLE pHwnd = OpenProcess(SYNCHRONIZE, TRUE, pid_list->ProcessIdList[0]);
+      if (pHwnd == NULL) {
+        switch (GetLastError()) {
+          case ERROR_INVALID_PARAMETER:
+          case ERROR_INVALID_HANDLE:
+            // Presumably the process terminated; try again.
+            continue;
+          default:
+            free(pid_list);
+            maperrno();
+            return false;
         }
-    }
+      }
 
-    // Check to see if a timeout has occurred or that the
-    // all processes in the job were finished by the time we
-    // got to the loop.
-    if (Overlapped == NULL && (HANDLE)CompletionKey != hJob)
-    {
-        // Timeout occurred.
-        return -1;
-    }
+      // Wait for it to finish...
+      if (WaitForSingleObject(pHwnd, INFINITE) != WAIT_OBJECT_0) {
+        free(pid_list);
+        maperrno();
+        CloseHandle(pHwnd);
+        return false;
+      }
 
-    return 0;
+      // The process signalled, loop again to try the next process.
+      CloseHandle(pHwnd);
+    }
 }
 
 #endif /* Win32 */
