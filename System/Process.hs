@@ -464,7 +464,7 @@ readProcess cmd args = readCreateProcess $ proc cmd args
 -- | @readCreateProcess@ works exactly like 'readProcess' except that it
 -- lets you pass 'CreateProcess' giving better flexibility.
 --
--- >  > readCreateProcess (shell "pwd" { cwd = "/etc/" }) ""
+-- >  > readCreateProcess ((shell "pwd") { cwd = Just "/etc/" }) ""
 -- >  "/etc\n"
 --
 -- Note that @Handle@s provided for @std_in@ or @std_out@ via the CreateProcess
