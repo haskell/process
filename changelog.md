@@ -1,5 +1,7 @@
 # Changelog for [`process` package](http://hackage.haskell.org/package/process)
 
+## Unreleased changes
+
 ## 1.6.8.0 *February 2020*
 
 * Fix several bugs on Windows where use of process jobs would result
