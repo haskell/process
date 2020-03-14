@@ -330,10 +330,7 @@ interruptProcessGroupOfInternal ph = do
     withProcessHandle ph $ \p_ -> do
         case p_ of
             ClosedHandle _ -> return ()
-            _ -> do let h = case p_ of
-                              OpenHandle x      -> x
-                              OpenExtHandle x _ -> x
-                              _                 -> error "interruptProcessGroupOfInternal"
+            _ -> do let h = phdlProcessHandle p_
 #if mingw32_HOST_OS
                     pid <- getProcessId h
                     generateConsoleCtrlEvent cTRL_BREAK_EVENT pid
