@@ -875,6 +875,11 @@ waitForJobCompletion ( HANDLE hJob )
           sizeof(JOBOBJECT_BASIC_PROCESS_ID_LIST),
           NULL);
 
+      if (!success) {
+          maperrno();
+          return false;
+      }
+
       if (!success && GetLastError() == ERROR_MORE_DATA) {
         process_count *= 2;
         free(pid_list);
