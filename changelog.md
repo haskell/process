@@ -1,6 +1,8 @@
 # Changelog for [`process` package](http://hackage.haskell.org/package/process)
 
-## Unreleased changes
+## 1.6.8.1 *March 2020*
+
+* Fix a few warnings on Windows.
 
 ## 1.6.8.0 *February 2020*
 
