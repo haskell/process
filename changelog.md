@@ -2,6 +2,10 @@
 
 ## Unreleased changes
 
+## 1.6.8.1 *March 2020*
+
+* Fix a few warnings on Windows.
+
 ## 1.6.8.0 *February 2020*
 
 * Fix several bugs on Windows where use of process jobs would result
