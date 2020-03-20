@@ -1,6 +1,8 @@
 # Changelog for [`process` package](http://hackage.haskell.org/package/process)
 
-## Unreleased changes
+## 1.6.8.2 *March 2020*
+
+* Fix another process wait bug on Windows.
 
 ## 1.6.8.1 *March 2020*
 
