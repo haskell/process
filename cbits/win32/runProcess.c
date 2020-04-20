@@ -553,6 +553,10 @@ waitForJobCompletion ( HANDLE hJob )
 
       if (pid_list == NULL) {
         pid_list = malloc(pid_list_size);
+        if (pid_list == NULL) {
+          errno = ENOMEM;
+          return false;
+        }
         pid_list->NumberOfAssignedProcesses = process_count;
       }
 
