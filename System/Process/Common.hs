@@ -26,6 +26,13 @@ module System.Process.Common
 #else
     , CGid
 #endif
+
+-- WINIO is only available on GHC 8.12 and up.
+#if defined(__IO_MANAGER_WINIO__)
+    , HANDLE
+    , mbHANDLE
+    , mbPipeHANDLE
+#endif
     ) where
 
 import Control.Concurrent
@@ -39,6 +46,10 @@ import GHC.IO.Exception
 import GHC.IO.Encoding
 import qualified GHC.IO.FD as FD
 import GHC.IO.Device
+#if defined(__IO_MANAGER_WINIO__)
+import GHC.IO.Handle.Windows
+import GHC.IO.Windows.Handle (fromHANDLE, Io(), NativeHandle())
+#endif
 import GHC.IO.Handle.FD
 import GHC.IO.Handle.Internals
 import GHC.IO.Handle.Types hiding (ClosedHandle)
@@ -51,6 +62,9 @@ import System.IO (IOMode)
 #ifdef WINDOWS
 import Data.Word (Word32)
 import System.Win32.DebugApi (PHANDLE)
+#if defined(__IO_MANAGER_WINIO__)
+import System.Win32.Types (HANDLE)
+#endif
 #else
 import System.Posix.Types
 #endif
@@ -258,3 +272,25 @@ pfdToHandle pfd mode = do
   let enc = localeEncoding
 #endif
   mkHandleFromFD fD' fd_type filepath mode False {-is_socket-} (Just enc)
+
+#if defined(__IO_MANAGER_WINIO__)
+-- It is not completely safe to pass the values -1 and -2 as HANDLE as it's an
+-- unsigned type. -1 additionally is also the value for INVALID_HANDLE.  However
+-- it should be safe in this case since an invalid handle would be an error here
+-- anyway and the chances of us getting a handle with a value of -2 is
+-- astronomical. However, sometime in the future process should really use a
+-- proper structure here.
+mbHANDLE :: HANDLE -> StdStream -> IO HANDLE
+mbHANDLE _std CreatePipe      = return $ intPtrToPtr (-1)
+mbHANDLE  std Inherit         = return std
+mbHANDLE _std NoStream        = return $ intPtrToPtr (-2)
+mbHANDLE _std (UseHandle hdl) = handleToHANDLE hdl
+
+mbPipeHANDLE :: StdStream -> Ptr HANDLE -> IOMode -> IO (Maybe Handle)
+mbPipeHANDLE CreatePipe pfd  mode =
+  do raw_handle <- peek pfd
+     let hwnd  = fromHANDLE raw_handle :: Io NativeHandle
+         ident = "hwnd:" ++ show raw_handle
+     Just <$> mkHandleFromHANDLE hwnd Stream ident mode Nothing
+mbPipeHANDLE _std      _pfd _mode = return Nothing
+#endif
