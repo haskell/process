@@ -862,8 +862,10 @@ waitForJobCompletion ( HANDLE hJob )
     JOBOBJECT_BASIC_PROCESS_ID_LIST *pid_list = NULL;
 
     while (true) {
+      size_t pid_list_size = sizeof(JOBOBJECT_BASIC_PROCESS_ID_LIST) + sizeof(ULONG_PTR) * (process_count - 1);
+
       if (pid_list == NULL) {
-        pid_list = malloc(sizeof(JOBOBJECT_BASIC_PROCESS_ID_LIST) + sizeof(ULONG_PTR) * process_count);
+        pid_list = malloc(pid_list_size);
         pid_list->NumberOfAssignedProcesses = process_count;
       }
 
@@ -872,7 +874,7 @@ waitForJobCompletion ( HANDLE hJob )
           hJob,
           JobObjectBasicProcessIdList,
           pid_list,
-          sizeof(JOBOBJECT_BASIC_PROCESS_ID_LIST),
+          pid_list_size,
           NULL);
 
       if (!success && GetLastError() == ERROR_MORE_DATA) {
