@@ -1,6 +1,8 @@
 # Changelog for [`process` package](http://hackage.haskell.org/package/process)
 
-## Unreleased changes
+## 1.6.9 *May 2020*
+
+* Windows: Fix buffer size of `QueryInformationJobObject` request [#176](https://github.com/haskell/process/pull/176/files)
 
 ## 1.6.8.2 *March 2020*
 
