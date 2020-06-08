@@ -1,5 +1,7 @@
 # Changelog for [`process` package](http://hackage.haskell.org/package/process)
 
+## Unreleased changes
+
 ## 1.6.10.0 *June 2020*
 
 * Give a usable buffer to `_pipe` on Windows [#182](https://github.com/haskell/process/pull/182)
