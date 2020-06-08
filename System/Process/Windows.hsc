@@ -308,7 +308,7 @@ createPipeInternal = do
 createPipeInternalFd :: IO (FD, FD)
 createPipeInternalFd = do
     allocaArray 2 $ \ pfds -> do
-        throwErrnoIfMinus1_ "_pipe" $ c__pipe pfds 2 (#const _O_BINARY)
+        throwErrnoIfMinus1_ "_pipe" $ c__pipe pfds 8192 (#const _O_BINARY)
         readfd <- peek pfds
         writefd <- peekElemOff pfds 1
         return (readfd, writefd)
