@@ -654,6 +654,10 @@ GHC Note: in order to call @waitForProcess@ without blocking all the
 other threads in the system, you must compile the program with
 @-threaded@.
 
+Note that it is safe to call @waitForProcess@ for the same process in multiple
+threads. When the process ends, threads blocking on this call will wake in
+FIFO order.
+
 (/Since: 1.2.0.0/) On Unix systems, a negative value @'ExitFailure' -/signum/@
 indicates that the child was terminated by signal @/signum/@.
 The signal numbers are platform-specific, so to test for a specific signal use
