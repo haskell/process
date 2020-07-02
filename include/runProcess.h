@@ -88,8 +88,18 @@ extern ProcHandle runInteractiveProcess( wchar_t *cmd,
                                          bool useJobObject,
                                          HANDLE *hJob );
 
-typedef void(*setterDef)(DWORD, HANDLE);
-typedef HANDLE(*getterDef)(DWORD);
+extern ProcHandle runInteractiveProcessHANDLE ( wchar_t *cmd,
+                                                wchar_t *workingDirectory,
+                                                wchar_t *environment,
+                                                HANDLE _stdin,
+                                                HANDLE _stdout,
+                                                HANDLE _stderr,
+                                                HANDLE *pStdInput,
+                                                HANDLE *pStdOutput,
+                                                HANDLE *pStdError,
+                                                int flags,
+                                                bool useJobObject,
+                                                HANDLE *hJob);
 
 extern int terminateJob( ProcHandle handle );
 extern int waitForJobCompletion( HANDLE hJob );

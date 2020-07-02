@@ -54,16 +54,20 @@ library
         System.Process.Internals
     other-modules: System.Process.Common
     if os(windows)
+        c-sources:
+            cbits/win32/runProcess.c
         other-modules: System.Process.Windows
         build-depends: Win32 >=2.2 && < 2.9
-        extra-libraries: kernel32
+        -- ole32 and rpcrt4 are needed to create GUIDs for unique named pipes
+        -- for process.
+        extra-libraries: kernel32, ole32, rpcrt4
         cpp-options: -DWINDOWS
     else
+        c-sources:
+            cbits/posix/runProcess.c
         other-modules: System.Process.Posix
         build-depends: unix >= 2.5 && < 2.8
 
-    c-sources:
-        cbits/runProcess.c
     include-dirs: include
     includes:
         runProcess.h

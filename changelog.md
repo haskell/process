@@ -2,6 +2,9 @@
 
 ## Unreleased changes
 
+* Windows: Add support for new I/O manager in GHC 8.12[#177](https://github.com/haskell/process/pull/177)
+* Deprecate use of `createPipeFd` in favor of `createPipe`
+
 ## 1.6.10.0 *June 2020*
 
 * Give a usable buffer to `_pipe` on Windows [#182](https://github.com/haskell/process/pull/182)
