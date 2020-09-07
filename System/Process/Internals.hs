@@ -82,6 +82,7 @@ import System.Process.Posix
 --   an I/O completion port to monitor a process tree's progress on Windows.
 --
 -- The function also returns two new handles:
+--
 --   * an I/O Completion Port handle on which events
 --     will be signaled.
 --   * a Job handle which can be used to kill all running
