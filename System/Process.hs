@@ -200,6 +200,15 @@ always the desired behavior. In cases where you would like to leave the
 instead. All created @Handle@s are initially in text mode; if you need them
 to be in binary mode then use 'hSetBinaryMode'.
 
+'use_process_jobs' can be set in CreateProcess since 1.5.0.0 in order to create
+an I/O completion port to monitor a process tree's progress on Windows.
+The function returns two new handles:
+
+  * an I/O Completion Port handle on which events will be signaled.
+  * a Job handle which can be used to kill all running processes.
+
+On POSIX platforms these two new handles will always be Nothing
+
 -}
 createProcess
   :: CreateProcess
