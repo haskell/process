@@ -189,6 +189,15 @@ data StdStream
 -- ----------------------------------------------------------------------------
 -- ProcessHandle type
 
+data ProcessHandle__ = OpenHandle { phdlProcessHandle :: PHANDLE }
+                     | OpenExtHandle { phdlProcessHandle :: PHANDLE
+                                     -- ^ the process
+                                     , phdlJobHandle     :: PHANDLE
+                                     -- ^ the job containing the process and
+                                     -- its subprocesses
+                                     }
+                     | ClosedHandle ExitCode
+
 {- | A handle to a process, which can be used to wait for termination
      of the process using 'System.Process.waitForProcess'.
 
@@ -200,14 +209,6 @@ data StdStream
      completion. This requires two handles. A process job handle and
      a events handle to monitor.
 -}
-data ProcessHandle__ = OpenHandle { phdlProcessHandle :: PHANDLE }
-                     | OpenExtHandle { phdlProcessHandle :: PHANDLE
-                                     -- ^ the process
-                                     , phdlJobHandle     :: PHANDLE
-                                     -- ^ the job containing the process and
-                                     -- its subprocesses
-                                     }
-                     | ClosedHandle ExitCode
 data ProcessHandle
   = ProcessHandle { phandle          :: !(MVar ProcessHandle__)
                   , mb_delegate_ctlc :: !Bool
