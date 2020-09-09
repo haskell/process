@@ -200,14 +200,12 @@ always the desired behavior. In cases where you would like to leave the
 instead. All created @Handle@s are initially in text mode; if you need them
 to be in binary mode then use 'hSetBinaryMode'.
 
-'use_process_jobs' can be set in CreateProcess since 1.5.0.0 in order to create
-an I/O completion port to monitor a process tree's progress on Windows.
-The function returns two new handles (inside @/ph/@):
-
-  * an I/O Completion Port handle on which events will be signaled.
-  * a Job handle which can be used to kill all running processes.
-
-On POSIX platforms these two new handles will always be Nothing
+@/ph/@ contains a handle to the running process.  On Windows
+'use_process_jobs' can be set in CreateProcess in order to create a
+Win32 Job object to monitor a process tree's progress.  If it is set
+then that job is also returned inside @/ph/@.  @/ph/@ can be used to
+kill all running sub-processes.  This feature has been available since
+1.5.0.0.
 
 -}
 createProcess
