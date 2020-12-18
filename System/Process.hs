@@ -817,7 +817,7 @@ terminateProcess ph = do
     case p_ of
       ClosedHandle  _ -> return ()
 #if defined(WINDOWS)
-      OpenExtHandle{} -> terminateJob ph 1 >> return ()
+      OpenExtHandle{} -> terminateJobUnsafe p_ 1 >> return ()
 #else
       OpenExtHandle{} -> error "terminateProcess with OpenExtHandle should not happen on POSIX."
 #endif

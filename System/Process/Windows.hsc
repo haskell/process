@@ -14,6 +14,7 @@ module System.Process.Windows
     , createPipeInternalFd
     , interruptProcessGroupOfInternal
     , terminateJob
+    , terminateJobUnsafe
     , waitForJobCompletion
     , timeout_Infinite
     ) where
@@ -278,13 +279,17 @@ stopDelegateControlC = return ()
 -- ----------------------------------------------------------------------------
 -- Interface to C I/O CP bits
 
-terminateJob :: ProcessHandle -> CUInt -> IO Bool
-terminateJob jh ecode =
-    withProcessHandle jh $ \p_ -> do
+-- | Variant of terminateJob that is not thread-safe
+terminateJobUnsafe :: ProcessHandle__ -> CUInt -> IO Bool
+terminateJobUnsafe p_  ecode = do
         case p_ of
             ClosedHandle      _ -> return False
             OpenHandle        _ -> return False
             OpenExtHandle _ job -> c_terminateJobObject job ecode
+
+terminateJob :: ProcessHandle -> CUInt -> IO Bool
+terminateJob jh ecode =
+    withProcessHandle jh $ \p_ -> terminateJobUnsafe p_ ecode
 
 timeout_Infinite :: CUInt
 timeout_Infinite = 0xFFFFFFFF
