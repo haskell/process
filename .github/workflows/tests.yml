@@ -1,0 +1,53 @@
+name: Tests
+
+on:
+    pull_request:
+    push:
+        branches:
+        - master
+
+jobs:
+  build:
+    name: CI
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        args:
+        - "--resolver nightly"
+        - "--resolver lts-16"
+        - "--resolver lts-14"
+        - "--resolver lts-12"
+        - "--resolver lts-11"
+        - "--resolver lts-9"
+        - "--resolver lts-7"
+        - "--resolver lts-6"
+        - "--stack-yaml stack-new-win32.yaml"
+
+        exclude:
+          - os: ubuntu-latest
+            args: "--stack-yaml stack-new-win32.yaml"
+          - os: macos-latest
+            args: "--stack-yaml stack-new-win32.yaml"
+
+    steps:
+      - name: Clone project
+        uses: actions/checkout@v2
+
+# No need to cache, minimal dependencies
+#      - name: Cache dependencies
+#        uses: actions/cache@v1
+#        with:
+#          path: ~/.stack
+#          key: ${{ runner.os }}-${{ matrix.resolver }}-${{ hashFiles('stack.yaml') }}
+#          restore-keys: |
+#            ${{ runner.os }}-${{ matrix.resolver }}-
+
+      - name: Build and run tests
+        shell: bash
+        run: |
+            set -ex
+            stack upgrade
+            stack --version
+            stack test --bench --no-run-benchmarks --haddock --no-terminal ${{ matrix.args }}
