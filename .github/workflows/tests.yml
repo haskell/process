@@ -50,4 +50,5 @@ jobs:
             set -ex
             stack upgrade
             stack --version
+            stack exec -- autoreconf -i
             stack test --bench --no-run-benchmarks --haddock --no-terminal ${{ matrix.args }}
