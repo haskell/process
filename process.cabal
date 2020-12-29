@@ -95,3 +95,5 @@ test-suite test
                , process
   ghc-options: -threaded
                -with-rtsopts "-N"
+  if os(windows)
+        cpp-options: -DWINDOWS
