@@ -1,6 +1,6 @@
 # Changelog for [`process` package](http://hackage.haskell.org/package/process)
 
-## Unreleased changes
+## 1.6.11.0 *January 2021*
 
 * Windows: Add support for new I/O manager in GHC 8.12[#177](https://github.com/haskell/process/pull/177)
 * Deprecate use of `createPipeFd` in favor of `createPipe`
