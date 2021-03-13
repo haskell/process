@@ -1,5 +1,5 @@
 name:          process
-version:       1.6.10.0
+version:       1.6.11.0
 -- NOTE: Don't forget to update ./changelog.md
 license:       BSD3
 license-file:  LICENSE
@@ -95,3 +95,5 @@ test-suite test
                , process
   ghc-options: -threaded
                -with-rtsopts "-N"
+  if os(windows)
+        cpp-options: -DWINDOWS

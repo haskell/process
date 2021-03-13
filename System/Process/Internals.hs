@@ -41,6 +41,7 @@ module System.Process.Internals (
     unwrapHandles,
 #ifdef WINDOWS
     terminateJob,
+    terminateJobUnsafe,
     waitForJobCompletion,
     timeout_Infinite,
 #else

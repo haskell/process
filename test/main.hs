@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 import Control.Exception
 import Control.Monad (guard, unless, void)
 import System.Exit
@@ -97,7 +98,11 @@ main = do
 
     putStrLn "testing getPid"
     do
+#ifdef WINDOWS
+      (_, Just out, _, p) <- createProcess $ (proc "sh" ["-c", "z=$$; cat /proc/$z/winpid"]) {std_out = CreatePipe}
+#else
       (_, Just out, _, p) <- createProcess $ (proc "sh" ["-c", "echo $$"]) {std_out = CreatePipe}
+#endif
       pid <- getPid p
       line <- hGetContents out
       putStrLn $ " queried PID: " ++ show pid
