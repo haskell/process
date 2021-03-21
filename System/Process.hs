@@ -680,9 +680,14 @@ waitForProcess ph@(ProcessHandle _ delegating_ctlc _) = lockWaitpid $ do
   p_ <- modifyProcessHandle ph $ \p_ -> return (p_,p_)
   case p_ of
     ClosedHandle e -> return e
-    OpenHandle h  -> do
+    -- Begin by masking all async exceptions, and only allowing them
+    -- during the actual C FFI call below.
+    OpenHandle h  -> mask $ \restore -> do
         -- don't hold the MVar while we call c_waitForProcess...
-        e <- waitForProcess' h
+        (e, eres) <- waitForProcess' h restore
+        -- e is the exit code, if waitpid succeeded
+        -- if waitpid succeeded, eres may still contain an async exception
+        -- first, update the process handle MVar with the new exit code
         e' <- modifyProcessHandle ph $ \p_' ->
           case p_' of
             ClosedHandle e' -> return (p_', e')
@@ -692,12 +697,15 @@ waitForProcess ph@(ProcessHandle _ delegating_ctlc _) = lockWaitpid $ do
               when delegating_ctlc $
                 endDelegateControlC e
               return (ClosedHandle e, e)
-        return e'
+        -- if we were interrupted with an async exception, go ahead and rethrow now
+        case eres of
+          Left ex -> throwIO ex
+          Right () -> pure e'
 #if defined(WINDOWS)
-    OpenExtHandle h job -> do
+    OpenExtHandle h job -> mask $ \restore -> do
         -- First wait for completion of the job...
         waitForJobCompletion job
-        e <- waitForProcess' h
+        (e, eres) <- waitForProcess' h restore
         e' <- modifyProcessHandle ph $ \p_' ->
           case p_' of
             ClosedHandle e' -> return (p_', e')
@@ -708,7 +716,9 @@ waitForProcess ph@(ProcessHandle _ delegating_ctlc _) = lockWaitpid $ do
               when delegating_ctlc $
                 endDelegateControlC e
               return (ClosedHandle e, e)
-        return e'
+        case eres of
+          Left ex -> throwIO ex
+          Right () -> pure e'
 #else
     OpenExtHandle _ _job ->
         return $ ExitFailure (-1)
@@ -721,10 +731,26 @@ waitForProcess ph@(ProcessHandle _ delegating_ctlc _) = lockWaitpid $ do
     -- https://github.com/haskell/process/pull/58 for further discussion
     lockWaitpid m = withMVar (waitpidLock ph) $ \() -> m
 
-    waitForProcess' :: PHANDLE -> IO ExitCode
-    waitForProcess' h = alloca $ \pret -> do
-      throwErrnoIfMinus1Retry_ "waitForProcess" (allowInterrupt >> c_waitForProcess h pret)
-      mkExitCode <$> peek pret
+    -- This function is run masked, and is given a restore function.
+    -- We cannot rely on return codes from the FFI, since we may be interrupted.
+    -- Instead, we pass in two pointers: one of the return code, and one
+    -- to indicate whether the call succeeded
+    waitForProcess' h restore = alloca $ \pret -> alloca $ \psuccess -> do
+      -- Make the FFI call, restoring interruptibility. But if the waitpid
+      -- call succeeds, we _must_ store the newly return exit code.
+      -- If we don't, future waitForProcess calls will attempt to look up
+      -- this PID, but will fail because it's already been removed from
+      -- the process table. Therefore, we capture "was it interrupted"
+      -- in `res`, and "did the FFI call itself succeed" in psuccess
+      res <- try (restore (allowInterrupt >> c_waitForProcess h pret psuccess))
+      success <- peek psuccess
+      case success of
+        -- Successful FFI call, get the exit code and pass it back
+        1 -> do
+          ec <- mkExitCode <$> peek pret
+          pure (ec, res :: Either SomeException ())
+        -- FFI call failed, exit immediately
+        _ -> throwErrno "waitForProcess"
 
     mkExitCode :: CInt -> ExitCode
     mkExitCode code
@@ -845,8 +871,9 @@ foreign import ccall unsafe "getProcessExitCode"
 foreign import ccall interruptible "waitForProcess" -- NB. safe - can block
   c_waitForProcess
         :: PHANDLE
-        -> Ptr CInt
-        -> IO CInt
+        -> Ptr CInt -- return code
+        -> Ptr CInt -- success?
+        -> IO ()
 
 
 -- ----------------------------------------------------------------------------

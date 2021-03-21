@@ -452,30 +452,37 @@ getProcessExitCode (ProcHandle handle, int *pExitCode)
     return -1;
 }
 
-int waitForProcess (ProcHandle handle, int *pret)
+void waitForProcess (ProcHandle handle, int *pret, int *success)
 {
     int wstat;
 
     if (waitpid(handle, &wstat, 0) < 0)
     {
-        return -1;
+        *success = 0;
+        *pret = 0;
+        return;
     }
 
     if (WIFEXITED(wstat)) {
+        *success = 1;
         *pret = WEXITSTATUS(wstat);
-        return 0;
+        return;
     }
     else {
         if (WIFSIGNALED(wstat))
         {
+            *success = 1;
             *pret = TERMSIG_EXITSTATUS(wstat);
-            return 0;
+            return;
         }
         else
         {
+            *success = 0;
+            *pret = 0;
             /* This should never happen */
         }
     }
 
-    return -1;
+    *success = 0;
+    *pret = 0;
 }

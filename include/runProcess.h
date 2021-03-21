@@ -108,4 +108,4 @@ extern int waitForJobCompletion( HANDLE hJob );
 
 extern int terminateProcess( ProcHandle handle );
 extern int getProcessExitCode( ProcHandle handle, int *pExitCode );
-extern int waitForProcess( ProcHandle handle, int *ret );
+extern void waitForProcess( ProcHandle handle, int *ret, int *success );
