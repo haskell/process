@@ -13,6 +13,12 @@ import System.IO (hClose, openBinaryTempFile, hGetContents)
 import qualified Data.ByteString as S
 import qualified Data.ByteString.Char8 as S8
 import System.Directory (getTemporaryDirectory, removeFile)
+import System.Info (os)
+
+ifWindows :: IO () -> IO ()
+ifWindows action
+  | os /= "windows" = return ()
+  | otherwise = action
 
 main :: IO ()
 main = do
@@ -40,7 +46,7 @@ main = do
 
     putStrLn "Testing subdirectories"
 
-    withCurrentDirectory "exes" $ do
+    ifWindows $ withCurrentDirectory "exes" $ do
       res1 <- readCreateProcess (proc "./echo.bat" []) ""
       unless ("parent" `isInfixOf` res1 && not ("child" `isInfixOf` res1)) $ error $
         "echo.bat with cwd failed: " ++ show res1
