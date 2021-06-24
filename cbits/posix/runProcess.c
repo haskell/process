@@ -59,7 +59,6 @@ runInteractiveProcess (char *const args[],
                        int fdStdIn, int fdStdOut, int fdStdErr,
                        int *pfdStdInput, int *pfdStdOutput, int *pfdStdError,
                        gid_t *childGroup, uid_t *childUser,
-                       int reset_int_quit_handlers,
                        int flags,
                        char **failed_doing)
 {
@@ -274,7 +273,7 @@ runInteractiveProcess (char *const args[],
 
         /* Reset the SIGINT/SIGQUIT signal handlers in the child, if requested
          */
-        if (reset_int_quit_handlers) {
+        if (flags & RESET_INT_QUIT_HANDLES != 0) {
             struct sigaction dfl;
             (void)sigemptyset(&dfl.sa_mask);
             dfl.sa_flags = 0;
