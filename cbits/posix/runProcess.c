@@ -4,408 +4,196 @@
    Support for System.Process
    ------------------------------------------------------------------------- */
 
-/* XXX This is a nasty hack; should put everything necessary in this package */
-#include "HsBase.h"
-#include "Rts.h"
-
 #include "runProcess.h"
+#include "common.h"
 
-#include "execvpe.h"
+#include <unistd.h>
+#include <errno.h>
+#include <sys/wait.h>
 
-/* ----------------------------------------------------------------------------
-   UNIX versions
-   ------------------------------------------------------------------------- */
+#ifdef HAVE_FCNTL_H
+#include <fcntl.h>
+#endif
+
+#if defined(HAVE_SIGNAL_H)
+#include <signal.h>
+#endif
+
+int
+get_max_fd()
+{
+    static int cache = 0;
+    if (cache == 0) {
+#if HAVE_SYSCONF
+        cache = sysconf(_SC_OPEN_MAX);
+        if (cache == -1) {
+            cache = 256;
+        }
+#else
+        cache = 256;
+#endif
+    }
+    return cache;
+}
 
 // If a process was terminated by a signal, the exit status we return
 // via the System.Process API is (-signum). This encoding avoids collision with
 // normal process termination status codes. See also #7229.
 #define TERMSIG_EXITSTATUS(s) (-(WTERMSIG(s)))
 
-static long max_fd = 0;
+/*
+ * Spawn a new process. We first try posix_spawn but since this isn't supported
+ * on all platforms we fall back to fork/exec in some cases on some platforms.
+ */
+static ProcHandle
+do_spawn (char *const args[],
+          char *workingDirectory, char **environment,
+          struct std_handle *stdInHdl,
+          struct std_handle *stdOutHdl,
+          struct std_handle *stdErrHdl,
+          gid_t *childGroup, uid_t *childUser,
+          int flags,
+          char **failed_doing)
+{
+    ProcHandle r;
+    r = do_spawn_posix(args,
+                       workingDirectory, environment,
+                       stdInHdl, stdOutHdl, stdErrHdl,
+                       childGroup, childUser,
+                       flags,
+                       failed_doing);
+    if (r == -2) {
+        // configuration not supported by posix_spawn, fall back to fork/exec
+    } else {
+        return r;
+    }
 
-// Rts internal API, not exposed in a public header file:
-extern void blockUserSignals(void);
-extern void unblockUserSignals(void);
+    r = do_spawn_fork(args,
+                      workingDirectory, environment,
+                      stdInHdl, stdOutHdl, stdErrHdl,
+                      childGroup, childUser,
+                      flags,
+                      failed_doing);
+    return r;
+}
 
-// These are arbitrarily chosen -- JP
-#define forkSetgidFailed 124
-#define forkSetuidFailed 125
+enum pipe_direction {
+    CHILD_READS, CHILD_WRITES
+};
 
-// See #1593.  The convention for the exit code when
-// exec() fails seems to be 127 (gleened from C's
-// system()), but there's no equivalent convention for
-// chdir(), so I'm picking 126 --SimonM.
-#define forkChdirFailed 126
-#define forkExecFailed  127
+/* Initialize a std_handle_behavior from a "pseudo-fd":
+ *   - fd == -1 means create a pipe
+ *   - fd == -2 means close the handle
+ *   - otherwise use fd
+ * Returns 0 on success, -1 otherwise.
+ */
+static int
+init_std_handle(int fd, enum pipe_direction direction,
+                         /* out */ struct std_handle *hdl,
+                         char **failed_doing)
+{
+    switch (fd) {
+    case -1: {
+        int pipe_fds[2];
+        int r = pipe(pipe_fds);
+        if (r == -1) {
+            *failed_doing = "pipe";
+            return -1;
+        }
 
-#define forkGetpwuidFailed 128
-#define forkInitgroupsFailed 129
-
-__attribute__((__noreturn__))
-static void childFailed(int pipe, int failCode) {
-    int err;
-    ssize_t unused __attribute__((unused));
-
-    err = errno;
-    unused = write(pipe, &failCode, sizeof(failCode));
-    unused = write(pipe, &err,      sizeof(err));
-    // As a fallback, exit with the failCode
-    _exit(failCode);
+        int child_end  = direction == CHILD_READS ? 0 : 1;
+        int parent_end = direction == CHILD_READS ? 1 : 0;
+        *hdl = (struct std_handle) {
+            .behavior = STD_HANDLE_USE_PIPE,
+            .use_pipe = { .child_end = pipe_fds[child_end], .parent_end = pipe_fds[parent_end] }
+        };
+        break;
+    }
+    case -2:
+        *hdl = (struct std_handle) {
+            .behavior = STD_HANDLE_CLOSE
+        };
+        break;
+    default:
+        *hdl = (struct std_handle) {
+            .behavior = STD_HANDLE_USE_FD,
+            .use_fd = fd
+        };
+        break;
+    }
+    return 0;
 }
 
 ProcHandle
 runInteractiveProcess (char *const args[],
                        char *workingDirectory, char **environment,
+                       // handles to use for the standard handles. -1 indicates
+                       // create pipe, -2 indicates close.
                        int fdStdIn, int fdStdOut, int fdStdErr,
+                       // output arguments to return created pipe handle to caller
                        int *pfdStdInput, int *pfdStdOutput, int *pfdStdError,
                        gid_t *childGroup, uid_t *childUser,
                        int flags,
                        char **failed_doing)
 {
-    int close_fds = ((flags & RUN_PROCESS_IN_CLOSE_FDS) != 0);
-    int pid;
-    int fdStdInput[2], fdStdOutput[2], fdStdError[2];
-    int forkCommunicationFds[2];
-    int r;
-    int failCode, err;
+    struct std_handle stdInHdl, stdOutHdl, stdErrHdl;
+    ProcHandle r;
 
-    // Ordering matters here, see below [Note #431].
-    if (fdStdIn == -1) {
-        r = pipe(fdStdInput);
-        if (r == -1) {
-            *failed_doing = "runInteractiveProcess: pipe";
-            return -1;
-        }
-    }
-    if (fdStdOut == -1) {
-        r = pipe(fdStdOutput);
-        if (r == -1) {
-            if (fdStdIn == -1) {
-                close(fdStdInput[0]);
-                close(fdStdInput[1]);
-            }
-            *failed_doing = "runInteractiveProcess: pipe";
-            return -1;
-        }
-    }
-    if (fdStdErr == -1) {
-        r = pipe(fdStdError);
-        if (r == -1) {
-            *failed_doing = "runInteractiveProcess: pipe";
-            if (fdStdIn == -1) {
-                close(fdStdInput[0]);
-                close(fdStdInput[1]);
-            }
-            if (fdStdOut == -1) {
-                close(fdStdOutput[0]);
-                close(fdStdOutput[1]);
-            }
-            return -1;
-        }
+    // A bit of paranoia to ensure that we catch if we fail to set this on
+    // failure.
+    *failed_doing = NULL;
+
+    // Ordering matters here, see below Note [Ordering of handle closing].
+    if (init_std_handle(fdStdIn, CHILD_READS, &stdInHdl, failed_doing) != 0) {
+        goto fail;
     }
 
-    r = pipe(forkCommunicationFds);
+    if (init_std_handle(fdStdOut, CHILD_WRITES, &stdOutHdl, failed_doing) != 0) {
+        goto fail;
+    }
+
+    if (init_std_handle(fdStdErr, CHILD_WRITES, &stdErrHdl, failed_doing) != 0) {
+        goto fail;
+    }
+
+    r = do_spawn(args,
+                 workingDirectory, environment,
+                 &stdInHdl, &stdOutHdl, &stdErrHdl,
+                 childGroup, childUser,
+                 flags,
+                 failed_doing);
     if (r == -1) {
-        *failed_doing = "runInteractiveProcess: pipe";
-        if (fdStdIn == -1) {
-            close(fdStdInput[0]);
-            close(fdStdInput[1]);
-        }
-        if (fdStdOut == -1) {
-            close(fdStdOutput[0]);
-            close(fdStdOutput[1]);
-        }
-        if (fdStdErr == -1) {
-            close(fdStdError[0]);
-            close(fdStdError[1]);
-        }
-        return -1;
+        goto fail;
     }
 
-    // Block signals with Haskell handlers.  The danger here is that
-    // with the threaded RTS, a signal arrives in the child process,
-    // the RTS writes the signal information into the pipe (which is
-    // shared between parent and child), and the parent behaves as if
-    // the signal had been raised.
-    blockUserSignals();
-
-    // See #4074.  Sometimes fork() gets interrupted by the timer
-    // signal and keeps restarting indefinitely.
-    stopTimer();
-
-    switch(pid = myfork())
-    {
-    case -1:
-        unblockUserSignals();
-        startTimer();
-        if (fdStdIn == -1) {
-            close(fdStdInput[0]);
-            close(fdStdInput[1]);
-        }
-        if (fdStdOut == -1) {
-            close(fdStdOutput[0]);
-            close(fdStdOutput[1]);
-        }
-        if (fdStdErr == -1) {
-            close(fdStdError[0]);
-            close(fdStdError[1]);
-        }
-        close(forkCommunicationFds[0]);
-        close(forkCommunicationFds[1]);
-        *failed_doing = "fork";
-        return -1;
-
-    case 0:
-        // WARNING! We may now be in the child of vfork(), and any
-        // memory we modify below may also be seen in the parent
-        // process.
-
-        close(forkCommunicationFds[0]);
-        fcntl(forkCommunicationFds[1], F_SETFD, FD_CLOEXEC);
-
-        if ((flags & RUN_PROCESS_NEW_SESSION) != 0) {
-            setsid();
-        }
-        if ((flags & RUN_PROCESS_IN_NEW_GROUP) != 0) {
-            setpgid(0, 0);
-        }
-
-        if ( childGroup) {
-            if ( setgid( *childGroup) != 0) {
-                // ERROR
-                childFailed(forkCommunicationFds[1], forkSetgidFailed);
-            }
-        }
-
-        if ( childUser) {
-            // Using setuid properly first requires that we initgroups.
-            // However, to do this we must know the username of the user we are
-            // switching to.
-            struct passwd pw;
-            struct passwd *res = NULL;
-            int buf_len = sysconf(_SC_GETPW_R_SIZE_MAX);
-            char *buf = malloc(buf_len);
-            gid_t suppl_gid = childGroup ? *childGroup : getgid();
-            if ( getpwuid_r(*childUser, &pw, buf, buf_len, &res) != 0) {
-                childFailed(forkCommunicationFds[1], forkGetpwuidFailed);
-            }
-            if ( res == NULL ) {
-                childFailed(forkCommunicationFds[1], forkGetpwuidFailed);
-            }
-            if ( initgroups(res->pw_name, suppl_gid) != 0) {
-                childFailed(forkCommunicationFds[1], forkInitgroupsFailed);
-            }
-            if ( setuid( *childUser) != 0) {
-                // ERROR
-                childFailed(forkCommunicationFds[1], forkSetuidFailed);
-            }
-        }
-
-        unblockUserSignals();
-
-        if (workingDirectory) {
-            if (chdir (workingDirectory) < 0) {
-                childFailed(forkCommunicationFds[1], forkChdirFailed);
-            }
-        }
-
-        // [Note #431]: Ordering matters here.  If any of the FDs
-        // 0,1,2 were initially closed, then our pipes may have used
-        // these FDs.  So when we dup2 the pipe FDs down to 0,1,2, we
-        // must do it in that order, otherwise we could overwrite an
-        // FD that we need later.
-
-        if (fdStdIn == -1) {
-            if (fdStdInput[0] != STDIN_FILENO) {
-                dup2 (fdStdInput[0], STDIN_FILENO);
-                close(fdStdInput[0]);
-            }
-            close(fdStdInput[1]);
-        } else if (fdStdIn == -2) {
-            close(STDIN_FILENO);
-        } else {
-            dup2(fdStdIn,  STDIN_FILENO);
-        }
-
-        if (fdStdOut == -1) {
-            if (fdStdOutput[1] != STDOUT_FILENO) {
-                dup2 (fdStdOutput[1], STDOUT_FILENO);
-                close(fdStdOutput[1]);
-            }
-            close(fdStdOutput[0]);
-        } else if (fdStdOut == -2) {
-            close(STDOUT_FILENO);
-        } else {
-            dup2(fdStdOut,  STDOUT_FILENO);
-        }
-
-        if (fdStdErr == -1) {
-            if (fdStdError[1] != STDERR_FILENO) {
-                dup2 (fdStdError[1], STDERR_FILENO);
-                close(fdStdError[1]);
-            }
-            close(fdStdError[0]);
-        } else if (fdStdErr == -2) {
-            close(STDERR_FILENO);
-        } else {
-            dup2(fdStdErr,  STDERR_FILENO);
-        }
-
-        if (close_fds) {
-            int i;
-            if (max_fd == 0) {
-#if HAVE_SYSCONF
-                max_fd = sysconf(_SC_OPEN_MAX);
-                if (max_fd == -1) {
-                    max_fd = 256;
-                }
-#else
-                max_fd = 256;
-#endif
-            }
-            // XXX Not the pipe
-            for (i = 3; i < max_fd; i++) {
-                if (i != forkCommunicationFds[1]) {
-                    close(i);
-                }
-            }
-        }
-
-        /* Reset the SIGINT/SIGQUIT signal handlers in the child, if requested
-         */
-        if (flags & RESET_INT_QUIT_HANDLES != 0) {
-            struct sigaction dfl;
-            (void)sigemptyset(&dfl.sa_mask);
-            dfl.sa_flags = 0;
-            dfl.sa_handler = SIG_DFL;
-            (void)sigaction(SIGINT,  &dfl, NULL);
-            (void)sigaction(SIGQUIT, &dfl, NULL);
-        }
-
-        /* the child */
-        if (environment) {
-            // XXX Check result
-            execvpe(args[0], args, environment);
-        } else {
-            // XXX Check result
-            execvp(args[0], args);
-        }
-
-        childFailed(forkCommunicationFds[1], forkExecFailed);
-
-    default:
-        if ((flags & RUN_PROCESS_IN_NEW_GROUP) != 0) {
-            setpgid(pid, pid);
-        }
-        if (fdStdIn  == -1) {
-            close(fdStdInput[0]);
-            fcntl(fdStdInput[1], F_SETFD, FD_CLOEXEC);
-            *pfdStdInput  = fdStdInput[1];
-        }
-        if (fdStdOut == -1) {
-            close(fdStdOutput[1]);
-            fcntl(fdStdOutput[0], F_SETFD, FD_CLOEXEC);
-            *pfdStdOutput = fdStdOutput[0];
-        }
-        if (fdStdErr == -1) {
-            close(fdStdError[1]);
-            fcntl(fdStdError[0], F_SETFD, FD_CLOEXEC);
-            *pfdStdError  = fdStdError[0];
-        }
-        close(forkCommunicationFds[1]);
-        fcntl(forkCommunicationFds[0], F_SETFD, FD_CLOEXEC);
-
-        break;
+    // Close the remote ends of any pipes we created.
+#define FINALISE_STD_HANDLE(hdl, pfd) \
+    if (hdl.behavior == STD_HANDLE_USE_PIPE) { \
+        close(hdl.use_pipe.child_end); \
+        fcntl(hdl.use_pipe.parent_end, F_SETFD, FD_CLOEXEC); \
+        *pfd  = hdl.use_pipe.parent_end; \
     }
 
-    // If the child process had a problem, then it will tell us via the
-    // forkCommunicationFds pipe. First we try to read what the problem
-    // was. Note that if none of these conditionals match then we fall
-    // through and just return pid.
-    r = read(forkCommunicationFds[0], &failCode, sizeof(failCode));
-    if (r == -1) {
-        *failed_doing = "runInteractiveProcess: read pipe";
-        pid = -1;
-    }
-    else if (r == sizeof(failCode)) {
-        // This is the case where we successfully managed to read
-        // the problem
-        switch (failCode) {
-        case forkChdirFailed:
-            *failed_doing = "runInteractiveProcess: chdir";
-            break;
-        case forkExecFailed:
-            *failed_doing = "runInteractiveProcess: exec";
-            break;
-        case forkSetgidFailed:
-            *failed_doing = "runInteractiveProcess: setgid";
-            break;
-        case forkSetuidFailed:
-            *failed_doing = "runInteractiveProcess: setuid";
-            break;
-        case forkGetpwuidFailed:
-            *failed_doing = "runInteractiveProcess: getpwuid";
-            break;
-        case forkInitgroupsFailed:
-            *failed_doing = "runInteractiveProcess: initgroups";
-            break;
-        default:
-            *failed_doing = "runInteractiveProcess: unknown";
-            break;
-        }
-        // Now we try to get the errno from the child
-        r = read(forkCommunicationFds[0], &err, sizeof(err));
-        if (r == -1) {
-            *failed_doing = "runInteractiveProcess: read pipe";
-        }
-        else if (r != sizeof(failCode)) {
-            *failed_doing = "runInteractiveProcess: read pipe bad length";
-        }
-        else {
-            // If we succeed then we set errno. It'll be saved and
-            // restored again below. Note that in any other case we'll
-            // get the errno of whatever else went wrong instead.
-            errno = err;
-        }
+    FINALISE_STD_HANDLE(stdInHdl,  pfdStdInput);
+    FINALISE_STD_HANDLE(stdOutHdl, pfdStdOutput);
+    FINALISE_STD_HANDLE(stdErrHdl, pfdStdError);
+#undef FINALISE_STD_HANDLE
 
-        // We forked the child, but the child had a problem and stopped so it's
-        // our responsibility to reap here as nobody else can.
-        waitpid(pid, NULL, 0);
+    return r;
 
-        if (fdStdIn == -1) {
-            // Already closed fdStdInput[0] above
-            close(fdStdInput[1]);
-        }
-        if (fdStdOut == -1) {
-            close(fdStdOutput[0]);
-            // Already closed fdStdOutput[1] above
-        }
-        if (fdStdErr == -1) {
-            close(fdStdError[0]);
-            // Already closed fdStdError[1] above
-        }
-
-        pid = -1;
-    }
-    else if (r != 0) {
-        *failed_doing = "runInteractiveProcess: read pipe bad length";
-        pid = -1;
+fail:
+#define CLOSE_PIPE(hdl) \
+    if (hdl.behavior == STD_HANDLE_USE_PIPE) { \
+        close(hdl.use_pipe.child_end); \
+        close(hdl.use_pipe.parent_end); \
     }
 
-    if (pid == -1) {
-        err = errno;
-    }
+    CLOSE_PIPE(stdInHdl);
+    CLOSE_PIPE(stdOutHdl);
+    CLOSE_PIPE(stdErrHdl);
+#undef CLOSE_PIPE
 
-    close(forkCommunicationFds[0]);
-
-    unblockUserSignals();
-    startTimer();
-
-    if (pid == -1) {
-        errno = err;
-    }
-
-    return pid;
+    return -1;
 }
 
 int
@@ -421,14 +209,11 @@ getProcessExitCode (ProcHandle handle, int *pExitCode)
 
     *pExitCode = 0;
 
-    if ((res = waitpid(handle, &wstat, WNOHANG)) > 0)
-    {
-        if (WIFEXITED(wstat))
-        {
+    if ((res = waitpid(handle, &wstat, WNOHANG)) > 0) {
+        if (WIFEXITED(wstat)) {
             *pExitCode = WEXITSTATUS(wstat);
             return 1;
-        }
-        else
+        } else {
             if (WIFSIGNALED(wstat))
             {
                 *pExitCode = TERMSIG_EXITSTATUS(wstat);
@@ -438,6 +223,7 @@ getProcessExitCode (ProcHandle handle, int *pExitCode)
             {
                 /* This should never happen */
             }
+        }
     }
 
     if (res == 0) return 0;
@@ -451,7 +237,8 @@ getProcessExitCode (ProcHandle handle, int *pExitCode)
     return -1;
 }
 
-int waitForProcess (ProcHandle handle, int *pret)
+int
+waitForProcess (ProcHandle handle, int *pret)
 {
     int wstat;
 
