@@ -8,7 +8,7 @@
 #if !defined(HAVE_POSIX_SPAWNP)
 ProcHandle
 do_spawn_posix (char *const args[],
-                const char *workingDirectory, const char **environment,
+                char *workingDirectory, char **environment,
                 struct std_handle *stdInHdl,
                 struct std_handle *stdOutHdl,
                 struct std_handle *stdErrHdl,
