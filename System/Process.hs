@@ -49,6 +49,7 @@ module System.Process (
     showCommandForUser,
     Pid,
     getPid,
+    getCurrentPid,
 
     -- ** Control-C handling on Unix
     -- $ctlc-handling
@@ -93,8 +94,9 @@ import System.IO
 import System.IO.Error (mkIOError, ioeSetErrorString)
 
 #if defined(WINDOWS)
-import System.Win32.Process (getProcessId, ProcessId)
+import System.Win32.Process (getProcessId, getCurrentProcessId, ProcessId)
 #else
+import System.Posix.Process (getProcessID)
 import System.Posix.Types (CPid (..))
 #endif
 
@@ -256,10 +258,10 @@ withCreateProcess_ fun c action =
                      (\(m_in, m_out, m_err, ph) -> action m_in m_out m_err ph)
 
 -- | Cleans up the process.
--- 
--- This function is meant to be invoked from any application level cleanup 
+--
+-- This function is meant to be invoked from any application level cleanup
 -- handler. It terminates the process, and closes any 'CreatePipe' 'handle's.
--- 
+--
 -- @since 1.6.4.0
 cleanupProcess :: (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)
                -> IO ()
@@ -650,6 +652,24 @@ getPid (ProcessHandle mh _ _) = do
     OpenHandle pid -> return $ Just pid
 #endif
     _ -> return Nothing
+
+
+-- ----------------------------------------------------------------------------
+-- getCurrentPid
+
+-- | Returns the PID (process ID) of the current process. On POSIX systems,
+-- this calls 'getProcessID' from "System.Posix.Process" in the @unix@ package.
+-- On Windows, this calls 'getCurrentProcessId' from "System.Win32.Process" in
+-- the @Win32@ package.
+--
+-- @since TODO
+getCurrentPid :: IO Pid
+getCurrentPid =
+#ifdef WINDOWS
+    getCurrentProcessId
+#else
+    getProcessID
+#endif
 
 
 -- ----------------------------------------------------------------------------
