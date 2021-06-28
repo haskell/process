@@ -1,0 +1,42 @@
+name: Tests
+
+on:
+    pull_request:
+    push:
+        branches:
+        - master
+
+jobs:
+  build:
+    name: CI
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        args:
+        - "--resolver ghc-9.0.1"
+        - "--resolver ghc-8.10.4"
+        - "--resolver ghc-8.8.4"
+        - "--resolver ghc-8.6.5"
+        - "--resolver ghc-8.4.4"
+        - "--resolver ghc-8.2.2"
+
+    steps:
+      - name: Clone project
+        uses: actions/checkout@v2
+
+      - name: Build and run tests
+        shell: bash
+        run: |
+            set -ex
+            stack upgrade
+            stack --version
+            if [[ "${{ runner.os }}" = 'Windows' ]]
+            then
+              # Looks like a bug in Stack, this shouldn't break things
+              ls C:/ProgramData/Chocolatey/bin/
+              rm C:/ProgramData/Chocolatey/bin/ghc*
+              stack ${{ matrix.args }} exec pacman -- --sync --refresh --noconfirm autoconf
+            fi
+            stack test --bench --no-run-benchmarks --haddock --no-terminal ${{ matrix.args }}
