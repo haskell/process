@@ -15,7 +15,12 @@ jobs:
       matrix:
         os: [windows-latest]
         args:
-        - "--resolver lts-18"
+        - "--resolver ghc-9.0.1"
+        - "--resolver ghc-8.10.4"
+        - "--resolver ghc-8.8.4"
+        - "--resolver ghc-8.6.5"
+        - "--resolver ghc-8.4.4"
+        - "--resolver ghc-8.2.2"
 
     steps:
       - name: Clone project
@@ -28,7 +33,7 @@ jobs:
             stack upgrade
             stack --version
             stack setup ${{ matrix.args }}
-            if [[ "${{ runner.os }}" = 'windows-latest' ]]
+            if [[ "${{ runner.os }}" = 'Windows' ]]
             then
               stack ${{ matrix.args }} exec pacman -- --sync --refresh --noconfirm autoconf
               stack ${{ matrix.args }} exec -- autoreconf -i
