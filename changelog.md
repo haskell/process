@@ -1,7 +1,5 @@
 # Changelog for [`process` package](http://hackage.haskell.org/package/process)
 
-## Unreleased changes
-
 ## 1.6.12.0 *June 2021*
 
 * Add function `getCurrentPid` to get the currently executing process' ID [#205](https://github.com/haskell/process/pull/205)
