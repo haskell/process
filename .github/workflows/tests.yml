@@ -29,15 +29,6 @@ jobs:
       - name: Clone project
         uses: actions/checkout@v2
 
-# No need to cache, minimal dependencies
-#      - name: Cache dependencies
-#        uses: actions/cache@v1
-#        with:
-#          path: ~/.stack
-#          key: ${{ runner.os }}-${{ matrix.resolver }}-${{ hashFiles('stack.yaml') }}
-#          restore-keys: |
-#            ${{ runner.os }}-${{ matrix.resolver }}-
-
       - name: Build and run tests
         shell: bash
         run: |
