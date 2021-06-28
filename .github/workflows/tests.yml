@@ -36,8 +36,5 @@ jobs:
             if [[ "${{ runner.os }}" = 'Windows' ]]
             then
               stack ${{ matrix.args }} exec pacman -- --sync --refresh --noconfirm autoconf
-              stack ${{ matrix.args }} exec -- autoreconf -i
-            else
-              autoreconf -i
             fi
             stack test --bench --no-run-benchmarks --haddock --no-terminal ${{ matrix.args }}
