@@ -27,9 +27,12 @@ jobs:
             set -ex
             stack upgrade
             stack --version
+            stack setup ${{ matrix.args }}
             if [[ "${{ runner.os }}" = 'windows-latest' ]]
             then
-              stack exec pacman -- --sync --refresh --noconfirm autoconf
+              stack ${{ matrix.args }} exec pacman -- --sync --refresh --noconfirm autoconf
+              stack ${{ matrix.args }} exec -- autoreconf -i
+            else
+              autoreconf -i
             fi
-            stack exec -- autoreconf -i
             stack test --bench --no-run-benchmarks --haddock --no-terminal ${{ matrix.args }}
