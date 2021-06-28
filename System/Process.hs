@@ -662,7 +662,7 @@ getPid (ProcessHandle mh _ _) = do
 -- On Windows, this calls 'getCurrentProcessId' from "System.Win32.Process" in
 -- the @Win32@ package.
 --
--- @since TODO
+-- @since 1.6.12.0
 getCurrentPid :: IO Pid
 getCurrentPid =
 #ifdef WINDOWS
