@@ -38,3 +38,4 @@ test('process010', normal, compile_and_run, [''])
 test('process011', when(opsys('mingw32'), skip), compile_and_run, [''])
 
 test('T8343', normal, compile_and_run, [''])
+test('process-fork-wait', normal, compile_and_run, [''])
