@@ -1,7 +1,11 @@
+# some platforms use spawnp instead of exec in some cases, resulting
+# in spurious error output changes.
+normalise_exec = normalise_fun(lambda s: s.replace('spawnp', 'exec'))
+
 test('process001', extra_clean(['process001.out']), compile_and_run, [''])
 test('process002', [fragile_for(16547, concurrent_ways), extra_clean(['process002.out'])], compile_and_run, [''])
 test('process003', [fragile_for(17245, concurrent_ways), omit_ways(['ghci'])], compile_and_run, [''])
-test('process004', normalise_exe, compile_and_run, [''])
+test('process004', [normalise_exec, normalise_exe], compile_and_run, [''])
 test('T1780', normal, compile_and_run, [''])
 test('process005', omit_ways(['ghci']), compile_and_run, [''])
 test('process006', normal, compile_and_run, [''])
@@ -34,7 +38,7 @@ test('T3994', [only_ways(['threaded1','threaded2']),
 test('T4889', normal, compile_and_run, [''])
 
 test('process009', when(opsys('mingw32'), skip), compile_and_run, [''])
-test('process010', normal, compile_and_run, [''])
+test('process010', normalise_exec, compile_and_run, [''])
 test('process011', when(opsys('mingw32'), skip), compile_and_run, [''])
 
 test('T8343', normal, compile_and_run, [''])
