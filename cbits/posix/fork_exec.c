@@ -85,6 +85,11 @@ setup_std_handle_fork(int fd,
             child_failed(pipe, "close(parent_end)");
         }
 	return 0;
+
+    default:
+	// N.B. this should be unreachable but some compilers apparently can't
+	// see this.
+        child_failed(pipe, "setup_std_handle_fork(invalid behavior)");
     }
 }
 

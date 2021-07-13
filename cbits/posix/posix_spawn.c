@@ -64,6 +64,13 @@ setup_std_handle_spawn (int fd,
             return -1;
         }
         return 0;
+
+    default:
+	// N.B. this should be unreachable
+	// but some compilers apparently can't
+	// see this.
+        *failed_doing = "posix_spawn_file_actions_addclose(invalid behavior)";
+        return -1;
     }
 }
 
