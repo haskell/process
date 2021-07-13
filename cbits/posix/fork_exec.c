@@ -224,7 +224,7 @@ do_spawn_fork (char *const args[],
 
         /* Reset the SIGINT/SIGQUIT signal handlers in the child, if requested
          */
-        if (flags & RESET_INT_QUIT_HANDLERS != 0) {
+        if ((flags & RESET_INT_QUIT_HANDLERS) != 0) {
             struct sigaction dfl;
             (void)sigemptyset(&dfl.sa_mask);
             dfl.sa_flags = 0;
