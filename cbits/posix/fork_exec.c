@@ -62,7 +62,6 @@ setup_std_handle_fork(int fd,
     case STD_HANDLE_CLOSE:
         if (close(fd) == -1) {
             child_failed(pipe, "close");
-            return -1;
         }
         return 0;
 
