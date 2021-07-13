@@ -1,6 +1,8 @@
 # Changelog for [`process` package](http://hackage.haskell.org/package/process)
 
-## Unreleased changes
+## 1.6.13.0 *July 2021*
+
+* Refactoring of POSIX process logic [#208](https://github.com/haskell/process/pull/208)
 
 ## 1.6.12.0 *June 2021*
 
