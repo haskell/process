@@ -84,7 +84,7 @@ setup_std_handle_fork(int fd,
         if (close(b->use_pipe.parent_end) == -1) {
             child_failed(pipe, "close(parent_end)");
         }
-        break;
+	return 0;
     }
 }
 
