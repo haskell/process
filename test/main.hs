@@ -13,12 +13,11 @@ import System.IO (hClose, openBinaryTempFile, hGetContents)
 import qualified Data.ByteString as S
 import qualified Data.ByteString.Char8 as S8
 import System.Directory (getTemporaryDirectory, removeFile)
-import System.Info (os)
 
 ifWindows :: IO () -> IO ()
 ifWindows action
-  | os /= "windows" = return ()
-  | otherwise = action
+  | not isWindows = return ()
+  | otherwise     = action
 
 isWindows :: Bool
 #if WINDOWS
