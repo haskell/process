@@ -27,6 +27,7 @@ extra-source-files:
     process.buildinfo
     exes/echo.bat
     exes/subdir/echo.bat
+    cbits/posix/common.h
 
 extra-tmp-files:
     autom4te.cache
