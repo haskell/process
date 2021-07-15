@@ -40,3 +40,4 @@ jobs:
               stack ${{ matrix.args }} exec pacman -- --sync --refresh --noconfirm autoconf
             fi
             stack test --bench --no-run-benchmarks --haddock --no-terminal ${{ matrix.args }}
+            stack sdist --test-tarball
