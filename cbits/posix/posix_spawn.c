@@ -64,6 +64,13 @@ setup_std_handle_spawn (int fd,
             return -1;
         }
         return 0;
+
+    default:
+	// N.B. this should be unreachable
+	// but some compilers apparently can't
+	// see this.
+        *failed_doing = "posix_spawn_file_actions_addclose(invalid behavior)";
+        return -1;
     }
 }
 
@@ -143,11 +150,13 @@ do_spawn_posix (char *const args[],
 #endif
     }
 
-#if defined(HAVE_POSIX_SPAWN_SETPGROUP)
     if ((flags & RUN_PROCESS_IN_NEW_GROUP) != 0) {
+#if defined(HAVE_POSIX_SPAWN_SETPGROUP)
         spawn_flags |= POSIX_SPAWN_SETPGROUP;
-    }
+#else
+	goto not_supported;
 #endif
+    }
 
     if (setup_std_handle_spawn(STDIN_FILENO,  stdInHdl,  &fa, failed_doing) != 0) {
         goto fail;

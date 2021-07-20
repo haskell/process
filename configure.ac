@@ -18,9 +18,18 @@ AC_CHECK_FUNCS([execvpe])
 
 # posix_spawn checks
 AC_CHECK_HEADERS([spawn.h])
-AC_CHECK_FUNCS([posix_spawnp posix_spawn_file_actions_addchdir])
-AC_CHECK_DECLS([POSIX_SPAWN_SETSID, POSIX_SPAWN_SETSID_NP])
-AC_CHECK_DECLS([POSIX_SPAWN_SETPGROUP])
+AC_CHECK_FUNCS([posix_spawnp posix_spawn_file_actions_addchdir],[],[],[
+  #define _GNU_SOURCE
+  #include <spawn.h>
+])
+AC_CHECK_DECLS([POSIX_SPAWN_SETSID, POSIX_SPAWN_SETSID_NP],[],[],[
+  #define _GNU_SOURCE
+  #include <spawn.h>
+])
+AC_CHECK_DECLS([POSIX_SPAWN_SETPGROUP],[],[],[
+  #define _GNU_SOURCE
+  #include <spawn.h>
+])
 
 FP_CHECK_CONSTS([SIG_DFL SIG_IGN])
 

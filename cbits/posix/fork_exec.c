@@ -62,7 +62,6 @@ setup_std_handle_fork(int fd,
     case STD_HANDLE_CLOSE:
         if (close(fd) == -1) {
             child_failed(pipe, "close");
-            return -1;
         }
         return 0;
 
@@ -84,7 +83,12 @@ setup_std_handle_fork(int fd,
         if (close(b->use_pipe.parent_end) == -1) {
             child_failed(pipe, "close(parent_end)");
         }
-        break;
+	return 0;
+
+    default:
+	// N.B. this should be unreachable but some compilers apparently can't
+	// see this.
+        child_failed(pipe, "setup_std_handle_fork(invalid behavior)");
     }
 }
 
@@ -219,7 +223,7 @@ do_spawn_fork (char *const args[],
 
         /* Reset the SIGINT/SIGQUIT signal handlers in the child, if requested
          */
-        if (flags & RESET_INT_QUIT_HANDLERS != 0) {
+        if ((flags & RESET_INT_QUIT_HANDLERS) != 0) {
             struct sigaction dfl;
             (void)sigemptyset(&dfl.sa_mask);
             dfl.sa_flags = 0;
