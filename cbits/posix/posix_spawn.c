@@ -42,10 +42,15 @@ setup_std_handle_spawn (int fd,
         return 0;
 
     case STD_HANDLE_USE_FD:
-        if (posix_spawn_file_actions_adddup2(fa, hdl->use_fd, fd) != 0) {
-            *failed_doing = "posix_spawn_file_actions_adddup2";
-            return -1;
-        }
+        // N.B. POSIX specifies that dup2(x,x) should be a no-op, but
+        // naturally Apple ignores this and rather fails in posix_spawn on Big
+        // Sur.
+        if (hdl->use_fd != fd) {
+            if (posix_spawn_file_actions_adddup2(fa, hdl->use_fd, fd) != 0) {
+                *failed_doing = "posix_spawn_file_actions_adddup2";
+                return -1;
+            }
+       }
         return 0;
 
     case STD_HANDLE_USE_PIPE:
