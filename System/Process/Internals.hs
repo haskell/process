@@ -85,7 +85,12 @@ import System.Process.Posix
 --
 -- @since 1.2.1.0
 createProcess_
-  :: String                     -- ^ function name (for error messages)
+  :: String
+       -- ^ Function name (for error messages).
+       --
+       --   This can be any 'String', but will typically be the name of the caller.
+       --   E.g., 'spawnProcess' passes @"spawnProcess"@ here when calling
+       --   'createProcess_'.
   -> CreateProcess
   -> IO (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)
 createProcess_ msg proc_ = unwrapHandles `fmap` createProcess_Internal msg proc_
