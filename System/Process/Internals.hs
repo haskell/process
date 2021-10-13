@@ -88,7 +88,7 @@ createProcess_
   :: String
        -- ^ Function name (for error messages).
        --
-       --   This is can be any 'String', but will typically be the name of the caller.
+       --   This can be any 'String', but will typically be the name of the caller.
        --   E.g., 'spawnProcess' passes @"spawnProcess"@ here when calling
        --   'createProcess_'.
   -> CreateProcess
