@@ -13,7 +13,7 @@ test('process006', normal, compile_and_run, [''])
 test('process007',
      [extra_clean(['process007.tmp',
                    'process007_fd.o', 'process007_fd', 'process007_fd.exe']),
-      reqlib('unix'),
+      when(opsys('mingw32'), skip),
       pre_cmd('$MAKE -s --no-print-directory process007_fd')],
      compile_and_run, [''])
 test('process008', normal, compile_and_run, [''])
