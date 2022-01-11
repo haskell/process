@@ -82,7 +82,9 @@ char *find_executable(char *filename) {
     }
 
     char *search_path = get_executable_search_path();
-    return find_in_search_path(search_path, filename);
+    char *result = find_in_search_path(search_path, filename);
+    free(search_path);
+    return result;
 }
 
 #endif
