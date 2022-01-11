@@ -128,7 +128,12 @@ do_spawn_fork (char *const args[],
 #if !defined(HAVE_execvpe)
     char *exec_path;
     if (environment) {
-        exec_path = find_executable(args[0]);
+        exec_path = find_executable(workingDirectory, args[0]);
+        if (exec_path == NULL) {
+            errno = -ENOENT;
+            *failed_doing = "find_executable";
+            return -1;
+        }
     }
 #endif
 
