@@ -12,7 +12,7 @@
 #include "common.h"
 
 // the below is only necessary when we need to emulate execvpe.
-#if !defined(HAVE_execvpe)
+#if !defined(HAVE_EXECVPE)
 
 /* A quick check for whether the given path is absolute. */
 static bool is_absolute(const char *path) {

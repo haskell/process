@@ -1,3 +1,6 @@
+/* ensure that execvpe is provided if possible */
+#define _GNU_SOURCE 1
+
 #include "common.h"
 
 #include <sys/types.h>
@@ -125,7 +128,7 @@ do_spawn_fork (char *const args[],
     // we emulate this using fork and exec. However, to safely do so
     // we need to perform all allocations *prior* to forking. Consequently, we
     // need to find_executable before forking.
-#if !defined(HAVE_execvpe)
+#if !defined(HAVE_EXECVPE)
     char *exec_path;
     if (environment) {
         exec_path = find_executable(workingDirectory, args[0]);
@@ -239,7 +242,7 @@ do_spawn_fork (char *const args[],
 
         /* the child */
         if (environment) {
-#if defined(HAVE_execvpe)
+#if defined(HAVE_EXECVPE)
             // XXX Check result
             execvpe(args[0], args, environment);
 #else
