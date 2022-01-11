@@ -201,6 +201,7 @@ do_spawn_posix (char *const args[],
 
     r = posix_spawnp(&pid, args[0], &fa, &sa, args, environment ? environment : environ);
     if (r != 0) {
+        errno = r; // posix_spawn doesn't necessarily set errno; see #227.
         *failed_doing = "posix_spawnp";
         goto fail;
     } else {
