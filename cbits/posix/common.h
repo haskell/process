@@ -25,8 +25,8 @@ struct std_handle {
 int get_max_fd(void);
 
 // defined in find_executable.c
-#if !defined(HAVE_execvpe)
-char *find_executable(char *filename);
+#if !defined(HAVE_EXECVPE)
+char *find_executable(char *workingDirectory, char *filename);
 #endif
 
 // defined in fork_exec.c

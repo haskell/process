@@ -159,7 +159,7 @@ do_spawn_posix (char *const args[],
 #if defined(HAVE_POSIX_SPAWN_SETPGROUP)
         spawn_flags |= POSIX_SPAWN_SETPGROUP;
 #else
-	goto not_supported;
+        goto not_supported;
 #endif
     }
 
