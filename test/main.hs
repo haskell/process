@@ -39,6 +39,8 @@ main = do
     testGetPid
     testReadProcess
     testInterruptWith
+    testDoubleWait
+    testKillDoubleWait
     putStrLn ">>> Tests passed successfully"
 
 run :: String -> IO () -> IO ()
@@ -194,6 +196,60 @@ testInterruptWith = unless isWindows $ run "interrupt withCreateProcess" $ do
             action
             threadDelay 1000 -- give some time for threads to finish
             readIORef exceptions
+
+-- Test that we can wait without exception twice, if the process exited on its own.
+testDoubleWait :: IO ()
+testDoubleWait = run "run process, then wait twice" $ do
+    let sleep = (proc "sleep" ["0"])
+    (_, _, _, p) <- createProcess sleep
+    res <- try $ waitForProcess p
+    case res of
+        Left e -> error $ "waitForProcess threw: " ++ show (e :: SomeException)
+        Right ExitSuccess -> return ()
+        Right exitCode -> error $ "unexpected exit code: " ++ show exitCode
+
+    res2 <- try $ waitForProcess p
+    case res2 of
+        Left e -> error $ "second waitForProcess threw: " ++ show (e :: SomeException)
+        Right ExitSuccess -> return ()
+        Right exitCode -> error $ "unexpected exit code: " ++ show exitCode
+
+-- Test that we can wait without exception twice, if the process was killed.
+testKillDoubleWait :: IO ()
+testKillDoubleWait = unless isWindows $ do
+    run "terminate process, then wait twice (delegate_ctlc = False)" $ runTest "TERM" False
+    run "terminate process, then wait twice (delegate_ctlc = True)" $ runTest "TERM" True
+    run "interrupt process, then wait twice (delegate_ctlc = False)" $ runTest "INT" False
+    run "interrupt process, then wait twice (delegate_ctlc = True)" $ runTest "INT" True
+  where
+    runTest sig delegate = do
+        let sleep = (proc "sleep" ["10"])
+        (_, _, _, p) <- createProcess sleep { delegate_ctlc = delegate }
+        Just pid <- getPid p
+        void $ readProcess "kill" ["-" ++ sig, show pid] ""
+
+        res <- try $ waitForProcess p
+        checkFirst sig delegate res
+
+        res' <- try $ waitForProcess p
+        checkSecond sig delegate res'
+
+    checkFirst :: String -> Bool -> Either SomeException ExitCode -> IO ()
+    checkFirst sig delegate res = case (sig, delegate) of
+        ("INT", True) -> case res of
+            Left e -> case fromException e of
+                Just UserInterrupt -> putStrLn "result ok"
+                Nothing -> error $ "expected UserInterrupt, got  " ++ show e
+            Right _ -> error $ "expected exception, got " ++ show res
+        _ -> case res of
+            Left e -> error $ "waitForProcess threw: " ++ show e
+            Right ExitSuccess -> error "expected failure"
+            _ -> putStrLn "result ok"
+
+    checkSecond :: String -> Bool -> Either SomeException ExitCode -> IO ()
+    checkSecond sig delegate res = case (sig, delegate) of
+        ("INT", True) -> checkFirst "INT" False res
+        _ -> checkFirst sig delegate res
 
 withCurrentDirectory :: FilePath -> IO a -> IO a
 withCurrentDirectory new inner = do
