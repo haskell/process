@@ -35,6 +35,7 @@ main = do
     testMultithreadedWait
     testInterruptMaskedWait
     testGetPid
+    testReadProcess
     putStrLn ">>> Tests passed successfully"
 
 run :: String -> IO () -> IO ()
@@ -150,6 +151,12 @@ testGetPid = run "getPid" $ do
       if isWindows
         then putStrLn "FIXME ignoring known failure on Windows"
         else error "subprocess reported unexpected PID"
+
+testReadProcess :: IO ()
+testReadProcess = run "readProcess" $ do
+    output <- readProcess "echo" ["hello", "world"] ""
+    unless (output == "hello world\n") $
+        error $ "unexpected output, got: " ++ output
 
 
 withCurrentDirectory :: FilePath -> IO a -> IO a
