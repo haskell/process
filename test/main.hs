@@ -7,12 +7,14 @@ import System.Directory (getCurrentDirectory, setCurrentDirectory)
 import System.Process
 import Control.Concurrent
 import Data.Char (isDigit)
+import Data.IORef
 import Data.List (isInfixOf)
 import Data.Maybe (isNothing)
 import System.IO (hClose, openBinaryTempFile, hGetContents)
 import qualified Data.ByteString as S
 import qualified Data.ByteString.Char8 as S8
 import System.Directory (getTemporaryDirectory, removeFile)
+import GHC.Conc.Sync (getUncaughtExceptionHandler, setUncaughtExceptionHandler)
 
 ifWindows :: IO () -> IO ()
 ifWindows action
@@ -36,6 +38,7 @@ main = do
     testInterruptMaskedWait
     testGetPid
     testReadProcess
+    testInterruptWith
     putStrLn ">>> Tests passed successfully"
 
 run :: String -> IO () -> IO ()
@@ -158,6 +161,39 @@ testReadProcess = run "readProcess" $ do
     unless (output == "hello world\n") $
         error $ "unexpected output, got: " ++ output
 
+-- | Test that withCreateProcess doesn't throw exceptions besides
+-- the expected UserInterrupt when the child process is interrupted
+-- by Ctrl-C.
+testInterruptWith :: IO ()
+testInterruptWith = unless isWindows $ run "interrupt withCreateProcess" $ do
+    mpid <- newEmptyMVar
+    forkIO $ do
+        pid <- takeMVar mpid
+        void $ readProcess "kill" ["-INT", show pid] ""
+
+    -- collect unhandled exceptions in any threads (specifically
+    -- the asynchronous 'waitForProcess' call from 'cleanupProcess')
+    es <- collectExceptions $ do
+        let sleep = (proc "sleep" ["10"]) { delegate_ctlc = True }
+        res <- try $ withCreateProcess sleep $ \_ _ _ p -> do
+            Just pid <- getPid p
+            putMVar mpid pid
+            waitForProcess p
+        unless (res == Left UserInterrupt) $
+            error $ "expected UserInterrupt, got " ++ show res
+
+    unless (null es) $
+        error $ "uncaught exceptions: " ++ show es
+
+  where
+    collectExceptions action = do
+        oldHandler <- getUncaughtExceptionHandler
+        flip finally (setUncaughtExceptionHandler oldHandler) $ do
+            exceptions <- newIORef ([] :: [SomeException])
+            setUncaughtExceptionHandler (\e -> atomicModifyIORef exceptions $ \es -> (e:es, ()))
+            action
+            threadDelay 1000 -- give some time for threads to finish
+            readIORef exceptions
 
 withCurrentDirectory :: FilePath -> IO a -> IO a
 withCurrentDirectory new inner = do
