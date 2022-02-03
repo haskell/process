@@ -703,15 +703,15 @@ waitForProcess ph@(ProcessHandle _ delegating_ctlc _) = lockWaitpid $ do
     OpenHandle h  -> do
         -- don't hold the MVar while we call c_waitForProcess...
         e <- waitForProcess' h
-        e' <- modifyProcessHandle ph $ \p_' ->
+        (e', was_open) <- modifyProcessHandle ph $ \p_' ->
           case p_' of
-            ClosedHandle e' -> return (p_', e')
+            ClosedHandle e' -> return (p_', (e', False))
             OpenExtHandle{} -> fail "waitForProcess(OpenExtHandle): this cannot happen"
             OpenHandle ph'  -> do
               closePHANDLE ph'
-              when delegating_ctlc $
-                endDelegateControlC e
-              return (ClosedHandle e, e)
+              return (ClosedHandle e, (e, True))
+        when (was_open && delegating_ctlc) $
+          endDelegateControlC e
         return e'
 #if defined(WINDOWS)
     OpenExtHandle h job -> do
@@ -725,8 +725,6 @@ waitForProcess ph@(ProcessHandle _ delegating_ctlc _) = lockWaitpid $ do
             OpenExtHandle ph' job' -> do
               closePHANDLE ph'
               closePHANDLE job'
-              when delegating_ctlc $
-                endDelegateControlC e
               return (ClosedHandle e, e)
         return e'
 #else
