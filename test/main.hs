@@ -28,6 +28,22 @@ isWindows = False
 
 main :: IO ()
 main = do
+    testDoesNotExist
+    testModifiers
+    testSubdirectories
+    testBinaryHandles
+    testMultithreadedWait
+    testInterruptMaskedWait
+    testGetPid
+    putStrLn ">>> Tests passed successfully"
+
+run :: String -> IO () -> IO ()
+run label test = do
+    putStrLn $ ">>> Running: " ++ label
+    test
+
+testDoesNotExist :: IO ()
+testDoesNotExist = run "non-existent executable" $ do
     res <- handle (return . Left . isDoesNotExistError) $ do
         (_, _, _, ph) <- createProcess (proc "definitelydoesnotexist" [])
             { close_fds = True
@@ -37,14 +53,14 @@ main = do
         Left True -> return ()
         _ -> error $ show res
 
-    let test name modifier = do
-            putStrLn $ "Running test: " ++ name
+testModifiers :: IO ()
+testModifiers = do
+    let test name modifier = run ("modifier " ++ name) $ do
             (_, _, _, ph) <- createProcess
                 $ modifier $ proc "echo" ["hello", "world"]
             ec <- waitForProcess ph
-            if ec == ExitSuccess
-                then putStrLn $ "Success running: " ++ name
-                else error $ "echo returned: " ++ show ec
+            unless (ec == ExitSuccess)
+                $ error $ "echo returned: " ++ show ec
 
     test "vanilla" id
 
@@ -54,9 +70,9 @@ main = do
     test "create_new_console" $ \cp -> cp { create_new_console = True }
     test "new_session" $ \cp -> cp { new_session = True }
 
-    putStrLn "Testing subdirectories"
-
-    ifWindows $ withCurrentDirectory "exes" $ do
+testSubdirectories :: IO ()
+testSubdirectories = ifWindows $ run "subdirectories" $ do
+    withCurrentDirectory "exes" $ do
       res1 <- readCreateProcess (proc "./echo.bat" []) ""
       unless ("parent" `isInfixOf` res1 && not ("child" `isInfixOf` res1)) $ error $
         "echo.bat with cwd failed: " ++ show res1
@@ -65,7 +81,8 @@ main = do
       unless ("child" `isInfixOf` res2 && not ("parent" `isInfixOf` res2)) $ error $
         "echo.bat with cwd failed: " ++ show res2
 
-    putStrLn "Binary handles"
+testBinaryHandles :: IO ()
+testBinaryHandles = run "binary handles" $ do
     tmpDir <- getTemporaryDirectory
     bracket
       (openBinaryTempFile tmpDir "process-binary-test.bin")
@@ -86,54 +103,54 @@ main = do
         unless (bs == res')
             $ error $ "Unexpected result: " ++ show res'
 
-    do -- multithreaded waitForProcess
-      (_, _, _, p) <- createProcess (proc "sleep" ["0.1"])
-      me1 <- newEmptyMVar
-      _ <- forkIO . void $ waitForProcess p >>= putMVar me1
-      -- check for race / deadlock between waitForProcess and getProcessExitCode
-      e3 <- getProcessExitCode p
-      e2 <- waitForProcess p
-      e1 <- readMVar me1
-      unless (isNothing e3)
-            $ error $ "unexpected exit " ++ show e3
-      unless (e1 == ExitSuccess && e2 == ExitSuccess)
-            $ error "sleep exited with non-zero exit code!"
+testMultithreadedWait :: IO ()
+testMultithreadedWait = run "multithreaded wait" $ do
+    (_, _, _, p) <- createProcess (proc "sleep" ["0.1"])
+    me1 <- newEmptyMVar
+    _ <- forkIO . void $ waitForProcess p >>= putMVar me1
+    -- check for race / deadlock between waitForProcess and getProcessExitCode
+    e3 <- getProcessExitCode p
+    e2 <- waitForProcess p
+    e1 <- readMVar me1
+    unless (isNothing e3)
+          $ error $ "unexpected exit " ++ show e3
+    unless (e1 == ExitSuccess && e2 == ExitSuccess)
+          $ error "sleep exited with non-zero exit code!"
 
-    do
-      putStrLn "interrupt masked waitForProcess"
-      (_, _, _, p) <- createProcess (proc "sleep" ["1.0"])
-      mec <- newEmptyMVar
-      tid <- mask_ . forkIO $
-          (waitForProcess p >>= putMVar mec . Just)
-              `catchThreadKilled` putMVar mec Nothing
-      killThread tid
-      eec <- takeMVar mec
-      case eec of
-        Nothing -> return ()
-        Just ec ->
-          if isWindows
-            then putStrLn "FIXME ignoring known failure on Windows"
-            else error $ "waitForProcess not interrupted: sleep exited with " ++ show ec
-
-    putStrLn "testing getPid"
-    do
-      (_, Just out, _, p) <-
-        if isWindows
-          then createProcess $ (proc "sh" ["-c", "z=$$; cat /proc/$z/winpid"]) {std_out = CreatePipe}
-          else createProcess $ (proc "sh" ["-c", "echo $$"]) {std_out = CreatePipe}
-      pid <- getPid p
-      line <- hGetContents out
-      putStrLn $ " queried PID: " ++ show pid
-      putStrLn $ " PID reported by stdout: " ++ show line
-      _ <- waitForProcess p
-      hClose out
-      let numStdoutPid = read (takeWhile isDigit line) :: Pid
-      unless (Just numStdoutPid == pid) $
+testInterruptMaskedWait :: IO ()
+testInterruptMaskedWait = run "interrupt masked wait" $ do
+    (_, _, _, p) <- createProcess (proc "sleep" ["1.0"])
+    mec <- newEmptyMVar
+    tid <- mask_ . forkIO $
+        (waitForProcess p >>= putMVar mec . Just)
+            `catchThreadKilled` putMVar mec Nothing
+    killThread tid
+    eec <- takeMVar mec
+    case eec of
+      Nothing -> return ()
+      Just ec ->
         if isWindows
           then putStrLn "FIXME ignoring known failure on Windows"
-          else error "subprocess reported unexpected PID"
+          else error $ "waitForProcess not interrupted: sleep exited with " ++ show ec
 
-    putStrLn "Tests passed successfully"
+testGetPid :: IO ()
+testGetPid = run "getPid" $ do
+    (_, Just out, _, p) <-
+      if isWindows
+        then createProcess $ (proc "sh" ["-c", "z=$$; cat /proc/$z/winpid"]) {std_out = CreatePipe}
+        else createProcess $ (proc "sh" ["-c", "echo $$"]) {std_out = CreatePipe}
+    pid <- getPid p
+    line <- hGetContents out
+    putStrLn $ " queried PID: " ++ show pid
+    putStrLn $ " PID reported by stdout: " ++ show line
+    _ <- waitForProcess p
+    hClose out
+    let numStdoutPid = read (takeWhile isDigit line) :: Pid
+    unless (Just numStdoutPid == pid) $
+      if isWindows
+        then putStrLn "FIXME ignoring known failure on Windows"
+        else error "subprocess reported unexpected PID"
+
 
 withCurrentDirectory :: FilePath -> IO a -> IO a
 withCurrentDirectory new inner = do
