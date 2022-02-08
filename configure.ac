@@ -31,6 +31,39 @@ AC_CHECK_DECLS([POSIX_SPAWN_SETPGROUP],[],[],[
   #include <spawn.h>
 ])
 
+if test "$ac_cv_func_posix_spawnp" = "yes"; then
+    dnl On OpenBSD posix_spawnp doesn't report ENOENT when
+    dnl the user attempts to spawn a process with a non-existent
+    dnl executable. Don't attempt to use such posix_spawn
+    dnl implementations to ensure errors are reported correctly.
+    dnl See #224.
+
+    AC_MSG_CHECKING(whether posix_spawn reports errors sensibly)
+    AC_RUN_IFELSE(
+        [AC_LANG_PROGRAM([
+             #include <stddef.h>
+             #include <stdbool.h>
+             #include <errno.h>
+             #include <spawn.h>
+           ], [[
+                 pid_t pid;
+                 char *prog = "__nonexistent_program__";
+                 char *args[] = {prog, NULL};
+                 char *env[] = {NULL};
+
+                 // This should fail with ENOENT
+                 int ret = posix_spawnp(&pid, prog, NULL, NULL, args, env);
+                 bool okay = ret == ENOENT;
+                 return !okay;
+           ]]
+         )],
+         [AC_DEFINE([USE_POSIX_SPAWN], [], [posix_spawn should be used])
+          AC_MSG_RESULT(yes)],
+         [AC_MSG_RESULT([no, falling back to fork/exec])]
+    )
+fi
+
+
 FP_CHECK_CONSTS([SIG_DFL SIG_IGN])
 
 AC_OUTPUT
