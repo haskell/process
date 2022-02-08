@@ -730,6 +730,7 @@ waitForProcess ph@(ProcessHandle _ delegating_ctlc _) = lockWaitpid $ do
               closePHANDLE ph'
               closePHANDLE job'
               return (ClosedHandle e, e)
+        -- omit endDelegateControlC since it's a no-op on Windows
         return e'
 #else
     OpenExtHandle _ _job ->
