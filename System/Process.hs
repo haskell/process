@@ -676,6 +676,7 @@ getCurrentPid =
 -- waitForProcess
 
 {- | Waits for the specified process to terminate, and returns its exit code.
+On Unix systems, may throw 'UserInterrupt' when using 'delegate_ctlc'.
 
 GHC Note: in order to call @waitForProcess@ without blocking all the
 other threads in the system, you must compile the program with
@@ -683,7 +684,8 @@ other threads in the system, you must compile the program with
 
 Note that it is safe to call @waitForProcess@ for the same process in multiple
 threads. When the process ends, threads blocking on this call will wake in
-FIFO order.
+FIFO order. When using 'delegate_ctlc' and the process is interrupted, only
+the first waiting thread will throw 'UserInterrupt'.
 
 (/Since: 1.2.0.0/) On Unix systems, a negative value @'ExitFailure' -/signum/@
 indicates that the child was terminated by signal @/signum/@.
@@ -703,15 +705,17 @@ waitForProcess ph@(ProcessHandle _ delegating_ctlc _) = lockWaitpid $ do
     OpenHandle h  -> do
         -- don't hold the MVar while we call c_waitForProcess...
         e <- waitForProcess' h
-        e' <- modifyProcessHandle ph $ \p_' ->
+        (e', was_open) <- modifyProcessHandle ph $ \p_' ->
           case p_' of
-            ClosedHandle e' -> return (p_', e')
+            ClosedHandle e' -> return (p_', (e', False))
             OpenExtHandle{} -> fail "waitForProcess(OpenExtHandle): this cannot happen"
             OpenHandle ph'  -> do
               closePHANDLE ph'
-              when delegating_ctlc $
-                endDelegateControlC e
-              return (ClosedHandle e, e)
+              return (ClosedHandle e, (e, True))
+        -- endDelegateControlC after closing the handle, since it
+        -- may throw UserInterrupt
+        when (was_open && delegating_ctlc) $
+          endDelegateControlC e
         return e'
 #if defined(WINDOWS)
     OpenExtHandle h job -> do
@@ -725,9 +729,8 @@ waitForProcess ph@(ProcessHandle _ delegating_ctlc _) = lockWaitpid $ do
             OpenExtHandle ph' job' -> do
               closePHANDLE ph'
               closePHANDLE job'
-              when delegating_ctlc $
-                endDelegateControlC e
               return (ClosedHandle e, e)
+        -- omit endDelegateControlC since it's a no-op on Windows
         return e'
 #else
     OpenExtHandle _ _job ->
@@ -761,7 +764,8 @@ still running, 'Nothing' is returned.  If the process has exited, then
 @'Just' e@ is returned where @e@ is the exit code of the process.
 
 On Unix systems, see 'waitForProcess' for the meaning of exit codes
-when the process died as the result of a signal.
+when the process died as the result of a signal. May throw
+'UserInterrupt' when using 'delegate_ctlc'.
 -}
 
 getProcessExitCode :: ProcessHandle -> IO (Maybe ExitCode)
@@ -784,6 +788,8 @@ getProcessExitCode ph@(ProcessHandle _ delegating_ctlc _) = tryLockWaitpid $ do
                         let e  | code == 0 = ExitSuccess
                                | otherwise = ExitFailure (fromIntegral code)
                         return (ClosedHandle e, (Just e, True))
+  -- endDelegateControlC after closing the handle, since it
+  -- may throw UserInterrupt
   case m_e of
     Just e | was_open && delegating_ctlc -> endDelegateControlC e
     _                                    -> return ()
