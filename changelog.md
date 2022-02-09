@@ -1,9 +1,14 @@
 # Changelog for [`process` package](http://hackage.haskell.org/package/process)
 
-## Unreleased
+## 1.6.14.0 *February 2022*
 
 * posix: Ensure that `errno` is set after `posix_spawnp` fails [#228](https://github.com/haskell/process/pull/228)
 * Fix `waitForProcess` not closing process handles with `delegate_ctlc` [#231](https://github.com/haskell/process/pull/231)
+* Don't use `posix_spawn` on platforms where it does not report `ENOENT` in caes where the
+  requested executable does not exist [#224](https://github.com/haskell/process/issues/224)
+* Ensure that `find_executable` correctly-locates executables when a change in
+  working directory is requested [#219](https://github.com/haskell/process/issues/219)
+* Fix capitalization error allowing `execvpe` to be used when available.
 
 ## 1.6.13.2 *July 2021*
 

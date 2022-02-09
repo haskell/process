@@ -5,7 +5,7 @@
 #include <errno.h>
 #include <signal.h>
 
-#if !defined(HAVE_POSIX_SPAWNP)
+#if !defined(USE_POSIX_SPAWN)
 ProcHandle
 do_spawn_posix (char *const args[],
                 char *workingDirectory, char **environment,
