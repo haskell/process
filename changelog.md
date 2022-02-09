@@ -3,6 +3,7 @@
 ## Unreleased
 
 * posix: Ensure that `errno` is set after `posix_spawnp` fails [#228](https://github.com/haskell/process/pull/228)
+* Fix `waitForProcess` not closing process handles with `delegate_ctlc` [#231](https://github.com/haskell/process/pull/231)
 
 ## 1.6.13.2 *July 2021*
 
