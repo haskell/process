@@ -187,7 +187,7 @@ runGenProcess_ fun c _ _ = createProcess_ fun c
 -- When this function is used with WinIO enabled it's the caller's
 -- responsibility to register the handles with the I/O manager.
 -- If this is not done the operation will deadlock.  Association can
--- be done as follow:
+-- be done as follows:
 --
 -- @
 --     #if defined(__IO_MANAGER_WINIO__)
