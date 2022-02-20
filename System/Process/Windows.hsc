@@ -450,8 +450,8 @@ createPipeInternalHANDLE =
    alloca $ \ pfdStdOutput -> do
      throwErrnoIf_  (==False) "c_mkNamedPipe" $
        c_mkNamedPipe pfdStdInput True pfdStdOutput True
-     Just hndStdInput  <- mbPipeHANDLE CreatePipe pfdStdInput WriteMode
-     Just hndStdOutput <- mbPipeHANDLE CreatePipe pfdStdOutput ReadMode
+     Just hndStdInput  <- mbPipeHANDLE CreatePipe pfdStdInput ReadMode
+     Just hndStdOutput <- mbPipeHANDLE CreatePipe pfdStdOutput WriteMode
      return (hndStdInput, hndStdOutput)
 
 
