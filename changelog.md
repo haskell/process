@@ -1,5 +1,10 @@
 # Changelog for [`process` package](http://hackage.haskell.org/package/process)
 
+## * unreleased *
+
+* Correct permissions on createPipe on Windows [234](https://github.com/haskell/process/pull/234)
+* Ensure that both ends of pipes on Windows are created in the same mode  [234](https://github.com/haskell/process/pull/234)
+
 ## 1.6.14.0 *February 2022*
 
 * posix: Ensure that `errno` is set after `posix_spawnp` fails [#228](https://github.com/haskell/process/pull/228)
