@@ -199,8 +199,8 @@ runGenProcess_ fun c _ _ = createProcess_ fun c
 --     ...
 --
 --     #if defined (__IO_MANAGER_WINIO__)
---     return () <|> $ do
---       associateHandle' =<< handleToHANDLE <handle>
+--     return () <!> (do
+--       associateHandle' =<< handleToHANDLE <handle>)
 --     #endif
 -- @
 --
