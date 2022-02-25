@@ -182,6 +182,33 @@ runGenProcess_ fun c _ _ = createProcess_ fun c
 -- | Create a pipe for interprocess communication and return a
 -- @(readEnd, writeEnd)@ `Handle` pair.
 --
+-- * WinIO Support
+--
+-- When this function is used with WinIO enabled it's the caller's
+-- responsibility to register the handles with the I/O manager.
+-- If this is not done the operation will deadlock.  Association can
+-- be done as follows:
+--
+-- @
+--     #if defined(__IO_MANAGER_WINIO__)
+--     import GHC.IO.SubSystem ((<!>))
+--     import GHC.IO.Handle.Windows (handleToHANDLE)
+--     import GHC.Event.Windows (associateHandle')
+--     #endif
+--
+--     ...
+--
+--     #if defined (__IO_MANAGER_WINIO__)
+--     return () <!> (do
+--       associateHandle' =<< handleToHANDLE <handle>)
+--     #endif
+-- @
+--
+-- Only associate handles that you are in charge of read/writing to.
+-- Do not associate handles passed to another process.  It's the
+-- process's reponsibility to register the handle if it supports
+-- async access.
+--
 -- @since 1.2.1.0
 createPipe :: IO (Handle, Handle)
 createPipe = createPipeInternal

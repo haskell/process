@@ -123,11 +123,29 @@ mkNamedPipe (HANDLE* pHandleIn, BOOL isInheritableIn,
     /* Create one end of the pipe. Named pipes are a bit less secure than
        anonymous pipes.  Because of this we restrict the pipe's access to only
        one client and also only the local host.  This means after we create the
-       other end of the pipe it should be as secure as an anonymous pipe.  */
+       other end of the pipe it should be as secure as an anonymous pipe.
+
+       "When you operate on named pipes, you have a choice of opening them in
+       PIPE_WAIT mode or PIPE_NOWAIT mode. When you read from a PIPE_WAIT pipe,
+       the read blocks until data becomes available in the pipe. When you read
+       from a PIPE_NOWAIT pipe, then the read completes immediately even if
+       there is no data in the pipe. But how is this different from a PIPE_WAIT
+       pipe opened in asynchronous mode by passing FILE_FLAG_OVERLAPPED? The
+       difference is in when the I/O is deemed to have completed. When you issue
+       an overlapped read against a PIPE_WAIT pipe, the call to Read­File returns
+       immediately, but the completion actions do not occur until there is data
+       available in the pipe. (Completion actions are things like setting the
+       event, running the completion routine, or queueing a completion to an I/O
+       completion port.) On the other hand, when you issue a read against a
+       PIPE_NOWAIT pipe, the call to Read­File returns immediately with
+       completion—if the pipe is empty, the read completes with a read of zero
+       bytes and the error ERROR_NO_DATA."[0]
+
+       [0] https://devblogs.microsoft.com/oldnewthing/20110114-00/?p=11753  */
     hTemporaryIn
-      = CreateNamedPipeW (&pipeName[0],
+      = CreateNamedPipeW (pipeName,
                           PIPE_ACCESS_INBOUND | FILE_FLAG_OVERLAPPED | FILE_FLAG_FIRST_PIPE_INSTANCE,
-                          PIPE_TYPE_MESSAGE | PIPE_REJECT_REMOTE_CLIENTS,
+                          PIPE_TYPE_MESSAGE | PIPE_REJECT_REMOTE_CLIENTS | PIPE_READMODE_MESSAGE | PIPE_WAIT,
                           1, buffer_size, buffer_size,
                           0,
                           &secAttr);
@@ -138,14 +156,26 @@ mkNamedPipe (HANDLE* pHandleIn, BOOL isInheritableIn,
        will give us the read and write ends of the pipe.  */
     secAttr.bInheritHandle = isInheritableOut;
     hTemporaryOut
-      = CreateFileW (&pipeName[0],
+      = CreateFileW (pipeName,
                      GENERIC_WRITE,
                      FILE_SHARE_WRITE,
                      &secAttr,
                      OPEN_EXISTING,
                      FILE_FLAG_OVERLAPPED,
                      NULL);
+
     if (hTemporaryOut == INVALID_HANDLE_VALUE)
+      goto fail;
+
+    /* Ensure that read and write ends are set to the same mode.  MESSAGE mode
+       will honor data boundaries as a whole.  That is, if n bytes are posted
+       at once, n bytes are received together at the other wide as long as n
+       is smaller than buffer size.  Otherwise it's up to buffer size.  BYTE
+       mode is essentially streaming mode. Typically Haskell would benefit from
+       both modes, cabal from byte streaming and iserv from message.  Let's
+       default to MESSAGE.  */
+    DWORD pipeFlags = PIPE_READMODE_MESSAGE;
+    if (!SetNamedPipeHandleState (hTemporaryOut, &pipeFlags, NULL, NULL))
       goto fail;
 
     /* Set some optimization flags to make the I/O manager operate more
