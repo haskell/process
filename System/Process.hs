@@ -20,7 +20,7 @@
 --
 -----------------------------------------------------------------------------
 
--- ToDo:
+-- TODO:
 --      * Flag to control whether exiting the parent also kills the child.
 
 module System.Process (
@@ -383,7 +383,7 @@ processFailedException fun cmd args exit_code =
 -- @SIGINT@ to every process using the console. The standard solution is that
 -- while running an interactive program, ignore @SIGINT@ in the parent, and let
 -- it be handled in the child process. If that process then terminates due to
--- the @SIGINT@ signal, then at that point treat it as if we had recieved the
+-- the @SIGINT@ signal, then at that point treat it as if we had received the
 -- @SIGINT@ ourselves and begin an orderly shutdown.
 --
 -- This behaviour is implemented by 'createProcess' (and
