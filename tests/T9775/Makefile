@@ -8,6 +8,5 @@ include $(TOP)/mk/test.mk
 
 .PHONY: T9775
 T9775:
-	'$(TEST_CC)' ok.c -o ok.exe
-	'$(TEST_CC)' main.c -o main.exe
-
+	'$(TEST_CC)' $(TEST_CC_OPTS) ok.c -o ok.exe
+	'$(TEST_CC)' $(TEST_CC_OPTS) main.c -o main.exe

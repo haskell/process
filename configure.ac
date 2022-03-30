@@ -1,4 +1,4 @@
-AC_INIT([Haskell process package], [1.0], [libraries@haskell.org], [process])
+AC_INIT([Haskell process package],[1.0],[libraries@haskell.org],[process])
 
 # Safety check: Ensure that we are in the correct source directory.
 AC_CONFIG_SRCDIR([include/runProcess.h])
