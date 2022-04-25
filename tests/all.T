@@ -42,6 +42,8 @@ test('process010', [
     normalise_fun(lambda s: s.replace('illegal operation (Inappropriate ioctl for device)', 'does not exist (No such file or directory)')),
     normalise_exec
 ], compile_and_run, [''])
-test('process011', when(opsys('mingw32'), skip), compile_and_run, [''])
+test('process011',
+     [when(opsys('mingw32'), skip), pre_cmd('{compiler} -no-hs-main -o process011_c process011_c.c')],
+     compile_and_run, [''])
 
 test('T8343', normal, compile_and_run, [''])

@@ -14,24 +14,16 @@ main = do
 
   -- shell kills itself with SIGINT,
   -- delegation off, exit code (death by signal) reported as normal
-  do let script = intercalate " "
-                    [ "exec python3 2>/dev/null"
-                    , "-c"
-                    , "'import os; os.kill(os.getpid(), 2)'"
-                    ]
-     (_,_,_,p) <- createProcess (shell script) { delegate_ctlc = False }
+  do let script = "./process011_c"
+     (_,_,_,p) <- createProcess (proc script []) { delegate_ctlc = False }
      waitForProcess p >>= print
 
   putStrLn "===================== test 2"
 
   -- shell kills itself with SIGINT,
   -- delegation on, so expect to throw UserInterrupt
-  do let script = intercalate " "
-                    [ "exec python3 2>/dev/null"
-                    , "-c"
-                    , "'import os; os.kill(os.getpid(), 2)'"
-                    ]
-     (_,_,_,p) <- createProcess (shell script) { delegate_ctlc = True }
+  do let script = "./process011_c"
+     (_,_,_,p) <- createProcess (proc script []) { delegate_ctlc = True }
      (waitForProcess p >>= print)
        `catchUserInterrupt` \e -> putStrLn $ "caught: " ++ show e
 
