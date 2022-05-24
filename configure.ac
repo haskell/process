@@ -59,7 +59,9 @@ if test "$ac_cv_func_posix_spawnp" = "yes"; then
          )],
          [AC_DEFINE([USE_POSIX_SPAWN], [], [posix_spawn should be used])
           AC_MSG_RESULT(yes)],
-         [AC_MSG_RESULT([no, falling back to fork/exec])]
+         [AC_MSG_RESULT([no, falling back to fork/exec])],
+         [AC_DEFINE([USE_POSIX_SPAWN], [], [])
+          AC_MSG_RESULT(cross-compiling - assuming yes)]
     )
 fi
 
