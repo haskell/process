@@ -142,9 +142,10 @@ mkNamedPipe (HANDLE* pHandleIn, BOOL isInheritableIn,
        bytes and the error ERROR_NO_DATA."[0]
 
        [0] https://devblogs.microsoft.com/oldnewthing/20110114-00/?p=11753  */
+    DWORD inAttr = isInheritableIn ? 0 : FILE_FLAG_OVERLAPPED;
     hTemporaryIn
       = CreateNamedPipeW (pipeName,
-                          PIPE_ACCESS_INBOUND | FILE_FLAG_OVERLAPPED | FILE_FLAG_FIRST_PIPE_INSTANCE,
+                          PIPE_ACCESS_INBOUND | inAttr | FILE_FLAG_FIRST_PIPE_INSTANCE,
                           PIPE_TYPE_MESSAGE | PIPE_REJECT_REMOTE_CLIENTS | PIPE_READMODE_MESSAGE | PIPE_WAIT,
                           1, buffer_size, buffer_size,
                           0,
@@ -161,7 +162,9 @@ mkNamedPipe (HANDLE* pHandleIn, BOOL isInheritableIn,
                      FILE_SHARE_WRITE,
                      &secAttr,
                      OPEN_EXISTING,
-                     FILE_FLAG_OVERLAPPED,
+                     isInheritableOut
+                       ? FILE_ATTRIBUTE_NORMAL
+                       : FILE_FLAG_OVERLAPPED,
                      NULL);
 
     if (hTemporaryOut == INVALID_HANDLE_VALUE)
