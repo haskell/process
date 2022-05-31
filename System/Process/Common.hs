@@ -292,6 +292,7 @@ mbPipeHANDLE CreatePipe pfd  mode =
   do raw_handle <- peek pfd
      let hwnd  = fromHANDLE raw_handle :: Io NativeHandle
          ident = "hwnd:" ++ show raw_handle
-     Just <$> mkHandleFromHANDLE hwnd Stream ident mode Nothing
+     enc <- fmap Just getLocaleEncoding
+     Just <$> mkHandleFromHANDLE hwnd Stream ident mode enc
 mbPipeHANDLE _std      _pfd _mode = return Nothing
 #endif
