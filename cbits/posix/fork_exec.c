@@ -69,8 +69,13 @@ setup_std_handle_fork(int fd,
         return 0;
 
     case STD_HANDLE_USE_FD:
-        if (dup2(b->use_fd,  fd) == -1) {
-            child_failed(pipe, "dup2");
+        // N.B. POSIX specifies that dup2(x,x) should be a no-op, but
+        // naturally Apple ignores this and rather fails in posix_spawn on Big
+        // Sur.
+        if (b->use_fd != fd) {
+            if (dup2(b->use_fd,  fd) == -1) {
+                child_failed(pipe, "dup2");
+            }
         }
         return 0;
 
