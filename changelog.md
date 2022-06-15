@@ -6,6 +6,7 @@
 * Ensure that both ends of pipes on Windows are created in the same mode  [234](https://github.com/haskell/process/pull/234)
 * Fixed an issue with WINIO where giving an application an inherited pipe can cause it to misbehave [245](https://github.com/haskell/process/pull/245)
 * Set the encoding on WINIO created pipes to the local encoding as with MIO [248](https://github.com/haskell/process/pull/248)
+* cbits/fork-exec: Don't dup2 identical fds [#250](https://github.com/haskell/process/pull/250)
 
 ## 1.6.14.0 *February 2022*
 
