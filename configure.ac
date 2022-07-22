@@ -16,6 +16,17 @@ AC_CHECK_HEADERS([signal.h sys/wait.h fcntl.h])
 AC_CHECK_FUNCS([setitimer sysconf])
 AC_CHECK_FUNCS([execvpe])
 
+# check for headers and functions used by bsd_closefrom.c
+AC_CHECK_HEADERS([dirent.h fcntl.h libproc.h ndir.h sys/dir.h sys/ndir.h])
+AC_CHECK_FUNCS([
+  closefrom
+  close_range
+  dirfd
+  proc_pid
+  proc_pidinfo
+  sysconf
+  ])
+
 # posix_spawn checks
 AC_CHECK_HEADERS([spawn.h])
 AC_CHECK_FUNCS([posix_spawnp posix_spawn_file_actions_addchdir],[],[],[

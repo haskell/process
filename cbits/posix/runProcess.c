@@ -21,13 +21,13 @@
 #include <signal.h>
 #endif
 
-#if defined(HAVE_CLOSERANGE)
+#if defined(HAVE_CLOSE_RANGE)
 #include <linux/close_range.h>
 #endif
 
 void
 closefrom_excluding(int lowfd, int excludingFd) {
-#if defined(HAVE_CLOSERANGE)
+#if defined(HAVE_CLOSE_RANGE)
     close_range(lowfd, excludingFd - 1);
     closefrom(excludingFd + 1);
 #else
