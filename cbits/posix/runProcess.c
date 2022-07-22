@@ -28,7 +28,7 @@ void
 closefrom_excluding(int lowfd, int excludingFd) {
     // Try using the close_range syscall, provided in Linux kernel >= 5.9.
     // We do this directly because not all C libs provide a wrapper (like musl)
-    long ret = syscall(SYS_close_range, lowfd, excludingFd - 1);
+    long ret = syscall(SYS_close_range, lowfd, excludingFd - 1, 0);
 
     if (ret != -1) {
         // If that worked, closefrom the remaining range
