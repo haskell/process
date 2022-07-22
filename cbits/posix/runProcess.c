@@ -13,6 +13,7 @@
 
 #include <unistd.h>
 #include <errno.h>
+#include <sys/syscall.h>
 #include <sys/wait.h>
 
 #ifdef HAVE_FCNTL_H
@@ -23,23 +24,23 @@
 #include <signal.h>
 #endif
 
-#if defined(HAVE_LINUX_CLOSE_RANGE_H)
-#define _GNU_SOURCE
-#include <linux/close_range.h>
-#endif
-
 void
 closefrom_excluding(int lowfd, int excludingFd) {
-#if defined(HAVE_CLOSE_RANGE)
-    close_range(lowfd, excludingFd - 1);
-    closefrom(excludingFd + 1);
-#else
-    for (int i = lowfd; i < excludingFd; i++) {
-        close(i);
-    }
+    // Try using the close_range syscall, provided in Linux kernel >= 5.9.
+    // We do this directly because not all C libs provide a wrapper (like musl)
+    long ret = syscall(SYS_close_range, lowfd, excludingFd - 1);
 
-    closefrom(excludingFd + 1);
-#endif
+    if (ret != -1) {
+        // If that worked, closefrom the remaining range
+        closefrom(excludingFd + 1);
+    } else {
+        // Otherwise, fall back to a loop + closefrom
+        for (int i = lowfd; i < excludingFd; i++) {
+            close(i);
+        }
+
+        closefrom(excludingFd + 1);
+    }
 }
 
 // If a process was terminated by a signal, the exit status we return
