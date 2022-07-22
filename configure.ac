@@ -26,6 +26,10 @@ AC_CHECK_DECLS([POSIX_SPAWN_SETSID, POSIX_SPAWN_SETSID_NP],[],[],[
   #define _GNU_SOURCE
   #include <spawn.h>
 ])
+AC_CHECK_DECLS([POSIX_SPAWN_CLOEXEC_DEFAULT],[],[],[
+  #define _GNU_SOURCE
+  #include <spawn.h>
+])
 AC_CHECK_DECLS([POSIX_SPAWN_SETPGROUP],[],[],[
   #define _GNU_SOURCE
   #include <spawn.h>
