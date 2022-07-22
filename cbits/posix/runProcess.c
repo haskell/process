@@ -9,6 +9,8 @@
 
 #if defined(HAVE_FORK)
 
+#include "bsd_closefrom.h"
+
 #include <unistd.h>
 #include <errno.h>
 #include <sys/wait.h>
@@ -21,7 +23,8 @@
 #include <signal.h>
 #endif
 
-#if defined(HAVE_CLOSE_RANGE)
+#if defined(HAVE_LINUX_CLOSE_RANGE_H)
+#define _GNU_SOURCE
 #include <linux/close_range.h>
 #endif
 

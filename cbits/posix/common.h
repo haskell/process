@@ -23,7 +23,6 @@ struct std_handle {
 };
 
 void closefrom_excluding(int from, int excluding);
-void closefrom(int lowfd);
 
 // defined in find_executable.c
 #if !defined(HAVE_EXECVPE)
