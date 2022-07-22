@@ -21,22 +21,6 @@
 #include <signal.h>
 #endif
 
-int
-get_max_fd()
-{
-    static int cache = 0;
-    if (cache == 0) {
-#if HAVE_SYSCONF
-        cache = sysconf(_SC_OPEN_MAX);
-        if (cache == -1) {
-            cache = 256;
-        }
-#else
-        cache = 256;
-#endif
-    }
-    return cache;
-}
 
 // If a process was terminated by a signal, the exit status we return
 // via the System.Process API is (-signum). This encoding avoids collision with

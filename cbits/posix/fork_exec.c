@@ -222,13 +222,7 @@ do_spawn_fork (char *const args[],
         setup_std_handle_fork(STDERR_FILENO, stdErrHdl, forkCommunicationFds[1]);
 
         if ((flags & RUN_PROCESS_IN_CLOSE_FDS) != 0) {
-            int max_fd = get_max_fd();
-            // XXX Not the pipe
-            for (int i = 3; i < max_fd; i++) {
-                if (i != forkCommunicationFds[1]) {
-                    close(i);
-                }
-            }
+            closefrom_excluding(3, forkCommunicationFds[1]);
         }
 
         /* Reset the SIGINT/SIGQUIT signal handlers in the child, if requested
