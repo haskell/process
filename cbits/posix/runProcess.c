@@ -21,6 +21,23 @@
 #include <signal.h>
 #endif
 
+#if defined(HAVE_CLOSERANGE)
+#include <linux/close_range.h>
+#endif
+
+void
+closefrom_excluding(int lowfd, int excludingFd) {
+#if defined(HAVE_CLOSERANGE)
+    close_range(lowfd, excludingFd - 1);
+    closefrom(excludingFd + 1);
+#else
+    for (int i = lowfd; i < excludingFd; i++) {
+        close(i);
+    }
+
+    closefrom(excludingFd + 1);
+#endif
+}
 
 // If a process was terminated by a signal, the exit status we return
 // via the System.Process API is (-signum). This encoding avoids collision with

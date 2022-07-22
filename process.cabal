@@ -67,7 +67,6 @@ library
         c-sources:
             cbits/posix/runProcess.c
             cbits/posix/bsd_closefrom.c
-            cbits/posix/close_fds.c
             cbits/posix/fork_exec.c
             cbits/posix/posix_spawn.c
             cbits/posix/find_executable.c
