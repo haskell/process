@@ -1,6 +1,6 @@
 # Changelog for [`process` package](http://hackage.haskell.org/package/process)
 
-## * unreleased *
+## 1.6.15.0 *August 2022*
 
 * Correct permissions on createPipe on Windows [234](https://github.com/haskell/process/pull/234)
 * Ensure that both ends of pipes on Windows are created in the same mode  [234](https://github.com/haskell/process/pull/234)
