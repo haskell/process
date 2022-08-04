@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <signal.h>
+#include <fcntl.h>
 
 #if !defined(USE_POSIX_SPAWN)
 ProcHandle
@@ -35,6 +36,14 @@ setup_std_handle_spawn (int fd,
 {
     switch (hdl->behavior) {
     case STD_HANDLE_CLOSE:
+        // N.B. POSIX specifies that addclose() may result in spawnp() failing
+        // if the fd to-be-closed is already closed. Consequently, we must
+        // first open a file (e.g. /dev/null) and before attempting to close
+        // the fd. Fixes #251.
+        if (posix_spawn_file_actions_addopen(fa, fd, "/dev/null", O_RDONLY, 0) != 0) {
+            *failed_doing = "posix_spawn_file_actions_addopen";
+            return -1;
+        }
         if (posix_spawn_file_actions_addclose(fa, fd) != 0) {
             *failed_doing = "posix_spawn_file_actions_addclose";
             return -1;
