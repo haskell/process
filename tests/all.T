@@ -47,3 +47,4 @@ test('process011',
      compile_and_run, [''])
 
 test('T8343', normal, compile_and_run, [''])
+test('processT251', normal, compile_and_run, [''])
