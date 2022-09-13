@@ -70,7 +70,7 @@ library
             cbits/posix/posix_spawn.c
             cbits/posix/find_executable.c
         other-modules: System.Process.Posix
-        build-depends: unix >= 2.5 && < 2.8
+        build-depends: unix >= 2.5 && < 2.9
 
     include-dirs: include
     includes:
