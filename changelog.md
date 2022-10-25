@@ -1,5 +1,7 @@
 # Changelog for [`process` package](http://hackage.haskell.org/package/process)
 
+## *unreleased*
+
 ## 1.6.16.0 *October 2022*
 
 * `posix_spawn`: Don't rely on addclose not failing for closed fds [#251](https://github.com/haskell/process/issues/251)
