@@ -30,7 +30,10 @@ child = do
 child2 :: IO ()
 child2 = do
     putStrLn "child2 start"
-    Left (IOError {ioe_type=InvalidArgument}) <-
-        try $ getContents >>= print
+    -- Unfortunate, there isn't a reliable way to test that stdin has been closed.
+    -- Afterall, if any file is opened in the child, it may reuse the
+    -- supposedly-closed fd 0. In particular this tends to happen in the
+    -- threaded RTS, since the event manager's control pipe is opened during
+    -- RTS initialzation.
     putStrLn "child2 done"
 
