@@ -31,7 +31,9 @@ typedef PHANDLE ProcHandle;
 
 #include "processFlags.h"
 
-#if !(defined(_MSC_VER) || defined(__MINGW32__) || defined(_WIN32))
+#if !defined(HAVE_WORKING_FORK)
+
+#elif !(defined(_MSC_VER) || defined(__MINGW32__) || defined(_WIN32))
 
 #include <pwd.h>
 #include <grp.h>

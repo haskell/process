@@ -3,8 +3,11 @@
 
 #include <unistd.h>
 #include <errno.h>
+
+#if defined(HAVE_SIGNAL_H)
 #include <signal.h>
 #include <fcntl.h>
+#endif
 
 #if !defined(USE_POSIX_SPAWN)
 ProcHandle

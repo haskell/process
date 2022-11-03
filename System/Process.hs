@@ -77,6 +77,8 @@ module System.Process (
     rawSystem,
     ) where
 
+#include <ghcplatform.h>
+
 import Prelude hiding (mapM)
 
 import System.Process.Internals
@@ -857,6 +859,19 @@ terminateProcess ph = do
 -- ----------------------------------------------------------------------------
 -- Interface to C bits
 
+#if defined(wasm32_HOST_ARCH)
+
+c_terminateProcess :: PHANDLE -> IO CInt
+c_terminateProcess _ = pure (-1)
+
+c_getProcessExitCode :: PHANDLE -> Ptr CInt -> IO CInt
+c_getProcessExitCode _ _ = pure (-1)
+
+c_waitForProcess :: PHANDLE -> Ptr CInt -> IO CInt
+c_waitForProcess _ _ = pure (-1)
+
+#else
+
 foreign import ccall unsafe "terminateProcess"
   c_terminateProcess
         :: PHANDLE
@@ -874,6 +889,7 @@ foreign import ccall interruptible "waitForProcess" -- NB. safe - can block
         -> Ptr CInt
         -> IO CInt
 
+#endif
 
 -- ----------------------------------------------------------------------------
 -- Old deprecated variants

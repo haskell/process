@@ -3,6 +3,8 @@
 
 #include "common.h"
 
+#if defined(HAVE_WORKING_FORK)
+
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <errno.h>
@@ -327,3 +329,5 @@ do_spawn_fork (char *const args[],
 
     return pid;
 }
+
+#endif // HAVE_WORKING_FORK
