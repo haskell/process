@@ -190,6 +190,9 @@ data StdStream
 -- ProcessHandle type
 
 data ProcessHandle__ = OpenHandle { phdlProcessHandle :: PHANDLE }
+                     -- | 'OpenExtHandle' is only applicable for
+                     -- Windows platform. It represents [Job
+                     -- Objects](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects).
                      | OpenExtHandle { phdlProcessHandle :: PHANDLE
                                      -- ^ the process
                                      , phdlJobHandle     :: PHANDLE
