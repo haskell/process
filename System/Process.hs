@@ -102,6 +102,11 @@ import System.Posix.Types (CPid (..))
 
 import GHC.IO.Exception ( ioException, IOErrorType(..), IOException(..) )
 
+#if defined(__wasm__)
+import GHC.IO.Exception ( unsupportedOperation )
+import System.IO.Error
+#endif
+
 -- | The platform specific type for a process identifier.
 --
 -- This is always an integral type. Width and signedness are platform specific.
@@ -857,6 +862,19 @@ terminateProcess ph = do
 -- ----------------------------------------------------------------------------
 -- Interface to C bits
 
+#if defined(__wasm__)
+
+c_terminateProcess :: PHANDLE -> IO CInt
+c_terminateProcess _ = ioError (ioeSetLocation unsupportedOperation "terminateProcess")
+
+c_getProcessExitCode :: PHANDLE -> Ptr CInt -> IO CInt
+c_getProcessExitCode _ _ = ioError (ioeSetLocation unsupportedOperation "getProcessExitCode")
+
+c_waitForProcess :: PHANDLE -> Ptr CInt -> IO CInt
+c_waitForProcess _ _ = ioError (ioeSetLocation unsupportedOperation "waitForProcess")
+
+#else
+
 foreign import ccall unsafe "terminateProcess"
   c_terminateProcess
         :: PHANDLE
@@ -874,6 +892,7 @@ foreign import ccall interruptible "waitForProcess" -- NB. safe - can block
         -> Ptr CInt
         -> IO CInt
 
+#endif
 
 -- ----------------------------------------------------------------------------
 -- Old deprecated variants
