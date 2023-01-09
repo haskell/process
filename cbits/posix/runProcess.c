@@ -7,6 +7,8 @@
 #include "runProcess.h"
 #include "common.h"
 
+#if defined(HAVE_FORK)
+
 #include <unistd.h>
 #include <errno.h>
 #include <sys/wait.h>
@@ -265,3 +267,5 @@ waitForProcess (ProcHandle handle, int *pret)
 
     return -1;
 }
+
+#endif // HAVE_FORK
