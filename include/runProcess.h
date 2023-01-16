@@ -31,7 +31,9 @@ typedef PHANDLE ProcHandle;
 
 #include "processFlags.h"
 
-#if defined(__wasm__)
+#include <ghcplatform.h>
+
+#if defined(wasm32_HOST_ARCH)
 
 #elif !(defined(_MSC_VER) || defined(__MINGW32__) || defined(_WIN32))
 
