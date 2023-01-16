@@ -6,6 +6,8 @@
 #endif
 {-# LANGUAGE InterruptibleFFI #-}
 
+#include <ghcplatform.h>
+
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  System.Process
@@ -102,7 +104,7 @@ import System.Posix.Types (CPid (..))
 
 import GHC.IO.Exception ( ioException, IOErrorType(..), IOException(..) )
 
-#if defined(__wasm__)
+#if defined(wasm32_HOST_ARCH)
 import GHC.IO.Exception ( unsupportedOperation )
 import System.IO.Error
 #endif
@@ -862,7 +864,7 @@ terminateProcess ph = do
 -- ----------------------------------------------------------------------------
 -- Interface to C bits
 
-#if defined(__wasm__)
+#if defined(wasm32_HOST_ARCH)
 
 c_terminateProcess :: PHANDLE -> IO CInt
 c_terminateProcess _ = ioError (ioeSetLocation unsupportedOperation "terminateProcess")
