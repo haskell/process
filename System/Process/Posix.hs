@@ -1,5 +1,8 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE CPP #-}
+
+#include <ghcplatform.h>
+
 module System.Process.Posix
     ( mkProcessHandle
     , translateInternal
@@ -43,7 +46,7 @@ import System.Posix.Process (getProcessGroupIDOf)
 
 import System.Process.Common hiding (mb_delegate_ctlc)
 
-#if defined(__wasm__)
+#if defined(wasm32_HOST_ARCH)
 import System.IO.Error
 #endif
 
@@ -266,7 +269,7 @@ endDelegateControlC exitCode = do
       where
         sig = fromIntegral (-n)
 
-#if defined(__wasm__)
+#if defined(wasm32_HOST_ARCH)
 
 c_runInteractiveProcess
         ::  Ptr CString
