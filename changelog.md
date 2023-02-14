@@ -1,6 +1,6 @@
 # Changelog for [`process` package](http://hackage.haskell.org/package/process)
 
-## *unreleased*
+## 1.6.17.0 *February 2023*
 
 * Improved documentation for the `OpenExtHandle` constructor.
 
