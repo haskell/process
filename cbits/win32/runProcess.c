@@ -617,7 +617,22 @@ waitForJobCompletion ( HANDLE hJob )
         return true;
       }
 
-      HANDLE pHwnd = OpenProcess(SYNCHRONIZE, TRUE, pid_list->ProcessIdList[0]);
+      HANDLE pHwnd;
+      bool found_p;
+
+      /* Find the first non-terminated handle.  */
+      for (DWORD i = 0; i < pid_list->NumberOfProcessIdsInList; i++) {
+        pHwnd = OpenProcess(SYNCHRONIZE, FALSE, pid_list->ProcessIdList[i]);
+        int code = 0;
+        found_p = pHwnd && getProcessExitCode (pHwnd, &code) != -1 && code != STILL_ACTIVE;
+        if (found_p)
+          break;
+      }
+
+      /* All processes were terminated already.  */
+      if (!found_p)
+        return true;
+
       if (pHwnd == NULL) {
         switch (GetLastError()) {
           case ERROR_INVALID_PARAMETER:
@@ -632,7 +647,13 @@ waitForJobCompletion ( HANDLE hJob )
       }
 
       // Wait for it to finish...
-      if (WaitForSingleObject(pHwnd, INFINITE) != WAIT_OBJECT_0) {
+      DWORD result = WaitForSingleObject(pHwnd, 200);
+      if (result == WAIT_TIMEOUT) {
+        int code = 0;
+        /* Current process is waiting to terminate. skip.  */
+        if (getProcessExitCode (pHwnd, &code) != -1 && code != STILL_ACTIVE)
+          continue ;
+      } else if (result != WAIT_OBJECT_0) {
         free(pid_list);
         maperrno();
         CloseHandle(pHwnd);
