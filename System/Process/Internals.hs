@@ -171,7 +171,6 @@ runGenProcess_
  -> Maybe CLong                -- ^ handler for SIGINT
  -> Maybe CLong                -- ^ handler for SIGQUIT
  -> IO (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)
--- On Windows, setting delegate_ctlc has no impact
 runGenProcess_ fun c (Just sig) (Just sig') | isDefaultSignal sig && sig == sig'
                          = createProcess_ fun c { delegate_ctlc = True }
 runGenProcess_ fun c _ _ = createProcess_ fun c
