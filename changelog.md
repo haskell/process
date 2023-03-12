@@ -1,5 +1,9 @@
 # Changelog for [`process` package](http://hackage.haskell.org/package/process)
 
+## unreleased
+
+* Fix deadlock when waiting for process completion and process jobs [#273](https://github.com/haskell/process/issues/273)
+
 ## 1.6.17.0 *February 2023*
 
 * Improved documentation for the `OpenExtHandle` constructor.
