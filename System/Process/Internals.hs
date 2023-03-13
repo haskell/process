@@ -41,6 +41,7 @@ module System.Process.Internals (
     unwrapHandles,
 #ifdef WINDOWS
     terminateJob,
+    terminateJobUnsafe,
     waitForJobCompletion,
     timeout_Infinite,
 #else
@@ -78,25 +79,18 @@ import System.Process.Posix
 -- * This function takes an extra @String@ argument to be used in creating
 --   error messages.
 --
--- * 'use_process_jobs' can be set in CreateProcess since 1.5.0.0 in order to create
---   an I/O completion port to monitor a process tree's progress on Windows.
---
--- The function also returns two new handles:
---   * an I/O Completion Port handle on which events
---     will be signaled.
---   * a Job handle which can be used to kill all running
---     processes.
---
---  On POSIX platforms these two new handles will always be Nothing
---
---
 -- This function has been available from the "System.Process.Internals" module
 -- for some time, and is part of the "System.Process" module since version
 -- 1.2.1.0.
 --
 -- @since 1.2.1.0
 createProcess_
-  :: String                     -- ^ function name (for error messages)
+  :: String
+       -- ^ Function name (for error messages).
+       --
+       --   This can be any 'String', but will typically be the name of the caller.
+       --   E.g., 'spawnProcess' passes @"spawnProcess"@ here when calling
+       --   'createProcess_'.
   -> CreateProcess
   -> IO (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)
 createProcess_ msg proc_ = unwrapHandles `fmap` createProcess_Internal msg proc_
@@ -177,7 +171,6 @@ runGenProcess_
  -> Maybe CLong                -- ^ handler for SIGINT
  -> Maybe CLong                -- ^ handler for SIGQUIT
  -> IO (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)
--- On Windows, setting delegate_ctlc has no impact
 runGenProcess_ fun c (Just sig) (Just sig') | isDefaultSignal sig && sig == sig'
                          = createProcess_ fun c { delegate_ctlc = True }
 runGenProcess_ fun c _ _ = createProcess_ fun c
@@ -187,6 +180,33 @@ runGenProcess_ fun c _ _ = createProcess_ fun c
 
 -- | Create a pipe for interprocess communication and return a
 -- @(readEnd, writeEnd)@ `Handle` pair.
+--
+-- * WinIO Support
+--
+-- When this function is used with WinIO enabled it's the caller's
+-- responsibility to register the handles with the I/O manager.
+-- If this is not done the operation will deadlock.  Association can
+-- be done as follows:
+--
+-- @
+--     #if defined(__IO_MANAGER_WINIO__)
+--     import GHC.IO.SubSystem ((<!>))
+--     import GHC.IO.Handle.Windows (handleToHANDLE)
+--     import GHC.Event.Windows (associateHandle')
+--     #endif
+--
+--     ...
+--
+--     #if defined (__IO_MANAGER_WINIO__)
+--     return () <!> (do
+--       associateHandle' =<< handleToHANDLE <handle>)
+--     #endif
+-- @
+--
+-- Only associate handles that you are in charge of read/writing to.
+-- Do not associate handles passed to another process.  It's the
+-- process's reponsibility to register the handle if it supports
+-- async access.
 --
 -- @since 1.2.1.0
 createPipe :: IO (Handle, Handle)

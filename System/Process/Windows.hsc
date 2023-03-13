@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP, ForeignFunctionInterface #-}
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE InterruptibleFFI #-}
 module System.Process.Windows
     ( mkProcessHandle
@@ -14,6 +15,7 @@ module System.Process.Windows
     , createPipeInternalFd
     , interruptProcessGroupOfInternal
     , terminateJob
+    , terminateJobUnsafe
     , waitForJobCompletion
     , timeout_Infinite
     ) where
@@ -21,6 +23,7 @@ module System.Process.Windows
 import System.Process.Common
 import Control.Concurrent
 import Control.Exception
+import Control.Monad
 import Data.Bits
 import Foreign.C
 import Foreign.Marshal
@@ -30,6 +33,11 @@ import System.IO.Unsafe
 
 import System.Posix.Internals
 import GHC.IO.Exception
+##if defined(__IO_MANAGER_WINIO__)
+import GHC.IO.SubSystem
+import Graphics.Win32.Misc
+import qualified GHC.Event.Windows as Mgr
+##endif
 import GHC.IO.Handle.FD
 import GHC.IO.Handle.Types hiding (ClosedHandle)
 import System.IO.Error
@@ -59,14 +67,14 @@ throwErrnoIfBadPHandle = throwErrnoIfNull
 
 -- On Windows, we have to close this HANDLE when it is no longer required,
 -- hence we add a finalizer to it
-mkProcessHandle :: PHANDLE -> PHANDLE -> IO ProcessHandle
-mkProcessHandle h job = do
+mkProcessHandle :: PHANDLE -> Bool -> PHANDLE -> IO ProcessHandle
+mkProcessHandle h ignore_signals job = do
    m <- if job == nullPtr
            then newMVar (OpenHandle h)
            else newMVar (OpenExtHandle h job)
    _ <- mkWeakMVar m (processHandleFinaliser m)
    l <- newMVar ()
-   return (ProcessHandle m False l)
+   return (ProcessHandle m ignore_signals l)
 
 processHandleFinaliser :: MVar ProcessHandle__ -> IO ()
 processHandleFinaliser m =
@@ -91,19 +99,76 @@ createProcess_Internal
   -> CreateProcess
   -> IO ProcRetHandles
 
-createProcess_Internal fun CreateProcess{ cmdspec = cmdsp,
-                                    cwd = mb_cwd,
-                                    env = mb_env,
-                                    std_in = mb_stdin,
-                                    std_out = mb_stdout,
-                                    std_err = mb_stderr,
-                                    close_fds = mb_close_fds,
-                                    create_group = mb_create_group,
-                                    delegate_ctlc = _ignored,
-                                    detach_console = mb_detach_console,
-                                    create_new_console = mb_create_new_console,
-                                    new_session = mb_new_session,
-                                    use_process_jobs = use_job }
+##if defined(__IO_MANAGER_WINIO__)
+createProcess_Internal = createProcess_Internal_mio <!> createProcess_Internal_winio
+##else
+createProcess_Internal = createProcess_Internal_mio
+##endif
+
+createProcess_Internal_mio
+  :: String                     -- ^ function name (for error messages)
+  -> CreateProcess
+  -> IO ProcRetHandles
+
+createProcess_Internal_mio fun def@CreateProcess{
+    std_in = mb_stdin,
+    std_out = mb_stdout,
+    std_err = mb_stderr,
+    close_fds = mb_close_fds,
+    create_group = mb_create_group,
+    detach_console = mb_detach_console,
+    create_new_console = mb_create_new_console,
+    new_session = mb_new_session,
+    use_process_jobs = use_job }
+ = createProcess_Internal_wrapper fun def $
+       \pfdStdInput pfdStdOutput pfdStdError hJob pEnv pWorkDir pcmdline -> do
+       fdin  <- mbFd fun fd_stdin  mb_stdin
+       fdout <- mbFd fun fd_stdout mb_stdout
+       fderr <- mbFd fun fd_stderr mb_stderr
+
+       -- #2650: we must ensure mutual exclusion of c_runInteractiveProcess,
+       -- because otherwise there is a race condition whereby one thread
+       -- has created some pipes, and another thread spawns a process which
+       -- accidentally inherits some of the pipe handles that the first
+       -- thread has created.
+       --
+       -- An MVar in Haskell is the best way to do this, because there
+       -- is no way to do one-time thread-safe initialisation of a mutex
+       -- the C code.  Also the MVar will be cheaper when not running
+       -- the threaded RTS.
+       proc_handle <- withMVar runInteractiveProcess_lock $ \_ ->
+                      throwErrnoIfBadPHandle fun $
+                           c_runInteractiveProcess pcmdline pWorkDir pEnv
+                                  fdin fdout fderr
+                                  pfdStdInput pfdStdOutput pfdStdError
+                                  ((if mb_close_fds then RUN_PROCESS_IN_CLOSE_FDS else 0)
+                                  .|.(if mb_create_group then RUN_PROCESS_IN_NEW_GROUP else 0)
+                                  .|.(if mb_detach_console then RUN_PROCESS_DETACHED else 0)
+                                  .|.(if mb_create_new_console then RUN_PROCESS_NEW_CONSOLE else 0)
+                                  .|.(if mb_new_session then RUN_PROCESS_NEW_SESSION else 0))
+                                  use_job
+                                  hJob
+
+       hndStdInput  <- mbPipe mb_stdin  pfdStdInput  WriteMode
+       hndStdOutput <- mbPipe mb_stdout pfdStdOutput ReadMode
+       hndStdError  <- mbPipe mb_stderr pfdStdError  ReadMode
+
+       return (proc_handle, hndStdInput, hndStdOutput, hndStdError)
+
+
+createProcess_Internal_wrapper
+  :: Storable a => String                     -- ^ function name (for error messages)
+  -> CreateProcess
+  -> (Ptr a -> Ptr a -> Ptr a -> Ptr PHANDLE -> Ptr CWString -> CWString
+      -> CWString -> IO (PHANDLE, Maybe Handle, Maybe Handle, Maybe Handle))
+  -> IO ProcRetHandles
+
+createProcess_Internal_wrapper _fun CreateProcess{
+    cmdspec = cmdsp,
+    cwd = mb_cwd,
+    env = mb_env,
+    delegate_ctlc = ignore_signals }
+    action
  = do
   let lenPtr = sizeOf (undefined :: WordPtr)
   (cmd, cmdline) <- commandToProcess cmdsp
@@ -116,9 +181,49 @@ createProcess_Internal fun CreateProcess{ cmdspec = cmdsp,
    maybeWith withCWString mb_cwd $ \pWorkDir -> do
    withCWString cmdline $ \pcmdline -> do
 
-     fdin  <- mbFd fun fd_stdin  mb_stdin
-     fdout <- mbFd fun fd_stdout mb_stdout
-     fderr <- mbFd fun fd_stderr mb_stderr
+     (proc_handle, hndStdInput, hndStdOutput, hndStdError)
+       <- action pfdStdInput pfdStdOutput pfdStdError hJob pEnv pWorkDir pcmdline
+
+     -- If we have successfully created the process then check if we have to
+     -- detach from the console.  I'm not sure why the posix version changes
+     -- the state right before creating the child process, but doing so here
+     -- means the first child also inherits this
+     when ignore_signals $
+       startDelegateControlC
+
+     phJob  <- peek hJob
+     ph     <- mkProcessHandle proc_handle ignore_signals phJob
+     return ProcRetHandles { hStdInput  = hndStdInput
+                           , hStdOutput = hndStdOutput
+                           , hStdError  = hndStdError
+                           , procHandle = ph
+                           }
+
+##if defined(__IO_MANAGER_WINIO__)
+createProcess_Internal_winio
+  :: String                     -- ^ function name (for error messages)
+  -> CreateProcess
+  -> IO ProcRetHandles
+
+createProcess_Internal_winio fun def@CreateProcess{
+    std_in = mb_stdin,
+    std_out = mb_stdout,
+    std_err = mb_stderr,
+    close_fds = mb_close_fds,
+    create_group = mb_create_group,
+    detach_console = mb_detach_console,
+    create_new_console = mb_create_new_console,
+    new_session = mb_new_session,
+    use_process_jobs = use_job }
+ = createProcess_Internal_wrapper fun def $
+       \pfdStdInput pfdStdOutput pfdStdError hJob pEnv pWorkDir pcmdline -> do
+
+     _stdin  <- getStdHandle sTD_INPUT_HANDLE
+     _stdout <- getStdHandle sTD_OUTPUT_HANDLE
+     _stderr <- getStdHandle sTD_ERROR_HANDLE
+     hwnd_in  <- mbHANDLE _stdin  mb_stdin
+     hwnd_out <- mbHANDLE _stdout mb_stdout
+     hwnd_err <- mbHANDLE _stderr mb_stderr
 
      -- #2650: we must ensure mutual exclusion of c_runInteractiveProcess,
      -- because otherwise there is a race condition whereby one thread
@@ -132,8 +237,8 @@ createProcess_Internal fun CreateProcess{ cmdspec = cmdsp,
      -- the threaded RTS.
      proc_handle <- withMVar runInteractiveProcess_lock $ \_ ->
                     throwErrnoIfBadPHandle fun $
-                         c_runInteractiveProcess pcmdline pWorkDir pEnv
-                                fdin fdout fderr
+                         c_runInteractiveProcessHANDLE pcmdline pWorkDir pEnv
+                                hwnd_in hwnd_out hwnd_err
                                 pfdStdInput pfdStdOutput pfdStdError
                                 ((if mb_close_fds then RUN_PROCESS_IN_CLOSE_FDS else 0)
                                 .|.(if mb_create_group then RUN_PROCESS_IN_NEW_GROUP else 0)
@@ -143,34 +248,90 @@ createProcess_Internal fun CreateProcess{ cmdspec = cmdsp,
                                 use_job
                                 hJob
 
-     hndStdInput  <- mbPipe mb_stdin  pfdStdInput  WriteMode
-     hndStdOutput <- mbPipe mb_stdout pfdStdOutput ReadMode
-     hndStdError  <- mbPipe mb_stderr pfdStdError  ReadMode
+     -- Attach the handle to the I/O manager's CompletionPort.  This allows the
+     -- I/O manager to service requests for this Handle.
+     Mgr.associateHandle' =<< peek pfdStdInput
+     Mgr.associateHandle' =<< peek pfdStdOutput
+     Mgr.associateHandle' =<< peek pfdStdError
 
-     phJob  <- peek hJob
-     ph     <- mkProcessHandle proc_handle phJob
-     return ProcRetHandles { hStdInput  = hndStdInput
-                           , hStdOutput = hndStdOutput
-                           , hStdError  = hndStdError
-                           , procHandle = ph
-                           }
+     -- Create the haskell mode handles as files.
+     hndStdInput  <- mbPipeHANDLE mb_stdin  pfdStdInput  WriteMode
+     hndStdOutput <- mbPipeHANDLE mb_stdout pfdStdOutput ReadMode
+     hndStdError  <- mbPipeHANDLE mb_stderr pfdStdError  ReadMode
+
+     return (proc_handle, hndStdInput, hndStdOutput, hndStdError)
+
+##endif
 
 {-# NOINLINE runInteractiveProcess_lock #-}
 runInteractiveProcess_lock :: MVar ()
 runInteractiveProcess_lock = unsafePerformIO $ newMVar ()
 
--- The following functions are always present in the export list. For
--- compatibility with the non-Windows code, we provide the same functions with
--- matching type signatures, but implemented as no-ops. For details, see:
--- <https://github.com/haskell/process/pull/21>
-startDelegateControlC :: IO ()
-startDelegateControlC = return ()
+-- ----------------------------------------------------------------------------
+-- Delegated control-C handling on Windows
 
-endDelegateControlC :: ExitCode -> IO ()
-endDelegateControlC _ = return ()
+-- See https://learn.microsoft.com/en-us/windows/console/setconsolectrlhandler
+--
+-- While running an interactive console process like ghci or a shell, we want
+-- to let that process handle Ctl-C keyboard interrupts how it sees fit.
+-- So that means we need to ignore the CTRL_C_EVENT/CTRL_BREAK_EVENT Windows
+-- events while we're running such programs.
+--
+-- If we run multiple programs like this concurrently then we have to be
+-- careful to avoid messing up the signal handlers. We keep a count and only
+-- restore when the last one has finished.
+--
+-- To do this we have to use SetConsoleCtrlHandler which masks the events for
+-- the current process and any child it creates from that point.
+--
+-- In this case we can't use FreeConsole/AttachConsole since those destroy
+-- the signal handler stack for the application when called.  This means we'd
+-- have to recreate them and process doesn't know what's there.
+
+{-# NOINLINE runInteractiveProcess_delegate_ctlc #-}
+runInteractiveProcess_delegate_ctlc :: MVar (Maybe (Int))
+runInteractiveProcess_delegate_ctlc = unsafePerformIO $ newMVar Nothing
+
+startDelegateControlC :: IO ()
+startDelegateControlC =
+    modifyMVar_ runInteractiveProcess_delegate_ctlc $ \delegating -> do
+      case delegating of
+        Nothing -> do
+          -- We're going to ignore ^C in the parent while there are any
+          -- processes using ^C delegation.
+          --
+          -- If another thread runs another process without using
+          -- delegation while we're doing this then it will inherit the
+          -- ignore ^C status.
+          _ <- c_setConsoleCtrlHandler nullPtr True
+          return (Just 1)
+
+        Just count -> do
+          -- If we're already doing it, just increment the count
+          let !count' = count + 1
+          return (Just count')
 
 stopDelegateControlC :: IO ()
-stopDelegateControlC = return ()
+stopDelegateControlC =
+    modifyMVar_ runInteractiveProcess_delegate_ctlc $ \delegating -> do
+      case delegating of
+        Just 1 -> do
+          -- Last process, so restore the old signal handlers
+          _ <- c_setConsoleCtrlHandler nullPtr False
+          return Nothing
+
+        Just count -> do
+          -- Not the last, just decrement the count
+          let !count' = count - 1
+          return (Just count')
+
+        Nothing -> return Nothing -- should be impossible
+
+endDelegateControlC :: ExitCode -> IO ()
+-- I don't think there's a standard exit code for program interruptions
+-- on Windows, so I'll just ignore it for now.
+endDelegateControlC _ = stopDelegateControlC
+
 
 -- End no-op functions
 
@@ -178,13 +339,17 @@ stopDelegateControlC = return ()
 -- ----------------------------------------------------------------------------
 -- Interface to C I/O CP bits
 
-terminateJob :: ProcessHandle -> CUInt -> IO Bool
-terminateJob jh ecode =
-    withProcessHandle jh $ \p_ -> do
+-- | Variant of terminateJob that is not thread-safe
+terminateJobUnsafe :: ProcessHandle__ -> CUInt -> IO Bool
+terminateJobUnsafe p_  ecode = do
         case p_ of
             ClosedHandle      _ -> return False
             OpenHandle        _ -> return False
             OpenExtHandle _ job -> c_terminateJobObject job ecode
+
+terminateJob :: ProcessHandle -> CUInt -> IO Bool
+terminateJob jh ecode =
+    withProcessHandle jh $ \p_ -> terminateJobUnsafe p_ ecode
 
 timeout_Infinite :: CUInt
 timeout_Infinite = 0xFFFFFFFF
@@ -201,6 +366,12 @@ foreign import WINDOWS_CCONV unsafe "TerminateJobObject"
   c_terminateJobObject
         :: PHANDLE
         -> CUInt
+        -> IO Bool
+
+foreign import WINDOWS_CCONV unsafe "SetConsoleCtrlHandler"
+  c_setConsoleCtrlHandler
+        :: Ptr ()
+        -> Bool
         -> IO Bool
 
 foreign import ccall interruptible "waitForJobCompletion" -- NB. safe - can block
@@ -223,6 +394,24 @@ foreign import ccall unsafe "runInteractiveProcess"
         -> Bool          -- useJobObject
         -> Ptr PHANDLE       -- Handle to Job
         -> IO PHANDLE
+
+##if defined(__IO_MANAGER_WINIO__)
+foreign import ccall unsafe "runInteractiveProcessHANDLE"
+  c_runInteractiveProcessHANDLE
+        :: CWString
+        -> CWString
+        -> Ptr CWString
+        -> HANDLE
+        -> HANDLE
+        -> HANDLE
+        -> Ptr HANDLE
+        -> Ptr HANDLE
+        -> Ptr HANDLE
+        -> CInt          -- flags
+        -> Bool          -- useJobObject
+        -> Ptr PHANDLE       -- Handle to Job
+        -> IO PHANDLE
+##endif
 
 commandToProcess
   :: CmdSpec
@@ -299,7 +488,14 @@ isDefaultSignal :: CLong -> Bool
 isDefaultSignal = const False
 
 createPipeInternal :: IO (Handle, Handle)
-createPipeInternal = do
+##if defined(__IO_MANAGER_WINIO__)
+createPipeInternal = createPipeInternalPosix <!> createPipeInternalHANDLE
+##else
+createPipeInternal = createPipeInternalPosix
+##endif
+
+createPipeInternalPosix :: IO (Handle, Handle)
+createPipeInternalPosix = do
     (readfd, writefd) <- createPipeInternalFd
     (do readh <- fdToHandle readfd
         writeh <- fdToHandle writefd
@@ -308,11 +504,26 @@ createPipeInternal = do
 createPipeInternalFd :: IO (FD, FD)
 createPipeInternalFd = do
     allocaArray 2 $ \ pfds -> do
-        throwErrnoIfMinus1_ "_pipe" $ c__pipe pfds 2 (#const _O_BINARY)
+        throwErrnoIfMinus1_ "_pipe" $ c__pipe pfds 8192 (#const _O_BINARY)
         readfd <- peek pfds
         writefd <- peekElemOff pfds 1
         return (readfd, writefd)
 
+##if defined(__IO_MANAGER_WINIO__)
+createPipeInternalHANDLE :: IO (Handle, Handle)
+createPipeInternalHANDLE =
+  alloca $ \ pfdStdInput  ->
+   alloca $ \ pfdStdOutput -> do
+     throwErrnoIf_  (==False) "c_mkNamedPipe" $
+       c_mkNamedPipe pfdStdInput True pfdStdOutput True
+     Just hndStdInput  <- mbPipeHANDLE CreatePipe pfdStdInput ReadMode
+     Just hndStdOutput <- mbPipeHANDLE CreatePipe pfdStdOutput WriteMode
+     return (hndStdInput, hndStdOutput)
+
+
+foreign import ccall "mkNamedPipe" c_mkNamedPipe ::
+    Ptr HANDLE -> Bool -> Ptr HANDLE -> Bool -> IO Bool
+##endif
 
 close' :: CInt -> IO ()
 close' = throwErrnoIfMinus1_ "_close" . c__close

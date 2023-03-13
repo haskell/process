@@ -4,6 +4,8 @@
    Interface for code in runProcess.c (providing support for System.Process)
    ------------------------------------------------------------------------- */
 
+#pragma once
+
 #include "HsProcessConfig.h"
 // Otherwise these clash with similar definitions from other packages:
 #undef PACKAGE_BUGREPORT
@@ -19,35 +21,8 @@
 #include <stdbool.h>
 #endif
 
-#include <unistd.h>
+#if !(defined(_MSC_VER) || defined(__MINGW32__) || defined(_WIN32))
 #include <sys/types.h>
-#if !(defined(_MSC_VER) || defined(__MINGW32__) || defined(_WIN32))
-#include <pwd.h>
-#include <grp.h>
-#endif
-
-#ifdef HAVE_FCNTL_H
-#include <fcntl.h>
-#endif
-
-#ifdef HAVE_VFORK_H
-#include <vfork.h>
-#endif
-
-#if defined(HAVE_WORKING_VFORK)
-#define myfork vfork
-#elif defined(HAVE_WORKING_FORK)
-#define myfork fork
-// We don't need a fork command on Windows
-#elif !(defined(_MSC_VER) || defined(__MINGW32__) || defined(_WIN32))
-#error Cannot find a working fork command
-#endif
-
-#ifdef HAVE_SIGNAL_H
-#include <signal.h>
-#endif
-
-#if !(defined(_MSC_VER) || defined(__MINGW32__) || defined(_WIN32))
 typedef pid_t ProcHandle;
 #else
 // Should really be intptr_t, but we don't have that type on the Haskell side
@@ -56,7 +31,14 @@ typedef PHANDLE ProcHandle;
 
 #include "processFlags.h"
 
-#if !(defined(_MSC_VER) || defined(__MINGW32__) || defined(_WIN32))
+#include <ghcplatform.h>
+
+#if defined(wasm32_HOST_ARCH)
+
+#elif !(defined(_MSC_VER) || defined(__MINGW32__) || defined(_WIN32))
+
+#include <pwd.h>
+#include <grp.h>
 
 extern ProcHandle runInteractiveProcess( char *const args[],
                                          char *workingDirectory,
@@ -69,7 +51,6 @@ extern ProcHandle runInteractiveProcess( char *const args[],
                                          int *pfdStdError,
                                          gid_t *childGroup,
                                          uid_t *childUser,
-                                         int reset_int_quit_handlers,
                                          int flags,
                                          char **failed_doing);
 
@@ -88,8 +69,18 @@ extern ProcHandle runInteractiveProcess( wchar_t *cmd,
                                          bool useJobObject,
                                          HANDLE *hJob );
 
-typedef void(*setterDef)(DWORD, HANDLE);
-typedef HANDLE(*getterDef)(DWORD);
+extern ProcHandle runInteractiveProcessHANDLE ( wchar_t *cmd,
+                                                wchar_t *workingDirectory,
+                                                wchar_t *environment,
+                                                HANDLE _stdin,
+                                                HANDLE _stdout,
+                                                HANDLE _stderr,
+                                                HANDLE *pStdInput,
+                                                HANDLE *pStdOutput,
+                                                HANDLE *pStdError,
+                                                int flags,
+                                                bool useJobObject,
+                                                HANDLE *hJob);
 
 extern int terminateJob( ProcHandle handle );
 extern int waitForJobCompletion( HANDLE hJob );

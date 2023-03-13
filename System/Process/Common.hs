@@ -26,6 +26,13 @@ module System.Process.Common
 #else
     , CGid
 #endif
+
+-- WINIO is only available on GHC 8.12 and up.
+#if defined(__IO_MANAGER_WINIO__)
+    , HANDLE
+    , mbHANDLE
+    , mbPipeHANDLE
+#endif
     ) where
 
 import Control.Concurrent
@@ -39,6 +46,10 @@ import GHC.IO.Exception
 import GHC.IO.Encoding
 import qualified GHC.IO.FD as FD
 import GHC.IO.Device
+#if defined(__IO_MANAGER_WINIO__)
+import GHC.IO.Handle.Windows
+import GHC.IO.Windows.Handle (fromHANDLE, Io(), NativeHandle())
+#endif
 import GHC.IO.Handle.FD
 import GHC.IO.Handle.Internals
 import GHC.IO.Handle.Types hiding (ClosedHandle)
@@ -51,6 +62,9 @@ import System.IO (IOMode)
 #ifdef WINDOWS
 import Data.Word (Word32)
 import System.Win32.DebugApi (PHANDLE)
+#if defined(__IO_MANAGER_WINIO__)
+import System.Win32.Types (HANDLE)
+#endif
 #else
 import System.Posix.Types
 #endif
@@ -74,11 +88,9 @@ data CreateProcess = CreateProcess{
   std_in       :: StdStream,               -- ^ How to determine stdin
   std_out      :: StdStream,               -- ^ How to determine stdout
   std_err      :: StdStream,               -- ^ How to determine stderr
-  close_fds    :: Bool,                    -- ^ Close all file descriptors except stdin, stdout and stderr in the new process (on Windows, only works if std_in, std_out, and std_err are all Inherit). This implementation will call close an every fd from 3 to the maximum of open files, which can be slow for high maximum of open files.
+  close_fds    :: Bool,                    -- ^ Close all file descriptors except stdin, stdout and stderr in the new process (on Windows, only works if std_in, std_out, and std_err are all Inherit). This implementation will call close on every fd from 3 to the maximum of open files, which can be slow for high maximum of open files.
   create_group :: Bool,                    -- ^ Create a new process group
   delegate_ctlc:: Bool,                    -- ^ Delegate control-C handling. Use this for interactive console processes to let them handle control-C themselves (see below for details).
-                                           --
-                                           --   On Windows this has no effect.
                                            --
                                            --   @since 1.2.0.0
   detach_console :: Bool,                  -- ^ Use the windows DETACHED_PROCESS flag when creating the process; does nothing on other platforms.
@@ -175,6 +187,18 @@ data StdStream
 -- ----------------------------------------------------------------------------
 -- ProcessHandle type
 
+data ProcessHandle__ = OpenHandle { phdlProcessHandle :: PHANDLE }
+                     -- | 'OpenExtHandle' is only applicable for
+                     -- Windows platform. It represents [Job
+                     -- Objects](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects).
+                     | OpenExtHandle { phdlProcessHandle :: PHANDLE
+                                     -- ^ the process
+                                     , phdlJobHandle     :: PHANDLE
+                                     -- ^ the job containing the process and
+                                     -- its subprocesses
+                                     }
+                     | ClosedHandle ExitCode
+
 {- | A handle to a process, which can be used to wait for termination
      of the process using 'System.Process.waitForProcess'.
 
@@ -186,14 +210,6 @@ data StdStream
      completion. This requires two handles. A process job handle and
      a events handle to monitor.
 -}
-data ProcessHandle__ = OpenHandle { phdlProcessHandle :: PHANDLE }
-                     | OpenExtHandle { phdlProcessHandle :: PHANDLE
-                                     -- ^ the process
-                                     , phdlJobHandle     :: PHANDLE
-                                     -- ^ the job containing the process and
-                                     -- its subprocesses
-                                     }
-                     | ClosedHandle ExitCode
 data ProcessHandle
   = ProcessHandle { phandle          :: !(MVar ProcessHandle__)
                   , mb_delegate_ctlc :: !Bool
@@ -258,3 +274,26 @@ pfdToHandle pfd mode = do
   let enc = localeEncoding
 #endif
   mkHandleFromFD fD' fd_type filepath mode False {-is_socket-} (Just enc)
+
+#if defined(__IO_MANAGER_WINIO__)
+-- It is not completely safe to pass the values -1 and -2 as HANDLE as it's an
+-- unsigned type. -1 additionally is also the value for INVALID_HANDLE.  However
+-- it should be safe in this case since an invalid handle would be an error here
+-- anyway and the chances of us getting a handle with a value of -2 is
+-- astronomical. However, sometime in the future process should really use a
+-- proper structure here.
+mbHANDLE :: HANDLE -> StdStream -> IO HANDLE
+mbHANDLE _std CreatePipe      = return $ intPtrToPtr (-1)
+mbHANDLE  std Inherit         = return std
+mbHANDLE _std NoStream        = return $ intPtrToPtr (-2)
+mbHANDLE _std (UseHandle hdl) = handleToHANDLE hdl
+
+mbPipeHANDLE :: StdStream -> Ptr HANDLE -> IOMode -> IO (Maybe Handle)
+mbPipeHANDLE CreatePipe pfd  mode =
+  do raw_handle <- peek pfd
+     let hwnd  = fromHANDLE raw_handle :: Io NativeHandle
+         ident = "hwnd:" ++ show raw_handle
+     enc <- fmap Just getLocaleEncoding
+     Just <$> mkHandleFromHANDLE hwnd Stream ident mode enc
+mbPipeHANDLE _std      _pfd _mode = return Nothing
+#endif

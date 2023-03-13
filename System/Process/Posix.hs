@@ -1,5 +1,8 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE CPP #-}
+
+#include <ghcplatform.h>
+
 module System.Process.Posix
     ( mkProcessHandle
     , translateInternal
@@ -42,6 +45,10 @@ import qualified System.Posix.IO as Posix
 import System.Posix.Process (getProcessGroupIDOf)
 
 import System.Process.Common hiding (mb_delegate_ctlc)
+
+#if defined(wasm32_HOST_ARCH)
+import System.IO.Error
+#endif
 
 #include "HsProcessConfig.h"
 #include "processFlags.h"
@@ -139,18 +146,20 @@ createProcess_Internal fun
      when mb_delegate_ctlc
        startDelegateControlC
 
+     let flags = (if mb_close_fds then RUN_PROCESS_IN_CLOSE_FDS else 0)
+                  .|.(if mb_create_group then RUN_PROCESS_IN_NEW_GROUP else 0)
+                  .|.(if mb_detach_console then RUN_PROCESS_DETACHED else 0)
+                  .|.(if mb_create_new_console then RUN_PROCESS_NEW_CONSOLE else 0)
+                  .|.(if mb_new_session then RUN_PROCESS_NEW_SESSION else 0)
+                  .|.(if mb_delegate_ctlc then RESET_INT_QUIT_HANDLERS else 0)
+
      -- See the comment on runInteractiveProcess_lock
      proc_handle <- withMVar runInteractiveProcess_lock $ \_ ->
                          c_runInteractiveProcess pargs pWorkDir pEnv
                                 fdin fdout fderr
                                 pfdStdInput pfdStdOutput pfdStdError
                                 pChildGroup pChildUser
-                                (if mb_delegate_ctlc then 1 else 0)
-                                ((if mb_close_fds then RUN_PROCESS_IN_CLOSE_FDS else 0)
-                                .|.(if mb_create_group then RUN_PROCESS_IN_NEW_GROUP else 0)
-                                .|.(if mb_detach_console then RUN_PROCESS_DETACHED else 0)
-                                .|.(if mb_create_new_console then RUN_PROCESS_NEW_CONSOLE else 0)
-                                .|.(if mb_new_session then RUN_PROCESS_NEW_SESSION else 0))
+                                flags
                                 pFailedDoing
 
      when (proc_handle == -1) $ do
@@ -260,6 +269,27 @@ endDelegateControlC exitCode = do
       where
         sig = fromIntegral (-n)
 
+#if defined(wasm32_HOST_ARCH)
+
+c_runInteractiveProcess
+        ::  Ptr CString
+        -> CString
+        -> Ptr CString
+        -> FD
+        -> FD
+        -> FD
+        -> Ptr FD
+        -> Ptr FD
+        -> Ptr FD
+        -> Ptr CGid
+        -> Ptr CUid
+        -> CInt                         -- flags
+        -> Ptr CString
+        -> IO PHANDLE
+c_runInteractiveProcess _ _ _ _ _ _ _ _ _ _ _ _ _ = ioError (ioeSetLocation unsupportedOperation "runInteractiveProcess")
+
+#else
+
 foreign import ccall unsafe "runInteractiveProcess"
   c_runInteractiveProcess
         ::  Ptr CString
@@ -273,10 +303,11 @@ foreign import ccall unsafe "runInteractiveProcess"
         -> Ptr FD
         -> Ptr CGid
         -> Ptr CUid
-        -> CInt                         -- reset child's SIGINT & SIGQUIT handlers
         -> CInt                         -- flags
         -> Ptr CString
         -> IO PHANDLE
+
+#endif
 
 ignoreSignal, defaultSignal :: CLong
 ignoreSignal  = CONST_SIG_IGN
