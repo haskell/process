@@ -1,6 +1,11 @@
 /* ensure that execvpe is provided if possible */
 #define _GNU_SOURCE 1
 
+/* Ensure getpwuid_r(3) is available on Solaris. */
+#if defined(__sun)
+#define _POSIX_PTHREAD_SEMANTICS
+#endif
+
 #include "common.h"
 
 #if defined(HAVE_FORK)
