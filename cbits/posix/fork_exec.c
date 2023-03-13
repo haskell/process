@@ -101,6 +101,32 @@ setup_std_handle_fork(int fd,
     }
 }
 
+/* We must ensure that the fork communications pipe does not inhabit fds 0
+ * through 2 since we will need to manipulate these fds in
+ * setup_std_handle_fork while keeping the pipe available so that it can report
+ * errors. See #266.
+ */
+int unshadow_pipe_fd(int fd, char **failed_doing) {
+    if (fd <= 2) {
+        int fd2 = dup(fd);
+        if (fd2 == -1) {
+            *failed_doing = "dup(unshadow)";
+            return -1;
+        }
+
+        // This should recurse at most three times
+        int fd3 = unshadow_pipe_fd(fd2, failed_doing);
+        if (close(fd2) == -1) {
+            *failed_doing = "close(unshadow)";
+            return -1;
+        }
+
+        return fd3;
+    } else {
+        return fd;
+    }
+}
+
 /* Try spawning with fork. */
 ProcHandle
 do_spawn_fork (char *const args[],
@@ -116,6 +142,16 @@ do_spawn_fork (char *const args[],
     int r = pipe(forkCommunicationFds);
     if (r == -1) {
         *failed_doing = "pipe";
+        return -1;
+    }
+
+    // Ensure that the pipe fds don't shadow stdin/stdout/stderr
+    forkCommunicationFds[0] = unshadow_pipe_fd(forkCommunicationFds[0], failed_doing);
+    if (forkCommunicationFds[0] == -1) {
+        return -1;
+    }
+    forkCommunicationFds[1] = unshadow_pipe_fd(forkCommunicationFds[1], failed_doing);
+    if (forkCommunicationFds[1] == -1) {
         return -1;
     }
 
