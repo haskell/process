@@ -3,7 +3,8 @@
 ## unreleased
 
 * Fix deadlock when waiting for process completion and process jobs [#273](https://github.com/haskell/process/issues/273)
-* Support delegate_ctlc on Windows. [#278](https://github.com/haskell/process/pull/278)
+* Support `delegate_ctlc` on Windows. [#278](https://github.com/haskell/process/pull/278)
+* Drop support for `vfork` [#261](https://github.com/haskell/process/pull/261)
 
 ## 1.6.17.0 *February 2023*
 
