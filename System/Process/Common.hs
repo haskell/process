@@ -92,8 +92,6 @@ data CreateProcess = CreateProcess{
   create_group :: Bool,                    -- ^ Create a new process group
   delegate_ctlc:: Bool,                    -- ^ Delegate control-C handling. Use this for interactive console processes to let them handle control-C themselves (see below for details).
                                            --
-                                           --   On Windows this has no effect.
-                                           --
                                            --   @since 1.2.0.0
   detach_console :: Bool,                  -- ^ Use the windows DETACHED_PROCESS flag when creating the process; does nothing on other platforms.
                                            --
