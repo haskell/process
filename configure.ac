@@ -7,7 +7,7 @@ AC_CONFIG_HEADERS([include/HsProcessConfig.h])
 
 AC_PROG_CC
 
-dnl ** Working vfork?
+dnl ** Working fork?
 AC_FUNC_FORK
 
 # check for specific header (.h) files that we are interested in

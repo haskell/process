@@ -29,15 +29,9 @@
 #include <signal.h>
 #endif
 
-#if defined(HAVE_VFORK_H)
-#include <vfork.h>
-#endif
-
 #include <Rts.h>
 
-#if defined(HAVE_WORKING_VFORK)
-#define myfork vfork
-#elif defined(HAVE_WORKING_FORK)
+#if defined(HAVE_WORKING_FORK)
 #define myfork fork
 // We don't need a fork command on Windows
 #else
@@ -152,7 +146,7 @@ do_spawn_fork (char *const args[],
     }
 #endif
 
-    int pid = myfork();
+    int pid = fork();
     switch(pid)
     {
     case -1:
@@ -164,10 +158,6 @@ do_spawn_fork (char *const args[],
         return -1;
 
     case 0:
-        // WARNING! We may now be in the child of vfork(), and any
-        // memory we modify below may also be seen in the parent
-        // process.
-
         close(forkCommunicationFds[0]);
         fcntl(forkCommunicationFds[1], F_SETFD, FD_CLOEXEC);
 
