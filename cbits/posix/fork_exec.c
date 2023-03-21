@@ -64,7 +64,7 @@ setup_std_handle_fork(int fd,
 {
     switch (b->behavior) {
     case STD_HANDLE_CLOSE:
-        if (close(fd) == -1) {
+        if (close(fd) == -1 && errno != EBADF) {
             child_failed(pipe, "close");
         }
         return 0;
