@@ -59,9 +59,6 @@ library
             cbits/win32/runProcess.c
         includes:
             runProcess.h
-        install-includes:
-            runProcess.h
-            processFlags.h
         other-modules: System.Process.Windows
         build-depends: Win32 >=2.4 && < 2.14
         -- ole32 and rpcrt4 are needed to create GUIDs for unique named pipes
@@ -78,14 +75,13 @@ library
         includes:
             runProcess.h
             cbits/posix/bsd_closefrom.h
-        install-includes:
-            runProcess.h
-            processFlags.h
-            cbits/posix/bsd_closefrom.h
         other-modules: System.Process.Posix
         build-depends: unix >= 2.5 && < 2.9
 
     include-dirs: include
+    install-includes:
+        runProcess.h
+        processFlags.h
 
     ghc-options: -Wall
 
