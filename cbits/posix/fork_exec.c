@@ -64,7 +64,7 @@ setup_std_handle_fork(int fd,
 {
     switch (b->behavior) {
     case STD_HANDLE_CLOSE:
-        if (close(fd) == -1) {
+        if (close(fd) == -1 && errno != EBADF) {
             child_failed(pipe, "close");
         }
         return 0;
@@ -101,6 +101,31 @@ setup_std_handle_fork(int fd,
     }
 }
 
+/* We must ensure that the fork communications pipe does not inhabit fds 0
+ * through 2 since we will need to manipulate these fds in
+ * setup_std_handle_fork while keeping the pipe available so that it can report
+ * errors. See #266.
+ */
+int unshadow_pipe_fd(int fd, char **failed_doing) {
+	int i = 0;
+	int fds[3] = {0};
+	for (i = 0; fd < 3 && i < 3; ++i) {
+		fds[i] = fd;
+		fd = dup(fd);
+		if (fd == -1) {
+			*failed_doing = "dup(unshadow)";
+			return -1;
+		}
+	}
+	for (int j = 0; j < i; ++j) {
+		if (close(fds[j]) == -1) {
+			*failed_doing = "close(unshadow)";
+			return -1;
+		}
+	}
+	return fd;
+}
+
 /* Try spawning with fork. */
 ProcHandle
 do_spawn_fork (char *const args[],
@@ -116,6 +141,16 @@ do_spawn_fork (char *const args[],
     int r = pipe(forkCommunicationFds);
     if (r == -1) {
         *failed_doing = "pipe";
+        return -1;
+    }
+
+    // Ensure that the pipe fds don't shadow stdin/stdout/stderr
+    forkCommunicationFds[0] = unshadow_pipe_fd(forkCommunicationFds[0], failed_doing);
+    if (forkCommunicationFds[0] == -1) {
+        return -1;
+    }
+    forkCommunicationFds[1] = unshadow_pipe_fd(forkCommunicationFds[1], failed_doing);
+    if (forkCommunicationFds[1] == -1) {
         return -1;
     }
 
