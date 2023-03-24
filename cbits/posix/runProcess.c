@@ -25,7 +25,7 @@
 #endif
 
 void
-closefrom_excluding(int lowfd, int excludingFd) {
+hs_process_closefrom_excluding(int lowfd, int excludingFd) {
 #ifdef SYS_close_range
     // Try using the close_range syscall, provided in Linux kernel >= 5.9.
     // We do this directly because not all C libs provide a wrapper (like musl)
@@ -36,14 +36,14 @@ closefrom_excluding(int lowfd, int excludingFd) {
 
     if (ret != -1) {
         // If that worked, closefrom the remaining range
-        closefrom(excludingFd + 1);
+        hs_process_closefrom(excludingFd + 1);
     } else {
         // Otherwise, fall back to a loop + closefrom
         for (int i = lowfd; i < excludingFd; i++) {
             close(i);
         }
 
-        closefrom(excludingFd + 1);
+        hs_process_closefrom(excludingFd + 1);
     }
 }
 

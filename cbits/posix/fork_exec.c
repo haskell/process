@@ -222,7 +222,7 @@ do_spawn_fork (char *const args[],
         setup_std_handle_fork(STDERR_FILENO, stdErrHdl, forkCommunicationFds[1]);
 
         if ((flags & RUN_PROCESS_IN_CLOSE_FDS) != 0) {
-            closefrom_excluding(3, forkCommunicationFds[1]);
+            hs_process_closefrom_excluding(3, forkCommunicationFds[1]);
         }
 
         /* Reset the SIGINT/SIGQUIT signal handlers in the child, if requested

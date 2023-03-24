@@ -22,7 +22,7 @@ struct std_handle {
     };
 };
 
-void closefrom_excluding(int from, int excluding);
+void hs_process_closefrom_excluding(int from, int excluding);
 
 // defined in find_executable.c
 #if !defined(HAVE_EXECVPE)

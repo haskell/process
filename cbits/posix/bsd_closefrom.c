@@ -61,7 +61,7 @@ __unused static const char rcsid[] = "$Sudo: closefrom.c,v 1.11 2006/08/17 15:26
  * Close all file descriptors greater than or equal to lowfd.
  */
 static void
-closefrom_fallback(int lowfd)
+hs_process_closefrom_fallback(int lowfd)
 {
 	long fd, maxfd;
 
@@ -85,13 +85,13 @@ closefrom_fallback(int lowfd)
 
 #ifdef HAVE_FCNTL_CLOSEM
 void
-closefrom(int lowfd)
+hs_process_closefrom(int lowfd)
 {
     (void) fcntl(lowfd, F_CLOSEM, 0);
 }
 #elif defined(HAVE_LIBPROC_H) && defined(HAVE_PROC_PIDINFO)
 void
-closefrom(int lowfd)
+hs_process_closefrom(int lowfd)
 {
 	int i, r, sz;
 	pid_t pid = getpid();
@@ -115,12 +115,12 @@ closefrom(int lowfd)
 	return;
  fallback:
 	free(fdinfo_buf);
-	closefrom_fallback(lowfd);
+	hs_process_closefrom_fallback(lowfd);
 	return;
 }
 #elif defined(HAVE_DIRFD) && defined(HAVE_PROC_PID)
 void
-closefrom(int lowfd)
+hs_process_closefrom(int lowfd)
 {
     long fd;
     char fdpath[PATH_MAX], *endp;
@@ -141,13 +141,13 @@ closefrom(int lowfd)
 	return;
     }
     /* /proc/$$/fd strategy failed, fall back to brute force closure */
-    closefrom_fallback(lowfd);
+    hs_process_closefrom_fallback(lowfd);
 }
 #else
 void
-closefrom(int lowfd)
+hs_process_closefrom(int lowfd)
 {
-	closefrom_fallback(lowfd);
+	hs_process_closefrom_fallback(lowfd);
 }
 #endif /* !HAVE_FCNTL_CLOSEM */
 #endif /* HAVE_CLOSEFROM */
