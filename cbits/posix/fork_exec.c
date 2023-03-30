@@ -154,17 +154,6 @@ do_spawn_fork (char *const args[],
         return -1;
     }
 
-    // Block signals with Haskell handlers.  The danger here is that
-    // with the threaded RTS, a signal arrives in the child process,
-    // the RTS writes the signal information into the pipe (which is
-    // shared between parent and child), and the parent behaves as if
-    // the signal had been raised.
-    blockUserSignals();
-
-    // See #4074.  Sometimes fork() gets interrupted by the timer
-    // signal and keeps restarting indefinitely.
-    stopTimer();
-
     // N.B. execvpe is not supposed on some platforms. In this case
     // we emulate this using fork and exec. However, to safely do so
     // we need to perform all allocations *prior* to forking. Consequently, we
@@ -180,6 +169,17 @@ do_spawn_fork (char *const args[],
         }
     }
 #endif
+
+    // Block signals with Haskell handlers.  The danger here is that
+    // with the threaded RTS, a signal arrives in the child process,
+    // the RTS writes the signal information into the pipe (which is
+    // shared between parent and child), and the parent behaves as if
+    // the signal had been raised.
+    blockUserSignals();
+
+    // See #4074.  Sometimes fork() gets interrupted by the timer
+    // signal and keeps restarting indefinitely.
+    stopTimer();
 
     int pid = fork();
     switch(pid)
