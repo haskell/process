@@ -107,23 +107,17 @@ setup_std_handle_fork(int fd,
  * errors. See #266.
  */
 int unshadow_pipe_fd(int fd, char **failed_doing) {
-	int i = 0;
-	int fds[3] = {0};
-	for (i = 0; fd < 3 && i < 3; ++i) {
-		fds[i] = fd;
-		fd = dup(fd);
-		if (fd == -1) {
-			*failed_doing = "dup(unshadow)";
-			return -1;
-		}
-	}
-	for (int j = 0; j < i; ++j) {
-		if (close(fds[j]) == -1) {
-			*failed_doing = "close(unshadow)";
-			return -1;
-		}
-	}
-	return fd;
+    if (fd > 2) {
+        return fd;
+    }
+
+    int new_fd = fcntl(fd, F_DUPFD, 3);
+    if (new_fd == -1) {
+        *failed_doing = "fcntl(F_DUP_FD)";
+        return -1;
+    }
+    close(fd);
+    return new_fd;
 }
 
 /* Try spawning with fork. */
