@@ -107,23 +107,17 @@ setup_std_handle_fork(int fd,
  * errors. See #266.
  */
 int unshadow_pipe_fd(int fd, char **failed_doing) {
-	int i = 0;
-	int fds[3] = {0};
-	for (i = 0; fd < 3 && i < 3; ++i) {
-		fds[i] = fd;
-		fd = dup(fd);
-		if (fd == -1) {
-			*failed_doing = "dup(unshadow)";
-			return -1;
-		}
-	}
-	for (int j = 0; j < i; ++j) {
-		if (close(fds[j]) == -1) {
-			*failed_doing = "close(unshadow)";
-			return -1;
-		}
-	}
-	return fd;
+    if (fd > 2) {
+        return fd;
+    }
+
+    int new_fd = fcntl(fd, F_DUPFD, 3);
+    if (new_fd == -1) {
+        *failed_doing = "fcntl(F_DUP_FD)";
+        return -1;
+    }
+    close(fd);
+    return new_fd;
 }
 
 /* Try spawning with fork. */
@@ -154,17 +148,6 @@ do_spawn_fork (char *const args[],
         return -1;
     }
 
-    // Block signals with Haskell handlers.  The danger here is that
-    // with the threaded RTS, a signal arrives in the child process,
-    // the RTS writes the signal information into the pipe (which is
-    // shared between parent and child), and the parent behaves as if
-    // the signal had been raised.
-    blockUserSignals();
-
-    // See #4074.  Sometimes fork() gets interrupted by the timer
-    // signal and keeps restarting indefinitely.
-    stopTimer();
-
     // N.B. execvpe is not supposed on some platforms. In this case
     // we emulate this using fork and exec. However, to safely do so
     // we need to perform all allocations *prior* to forking. Consequently, we
@@ -180,6 +163,17 @@ do_spawn_fork (char *const args[],
         }
     }
 #endif
+
+    // Block signals with Haskell handlers.  The danger here is that
+    // with the threaded RTS, a signal arrives in the child process,
+    // the RTS writes the signal information into the pipe (which is
+    // shared between parent and child), and the parent behaves as if
+    // the signal had been raised.
+    blockUserSignals();
+
+    // See #4074.  Sometimes fork() gets interrupted by the timer
+    // signal and keeps restarting indefinitely.
+    stopTimer();
 
     int pid = fork();
     switch(pid)
