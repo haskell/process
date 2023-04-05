@@ -108,9 +108,15 @@ do_spawn_posix (char *const args[],
     if (childGroup || childUser) {
         return -2;
     }
+
+    short spawn_flags = 0;
+
     if ((flags & RUN_PROCESS_IN_CLOSE_FDS) != 0) {
-        // TODO: can this be efficiently supported?
+#if defined(HAVE_POSIX_SPAWN_CLOEXEC_DEFAULT)
+        spawn_flags |= POSIX_SPAWN_CLOEXEC_DEFAULT;
+#else
         return -2;
+#endif
     }
 
     // Now the main act...
@@ -119,7 +125,6 @@ do_spawn_posix (char *const args[],
     posix_spawnattr_t sa;
     int r;
     ProcHandle ret;
-    short spawn_flags = 0;
 
     r = posix_spawn_file_actions_init(&fa);
     if (r != 0) {
