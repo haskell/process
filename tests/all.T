@@ -48,6 +48,6 @@ test('process010', [
 test('process011',
      [when(opsys('mingw32'), skip), pre_cmd('{compiler} -no-hs-main -o process011_c process011_c.c'), js_broken(22349)],
      compile_and_run, [''])
-
+test('process-fork-wait', normal, compile_and_run, [''])
 test('T8343', js_broken(22349), compile_and_run, [''])
 test('processT251', js_broken(22349), compile_and_run, [''])
