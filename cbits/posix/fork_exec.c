@@ -31,10 +31,7 @@
 
 #include <Rts.h>
 
-#if defined(HAVE_WORKING_FORK)
-#define myfork fork
-// We don't need a fork command on Windows
-#else
+#if !defined(HAVE_WORKING_FORK)
 #error Cannot find a working fork command
 #endif
 
