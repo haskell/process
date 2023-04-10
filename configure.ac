@@ -15,6 +15,11 @@ AC_CHECK_HEADERS([signal.h sys/wait.h fcntl.h])
 
 AC_CHECK_FUNCS([setitimer sysconf])
 AC_CHECK_FUNCS([execvpe])
+AC_CHECK_FUNCS([pipe2],[],[],[
+  #define _GNU_SOURCE
+  #include <unistd.h>
+  #include <fcntl.h>
+])
 
 # posix_spawn checks
 AC_CHECK_HEADERS([spawn.h])
