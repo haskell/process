@@ -1,4 +1,4 @@
-/* ensure that execvpe is provided if possible */
+/* Ensure that execvpe and pipe2 are provided if possible */
 #define _GNU_SOURCE 1
 
 /* Ensure getpwuid_r(3) is available on Solaris. */
@@ -31,10 +31,7 @@
 
 #include <Rts.h>
 
-#if defined(HAVE_WORKING_FORK)
-#define myfork fork
-// We don't need a fork command on Windows
-#else
+#if !defined(HAVE_WORKING_FORK)
 #error Cannot find a working fork command
 #endif
 
@@ -101,8 +98,11 @@ setup_std_handle_fork(int fd,
     }
 }
 
-/* We must ensure that the fork communications pipe does not inhabit fds 0
- * through 2 since we will need to manipulate these fds in
+/* This will `dup` the given fd such that it does not fall in the range of
+ * stdin/stdout/stderr, if necessary. The new handle will have O_CLOEXEC.
+ *
+ * This is necessary as we must ensure that the fork communications pipe does
+ * not inhabit fds 0 through 2 since we will need to manipulate these fds in
  * setup_std_handle_fork while keeping the pipe available so that it can report
  * errors. See #266.
  */
@@ -111,7 +111,7 @@ int unshadow_pipe_fd(int fd, char **failed_doing) {
         return fd;
     }
 
-    int new_fd = fcntl(fd, F_DUPFD, 3);
+    int new_fd = fcntl(fd, F_DUPFD_CLOEXEC, 3);
     if (new_fd == -1) {
         *failed_doing = "fcntl(F_DUP_FD)";
         return -1;
@@ -132,7 +132,13 @@ do_spawn_fork (char *const args[],
                char **failed_doing)
 {
     int forkCommunicationFds[2];
-    int r = pipe(forkCommunicationFds);
+    int r;
+
+#if defined(HAVE_PIPE2)
+    r = pipe2(forkCommunicationFds, O_CLOEXEC);
+#else
+    r = pipe(forkCommunicationFds);
+#endif
     if (r == -1) {
         *failed_doing = "pipe";
         return -1;
