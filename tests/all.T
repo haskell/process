@@ -2,8 +2,8 @@
 # in spurious error output changes.
 normalise_exec = normalise_fun(lambda s: s.replace('posix_spawnp', 'exec'))
 
-test('process001', [extra_clean(['process001.out']), js_broken(22349), req_process], compile_and_run, [''])
-test('process002', [fragile_for(16547, concurrent_ways), extra_clean(['process002.out']), js_broken(22349), req_process], compile_and_run, [''])
+test('process001', [js_broken(22349), req_process], compile_and_run, [''])
+test('process002', [fragile_for(16547, concurrent_ways), js_broken(22349), req_process], compile_and_run, [''])
 test('process003', [fragile_for(17245, concurrent_ways), omit_ways(['ghci']), js_broken(22349), req_process], compile_and_run, [''])
 test('process004', [normalise_exec, normalise_exe, js_broken(22349), req_process], compile_and_run, [''])
 test('T1780', [js_broken(22349), req_process], compile_and_run, [''])
@@ -11,9 +11,7 @@ test('process005', [omit_ways(['ghci']), js_broken(22349), req_process], compile
 test('process006', [js_broken(22349), req_process], compile_and_run, [''])
 
 test('process007',
-     [extra_clean(['process007.tmp',
-                   'process007_fd.o', 'process007_fd', 'process007_fd.exe']),
-      when(opsys('mingw32'), skip),
+     [when(opsys('mingw32'), skip),
       pre_cmd('$MAKE -s --no-print-directory process007_fd'),
       js_broken(22349),
       req_process],
@@ -24,13 +22,11 @@ test('process008', [js_broken(22349), req_process], compile_and_run, [''])
 # will get stuck without the threaded RTS.
 test('T3231',
      [only_ways(['threaded1','threaded2']),
-      extra_clean(['foo1.txt', 'foo2.txt']),
       req_process],
      compile_and_run,
      [''])
 test('T4198',
      [pre_cmd('{compiler} exitminus1.c -no-hs-main -o exitminus1'),
-      extra_clean(['exitminus1.o', 'exitminus1', 'exitminus1.exe']),
       js_broken(22349),
       req_process],
      compile_and_run,
