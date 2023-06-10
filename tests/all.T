@@ -4,10 +4,10 @@ normalise_exec = normalise_fun(lambda s: s.replace('posix_spawnp', 'exec'))
 
 test('process001', [js_broken(22349), req_process], compile_and_run, [''])
 test('process002', [fragile_for(16547, concurrent_ways), js_broken(22349), req_process], compile_and_run, [''])
-test('process003', [fragile_for(17245, concurrent_ways), omit_ways(['ghci']), js_broken(22349), req_process], compile_and_run, [''])
+test('process003', [fragile_for(17245, concurrent_ways), js_broken(22349), req_process], compile_and_run, [''])
 test('process004', [normalise_exec, normalise_exe, js_broken(22349), req_process], compile_and_run, [''])
 test('T1780', [js_broken(22349), req_process], compile_and_run, [''])
-test('process005', [omit_ways(['ghci']), js_broken(22349), req_process], compile_and_run, [''])
+test('process005', [omit_ghci, js_broken(22349), req_process], compile_and_run, [''])
 test('process006', [js_broken(22349), req_process], compile_and_run, [''])
 
 test('process007',
@@ -51,4 +51,4 @@ test('process011',
      compile_and_run, [''])
 
 test('T8343', [js_broken(22349), req_process], compile_and_run, [''])
-test('processT251', [js_broken(22349), req_process], compile_and_run, [''])
+test('processT251', [js_broken(22349), omit_ghci, req_process], compile_and_run, [''])
