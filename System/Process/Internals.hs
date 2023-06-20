@@ -45,9 +45,11 @@ module System.Process.Internals (
     waitForJobCompletion,
     timeout_Infinite,
 #else
+#if !defined(javascript_HOST_ARCH)
     pPrPr_disableITimers, c_execvpe,
-    ignoreSignal, defaultSignal,
     runInteractiveProcess_lock,
+#endif
+    ignoreSignal, defaultSignal,
 #endif
     withFilePathException, withCEnvironment,
     translate,
@@ -64,7 +66,9 @@ import System.Posix.Internals (FD)
 
 import System.Process.Common
 
-#ifdef WINDOWS
+#if defined(javascript_HOST_ARCH)
+import System.Process.JavaScript
+#elif defined(WINDOWS)
 import System.Process.Windows
 #else
 import System.Process.Posix
