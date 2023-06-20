@@ -899,7 +899,6 @@ c_waitForProcess _ _ = ioError (ioeSetLocation unsupportedOperation "waitForProc
 
 #elif defined(javascript_HOST_ARCH)
 
--- XXX descriptive argument names
 foreign import javascript unsafe "h$process_terminateProcess"
   c_terminateProcess
         :: PHANDLE

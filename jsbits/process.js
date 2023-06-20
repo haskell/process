@@ -1,6 +1,4 @@
 //#OPTIONS: CPP
-// XXX do we need this?
-#include "HsBaseConfig.h"
 
 // #define JS_TRACE_PROCESS 1
 
