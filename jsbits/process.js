@@ -421,10 +421,8 @@ function h$process_commandToProcess(cmd, args) {
                     h$setErrno('ENOENT');
                     return null;
                 }
-                // XXX need to escape stuff
                 return [com, " /c " + cmd];
             } else {
-                // XXX need to escape stuff
                 var r = [cmd];
                 r = r.concat(args);
                 return r;
