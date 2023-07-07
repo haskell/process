@@ -9,8 +9,11 @@
 
 #if defined(HAVE_FORK)
 
+#include "bsd_closefrom.h"
+
 #include <unistd.h>
 #include <errno.h>
+#include <sys/syscall.h>
 #include <sys/wait.h>
 
 #ifdef HAVE_FCNTL_H
@@ -21,21 +24,27 @@
 #include <signal.h>
 #endif
 
-int
-get_max_fd()
-{
-    static int cache = 0;
-    if (cache == 0) {
-#if HAVE_SYSCONF
-        cache = sysconf(_SC_OPEN_MAX);
-        if (cache == -1) {
-            cache = 256;
-        }
+void
+hs_process_closefrom_excluding(int lowfd, int excludingFd) {
+#ifdef SYS_close_range
+    // Try using the close_range syscall, provided in Linux kernel >= 5.9.
+    // We do this directly because not all C libs provide a wrapper (like musl)
+    long ret = syscall(SYS_close_range, lowfd, excludingFd - 1, 0);
 #else
-        cache = 256;
+    long ret = -1;
 #endif
+
+    if (ret != -1) {
+        // If that worked, closefrom the remaining range
+        hs_process_closefrom(excludingFd + 1);
+    } else {
+        // Otherwise, fall back to a loop + closefrom
+        for (int i = lowfd; i < excludingFd; i++) {
+            close(i);
+        }
+
+        hs_process_closefrom(excludingFd + 1);
     }
-    return cache;
 }
 
 // If a process was terminated by a signal, the exit status we return

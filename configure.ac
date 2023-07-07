@@ -21,6 +21,18 @@ AC_CHECK_FUNCS([pipe2],[],[],[
   #include <fcntl.h>
 ])
 
+# check for headers and functions used by bsd_closefrom.c
+AC_CHECK_HEADERS([dirent.h fcntl.h libproc.h linux/close_range.h ndir.h sys/dir.h sys/ndir.h])
+AC_CHECK_FUNCS([closefrom close_range dirfd proc_pidinfo sysconf])
+AC_MSG_CHECKING([for /proc/pid/fd directory])
+if test -d "/proc/$$/fd" ; then
+	AC_DEFINE([HAVE_PROC_PID], [1], [Define if you have /proc/$pid/fd])
+	AC_MSG_RESULT([yes])
+else
+	AC_MSG_RESULT([no])
+fi
+
+
 # posix_spawn checks
 AC_CHECK_HEADERS([spawn.h])
 AC_CHECK_FUNCS([posix_spawnp posix_spawn_file_actions_addchdir],[],[],[

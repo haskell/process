@@ -22,7 +22,7 @@ struct std_handle {
     };
 };
 
-int get_max_fd(void);
+void hs_process_closefrom_excluding(int from, int excluding);
 
 // defined in find_executable.c
 #if !defined(HAVE_EXECVPE)
