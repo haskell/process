@@ -53,10 +53,12 @@ static bool is_executable(char *working_dir, const char *path) {
  * found.
   */
 static char *find_in_search_path(char *working_dir, char *search_path, const char *filename) {
-    int workdir_len = strlen(working_dir);
     const int filename_len = strlen(filename);
     char *tokbuf;
     char *path = strtok_r(search_path, ":", &tokbuf);
+    if (!working_dir)
+        working_dir = ".";
+    int workdir_len = strlen(working_dir);
     while (path != NULL) {
 	// N.B. gcc 6.3.0, used by Debian 9, inexplicably warns that `path`
 	// may not be initialised with -Wall.  Silence this warning. See #210.

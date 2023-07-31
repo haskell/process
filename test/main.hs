@@ -41,6 +41,7 @@ main = do
     testInterruptWith
     testDoubleWait
     testKillDoubleWait
+    testCreateProcess
     putStrLn ">>> Tests passed successfully"
 
 run :: String -> IO () -> IO ()
@@ -250,6 +251,33 @@ testKillDoubleWait = unless isWindows $ do
     checkSecond sig delegate res = case (sig, delegate) of
         ("INT", True) -> checkFirst "INT" False res
         _ -> checkFirst sig delegate res
+
+-- Test that createProcess doesn't segfault on Mac with a cwd of Nothing
+testCreateProcess :: IO ()
+testCreateProcess = run "createProcess with cwd = Nothing" $ do
+    let env = CreateProcess
+            { child_group = Nothing
+            , child_user = Nothing
+            , close_fds = False
+            , cmdspec = RawCommand "env" []
+            , create_group = True
+            , create_new_console = False
+            , cwd = Nothing
+            , delegate_ctlc = False
+            , detach_console = False
+            , env = Just [("PATH", "/bin:/usr/bin")]
+            , new_session = False
+            , std_err = Inherit
+            , std_in = Inherit
+            , std_out = Inherit
+            , use_process_jobs = False
+            }
+    (_, _, _, p) <- createProcess env
+    res <- try $ waitForProcess p
+    case res of
+        Left e -> error $ "waitForProcess threw: " ++ show (e :: SomeException)
+        Right ExitSuccess -> return ()
+        Right exitCode -> error $ "unexpected exit code: " ++ show exitCode
 
 withCurrentDirectory :: FilePath -> IO a -> IO a
 withCurrentDirectory new inner = do
