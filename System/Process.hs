@@ -8,6 +8,10 @@
 
 #include <ghcplatform.h>
 
+#if defined(javascript_HOST_ARCH)
+{-# LANGUAGE JavaScriptFFI #-}
+#endif
+
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  System.Process
@@ -85,7 +89,11 @@ import System.Process.Internals
 
 import Control.Concurrent
 import Control.DeepSeq (rnf)
-import Control.Exception (SomeException, mask, allowInterrupt, bracket, try, throwIO)
+import Control.Exception (SomeException, mask
+#if !defined(javascript_HOST_ARCH)
+                         , allowInterrupt
+#endif
+                         , bracket, try, throwIO)
 import qualified Control.Exception as C
 import Control.Monad
 import Data.Maybe
@@ -95,7 +103,9 @@ import System.Exit      ( ExitCode(..) )
 import System.IO
 import System.IO.Error (mkIOError, ioeSetErrorString)
 
-#if defined(WINDOWS)
+#if defined(javascript_HOST_ARCH)
+import System.Process.JavaScript(getProcessId, getCurrentProcessId)
+#elif defined(WINDOWS)
 import System.Win32.Process (getProcessId, getCurrentProcessId, ProcessId)
 #else
 import System.Posix.Process (getProcessID)
@@ -114,7 +124,9 @@ import System.IO.Error
 -- This is always an integral type. Width and signedness are platform specific.
 --
 -- @since 1.6.3.0
-#if defined(WINDOWS)
+#if defined(javascript_HOST_ARCH)
+type Pid = Int
+#elif defined(WINDOWS)
 type Pid = ProcessId
 #else
 type Pid = CPid
@@ -651,7 +663,11 @@ getPid :: ProcessHandle -> IO (Maybe Pid)
 getPid (ProcessHandle mh _ _) = do
   p_ <- readMVar mh
   case p_ of
-#ifdef WINDOWS
+#if defined(javascript_HOST_ARCH)
+    OpenHandle h -> do
+      pid <- getProcessId h
+      return $ Just pid
+#elif defined(WINDOWS)
     OpenHandle h -> do
       pid <- getProcessId h
       return $ Just pid
@@ -672,7 +688,9 @@ getPid (ProcessHandle mh _ _) = do
 -- @since 1.6.12.0
 getCurrentPid :: IO Pid
 getCurrentPid =
-#ifdef WINDOWS
+#if defined(javascript_HOST_ARCH)
+    getCurrentProcessId
+#elif defined(WINDOWS)
     getCurrentProcessId
 #else
     getProcessID
@@ -753,7 +771,11 @@ waitForProcess ph@(ProcessHandle _ delegating_ctlc _) = lockWaitpid $ do
 
     waitForProcess' :: PHANDLE -> IO ExitCode
     waitForProcess' h = alloca $ \pret -> do
+#if defined(javascript_HOST_ARCH)
+      throwErrnoIfMinus1Retry_ "waitForProcess" (C.interruptible $ c_waitForProcess h pret)
+#else
       throwErrnoIfMinus1Retry_ "waitForProcess" (allowInterrupt >> c_waitForProcess h pret)
+#endif
       mkExitCode <$> peek pret
 
     mkExitCode :: CInt -> ExitCode
@@ -874,6 +896,25 @@ c_getProcessExitCode _ _ = ioError (ioeSetLocation unsupportedOperation "getProc
 
 c_waitForProcess :: PHANDLE -> Ptr CInt -> IO CInt
 c_waitForProcess _ _ = ioError (ioeSetLocation unsupportedOperation "waitForProcess")
+
+#elif defined(javascript_HOST_ARCH)
+
+foreign import javascript unsafe "h$process_terminateProcess"
+  c_terminateProcess
+        :: PHANDLE
+        -> IO Int
+
+foreign import javascript unsafe "h$process_getProcessExitCode"
+  c_getProcessExitCode
+        :: PHANDLE
+        -> Ptr Int
+        -> IO Int
+
+foreign import javascript interruptible "h$process_waitForProcess"
+  c_waitForProcess
+        :: PHANDLE
+        -> Ptr CInt
+        -> IO CInt
 
 #else
 
