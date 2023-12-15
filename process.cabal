@@ -88,7 +88,7 @@ library
 
     build-depends: base      >= 4.10 && < 4.20,
                    directory >= 1.1 && < 1.4,
-                   filepath  >= 1.2 && < 1.5,
+                   filepath  >= 1.2 && < 1.6,
                    deepseq   >= 1.1 && < 1.6
 
 test-suite test
