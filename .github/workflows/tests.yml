@@ -28,7 +28,7 @@ jobs:
 
     steps:
       - name: Clone project
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Build and run tests
         shell: bash
