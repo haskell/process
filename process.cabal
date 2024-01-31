@@ -58,7 +58,7 @@ library
         c-sources:
             cbits/win32/runProcess.c
         other-modules: System.Process.Windows
-        build-depends: Win32 >=2.4 && < 2.14
+        build-depends: Win32 >=2.4 && < 2.15
         -- ole32 and rpcrt4 are needed to create GUIDs for unique named pipes
         -- for process.
         extra-libraries: kernel32, ole32, rpcrt4
