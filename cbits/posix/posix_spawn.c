@@ -135,7 +135,7 @@ do_spawn_posix (char *const args[],
     }
 
     if (workingDirectory) {
-#if defined(HAVE_posix_spawn_file_actions_addchdir_np)
+#if defined(HAVE_posix_spawn_file_actions_addchdir)
         // N.B. this function is broken on macOS.
         // See https://github.com/rust-lang/rust/pull/80537.
         r = posix_spawn_file_actions_addchdir(&fa, workingDirectory);
