@@ -23,7 +23,7 @@ AC_CHECK_FUNCS([pipe2],[],[],[
 
 # posix_spawn checks
 AC_CHECK_HEADERS([spawn.h])
-AC_CHECK_FUNCS([posix_spawnp posix_spawn_file_actions_addchdir],[],[],[
+AC_CHECK_FUNCS([posix_spawnp posix_spawn_file_actions_addchdir_np posix_spawn_file_actions_addchdir],[],[],[
   #define _GNU_SOURCE
   #include <spawn.h>
 ])
