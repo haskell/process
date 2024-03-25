@@ -282,16 +282,17 @@ do_spawn_fork (char *const args[],
 #if defined(HAVE_EXECVPE)
             // XXX Check result
             execvpe(args[0], args, environment);
+            child_failed(forkCommunicationFds[1], "execvpe");
 #else
             // XXX Check result
             execve(exec_path, args, environment);
+            child_failed(forkCommunicationFds[1], "execve");
 #endif
         } else {
             // XXX Check result
             execvp(args[0], args);
+            child_failed(forkCommunicationFds[1], "execvp");
         }
-
-        child_failed(forkCommunicationFds[1], "exec");
 
     default:
         if ((flags & RUN_PROCESS_IN_NEW_GROUP) != 0) {
