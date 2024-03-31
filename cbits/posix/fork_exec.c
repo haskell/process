@@ -335,16 +335,8 @@ do_spawn_fork (char *const args[],
         // our responsibility to reap here as nobody else can.
         waitpid(pid, NULL, 0);
 
-        // Already closed child ends above
-        if (stdInHdl->behavior == STD_HANDLE_USE_PIPE) {
-            close(stdInHdl->use_pipe.parent_end);
-        }
-        if (stdOutHdl->behavior == STD_HANDLE_USE_PIPE) {
-            close(stdOutHdl->use_pipe.parent_end);
-        }
-        if (stdErrHdl->behavior == STD_HANDLE_USE_PIPE) {
-            close(stdErrHdl->use_pipe.parent_end);
-        }
+        // No need to close stdin, et al. here as runInteractiveProcess will
+        // handle this. See #306.
 
         pid = -1;
     }
