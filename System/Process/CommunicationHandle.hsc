@@ -27,8 +27,10 @@ import Foreign.Ptr (Ptr, ptrToWordPtr, wordPtrToPtr)
 import Foreign.Storable (Storable(peek))
 import GHC.IO.Handle.FD (fdToHandle)
 import GHC.IO.IOMode (IOMode(ReadMode, WriteMode))
+import GHC.Windows (throwGetLastError)
 ##  if defined(__IO_MANAGER_WINIO__)
 import Control.Exception (catch, throwIO)
+import Foreign.Ptr (nullPtr)
 import GHC.IO (onException)
 import GHC.IO.Device as IODevice (close, devType)
 import GHC.IO.Encoding (getLocaleEncoding)
@@ -147,15 +149,16 @@ openCommunicationHandleRead = useCommunicationHandle True
 openCommunicationHandleWrite :: CommunicationHandle -> IO Handle
 openCommunicationHandleWrite = useCommunicationHandle False
 
--- | Internal function used to define 'openCommunicationHandleRead' and
--- openCommunicationHandleWrite.
+-- | Internal function for 'openCommunicationHandleRead' and
+-- 'openCommunicationHandleWrite'.
 useCommunicationHandle :: Bool -> CommunicationHandle -> IO Handle
-useCommunicationHandle wantToRead (CommunicationHandle ch) = do
+useCommunicationHandle _wantToRead (CommunicationHandle ch) = do
+  ch' <-
+    return ch
 ##if defined(__IO_MANAGER_WINIO__)
-  return ()
-    <!> associateHandleWithFallback wantToRead ch
+    <!> associateHandleWithFallback _wantToRead ch
 ##endif
-  getGhcHandle ch
+  getGhcHandle ch'
 
 ##if defined(__IO_MANAGER_WINIO__)
 -- Internal function used when associating a 'HANDLE' with the current process.
@@ -165,27 +168,51 @@ useCommunicationHandle wantToRead (CommunicationHandle ch) = do
 --
 -- In a child process, we don't necessarily know which kind of handle we will receive,
 -- so we try to associate it (in case it is an asynchronous handle). This might
--- fail (if the handle is synchronous), in which case we continue in synchronous
--- mode (without associating).
+-- fail (if the handle is synchronous), in which case we try to re-open the handle
+-- in asynchronous mode. If this succeeds, we associate the handle, otherwise
+-- we continue in synchronous mode (without associating).
 --
 -- With the current API, inheritable handles in WinIO created with mkNamedPipe
 -- are synchronous, but it's best to be safe in case the child receives an
 -- asynchronous handle anyway.
-associateHandleWithFallback :: Bool -> HANDLE -> IO ()
-associateHandleWithFallback _wantToRead h =
-  associateHandle' h `catch` handler
+associateHandleWithFallback :: Bool -> HANDLE -> IO HANDLE
+associateHandleWithFallback wantToRead = go True
   where
-    handler :: IOError -> IO ()
-    handler ioErr@(IOError { ioe_handle = _mbErrHandle, ioe_type = errTy, ioe_errno = mbErrNo })
-      -- Catches the following error that occurs when attemping to associate
-      -- a HANDLE that does not have OVERLAPPING mode set:
-      --
-      --   associateHandleWithIOCP: invalid argument (The parameter is incorrect.)
-      | InvalidArgument <- errTy
-      , Just 22 <- mbErrNo
-      = return ()
-      | otherwise
-      = throwIO ioErr
+    go :: Bool -> HANDLE -> IO HANDLE
+    go tryReOpening h = do
+      ( associateHandle' h *> return h ) `catch` ( handler tryReOpening h )
+    handler :: Bool -> HANDLE -> IOError -> IO HANDLE
+    handler tryReOpening h
+      ioErr@(IOError { ioe_handle = _mbErrHandle, ioe_type = errTy, ioe_errno = mbErrNo })
+        -- Catches the following error that occurs when attemping to associate
+        -- a HANDLE that does not have OVERLAPPING mode set:
+        --
+        --   associateHandleWithIOCP: invalid argument (The parameter is incorrect.)
+        | InvalidArgument <- errTy
+        , Just 22 <- mbErrNo
+        = if tryReOpening
+          then do
+            -- Try to re-open the HANDLE in overlapped mode.
+            --
+            -- TODO: this seems to never actual works; we get:
+            --
+            --  > permission denied (Access is denied.)
+            --
+            -- It seems we can't re-open one side of a pipe created with
+            -- mkNamedPipe, even without FILE_FLAG_FIRST_PIPE_INSTANCE and
+            -- with PIPE_UNLIMITED_INSTANCES.
+            h' <- reOpenFileOverlapped h wantToRead
+            if h' /= nullPtr
+              -- re-opening succeeded; now try associating the new handle
+            then go False h'
+              -- re-opening failed
+            else throwGetLastError "reOpenFileOverlapped"
+          else return h
+        | otherwise
+        = throwIO ioErr
+
+foreign import ccall "reOpenFileOverlapped"
+  reOpenFileOverlapped :: HANDLE -> Bool -> IO HANDLE
 ##endif
 
 -- | Close a 'CommunicationHandle'.

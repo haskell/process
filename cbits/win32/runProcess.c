@@ -145,9 +145,9 @@ mkNamedPipe (HANDLE* pHandleIn, BOOL isInheritableIn, BOOL isOverlappedIn,
     DWORD inAttr = isOverlappedIn ? FILE_FLAG_OVERLAPPED : 0;
     hTemporaryIn
       = CreateNamedPipeW (pipeName,
-                          PIPE_ACCESS_INBOUND | inAttr | FILE_FLAG_FIRST_PIPE_INSTANCE,
+                          PIPE_ACCESS_INBOUND | inAttr, // | FILE_FLAG_FIRST_PIPE_INSTANCE,
                           PIPE_TYPE_MESSAGE | PIPE_REJECT_REMOTE_CLIENTS | PIPE_READMODE_MESSAGE | PIPE_WAIT,
-                          1, buffer_size, buffer_size,
+                          PIPE_UNLIMITED_INSTANCES, buffer_size, buffer_size,
                           0,
                           &secAttr);
     if (hTemporaryIn == INVALID_HANDLE_VALUE)
@@ -207,6 +207,26 @@ fail:
     if (INVALID_HANDLE_VALUE != hTemporaryIn ) CloseHandle (hTemporaryIn);
     if (INVALID_HANDLE_VALUE != hTemporaryOut) CloseHandle (hTemporaryOut);
     return FALSE;
+}
+
+/*
+ * Function: reOpenFileOverlapped
+ *
+ * Purpose:  attempts to re-open a HANDLE with the FILE_FLAG_OVERLAPPED flag
+ *           set, in order to allow asynchronous IO on the HANDLE.
+ */
+HANDLE
+reOpenFileOverlapped (HANDLE h, BOOL wantToRead)
+{ HANDLE h2 = ReOpenFile( h
+                        , wantToRead ? GENERIC_READ : GENERIC_WRITE
+                        , wantToRead ? FILE_SHARE_READ : FILE_SHARE_WRITE
+                        , FILE_FLAG_OVERLAPPED
+                        );
+  if (h2 == INVALID_HANDLE_VALUE) {
+    maperrno();
+    return NULL;
+  }
+  return h2;
 }
 
 static HANDLE
