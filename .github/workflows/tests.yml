@@ -43,5 +43,7 @@ jobs:
               rm -rf C:/ProgramData/Chocolatey/bin/ghc*
               stack ${{ matrix.args }} exec pacman -- --sync --refresh --noconfirm autoconf
             fi
-            stack test --bench --no-run-benchmarks --haddock --no-terminal ${{ matrix.args }}
+            stack build
             stack sdist --test-tarball
+            cd test
+            stack test --bench --no-run-benchmarks --haddock --no-terminal ${{ matrix.args }}

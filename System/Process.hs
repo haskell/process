@@ -105,13 +105,12 @@ import System.IO.Error (mkIOError, ioeSetErrorString)
 
 #if defined(javascript_HOST_ARCH)
 import System.Process.JavaScript(getProcessId, getCurrentProcessId)
-#elif defined(WINDOWS)
+#elif defined(mingw32_HOST_OS)
 import System.Win32.Process (getProcessId, getCurrentProcessId, ProcessId)
 #else
 import System.Posix.Process (getProcessID)
 import System.Posix.Types (CPid (..))
 #endif
-
 import GHC.IO.Exception ( ioException, IOErrorType(..), IOException(..) )
 
 #if defined(wasm32_HOST_ARCH)
@@ -126,7 +125,7 @@ import System.IO.Error
 -- @since 1.6.3.0
 #if defined(javascript_HOST_ARCH)
 type Pid = Int
-#elif defined(WINDOWS)
+#elif defined(mingw32_HOST_OS)
 type Pid = ProcessId
 #else
 type Pid = CPid
@@ -668,7 +667,7 @@ getPid (ProcessHandle mh _ _) = do
     OpenHandle h -> do
       pid <- getProcessId h
       return $ Just pid
-#elif defined(WINDOWS)
+#elif defined(mingw32_HOST_OS)
     OpenHandle h -> do
       pid <- getProcessId h
       return $ Just pid
@@ -691,7 +690,7 @@ getCurrentPid :: IO Pid
 getCurrentPid =
 #if defined(javascript_HOST_ARCH)
     getCurrentProcessId
-#elif defined(WINDOWS)
+#elif defined(mingw32_HOST_OS)
     getCurrentProcessId
 #else
     getProcessID
@@ -743,7 +742,7 @@ waitForProcess ph@(ProcessHandle _ delegating_ctlc _) = lockWaitpid $ do
         when (was_open && delegating_ctlc) $
           endDelegateControlC e
         return e'
-#if defined(WINDOWS)
+#if defined(mingw32_HOST_OS)
     OpenExtHandle h job -> do
         -- First wait for completion of the job...
         waitForJobCompletion job
@@ -872,7 +871,7 @@ terminateProcess ph = do
   withProcessHandle ph $ \p_ ->
     case p_ of
       ClosedHandle  _ -> return ()
-#if defined(WINDOWS)
+#if defined(mingw32_HOST_OS)
       OpenExtHandle{} -> terminateJobUnsafe p_ 1 >> return ()
 #else
       OpenExtHandle{} -> error "terminateProcess with OpenExtHandle should not happen on POSIX."

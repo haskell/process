@@ -21,7 +21,7 @@ module System.Process.Common
     , pfdToHandle
 
 -- Avoid a warning on Windows
-#ifdef WINDOWS
+#if defined(mingw32_HOST_OS)
     , CGid (..)
 #else
     , CGid
@@ -63,7 +63,7 @@ import GHC.JS.Prim (JSVal)
 
 -- We do a minimal amount of CPP here to provide uniform data types across
 -- Windows and POSIX.
-#ifdef WINDOWS
+#if defined(mingw32_HOST_OS)
 import Data.Word (Word32)
 import System.Win32.DebugApi (PHANDLE)
 #if defined(__IO_MANAGER_WINIO__)
@@ -75,7 +75,7 @@ import System.Posix.Types
 
 #if defined(javascript_HOST_ARCH)
 type PHANDLE = JSVal
-#elif defined(WINDOWS)
+#elif defined(mingw32_HOST_OS)
 -- Define some missing types for Windows compatibility. Note that these values
 -- will never actually be used, as the setuid/setgid system calls are not
 -- applicable on Windows. No value of this type will ever exist.

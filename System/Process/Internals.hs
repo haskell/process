@@ -22,7 +22,7 @@
 module System.Process.Internals (
     ProcessHandle(..), ProcessHandle__(..),
     PHANDLE, closePHANDLE, mkProcessHandle,
-#ifdef WINDOWS
+#if defined(mingw32_HOST_OS)
     CGid(..),
 #else
     CGid,
@@ -39,7 +39,7 @@ module System.Process.Internals (
     endDelegateControlC,
     stopDelegateControlC,
     unwrapHandles,
-#ifdef WINDOWS
+#if defined(mingw32_HOST_OS)
     terminateJob,
     terminateJobUnsafe,
     waitForJobCompletion,
@@ -68,7 +68,7 @@ import System.Process.Common
 
 #if defined(javascript_HOST_ARCH)
 import System.Process.JavaScript
-#elif defined(WINDOWS)
+#elif defined(mingw32_HOST_OS)
 import System.Process.Windows
 #else
 import System.Process.Posix
