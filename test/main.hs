@@ -1,20 +1,33 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE OverloadedStrings #-}
+
 import Control.Exception
-import Control.Monad (guard, unless, void)
+import Control.Monad (guard, unless, void, when)
 import System.Exit
 import System.IO.Error
 import System.Directory (getCurrentDirectory, setCurrentDirectory)
 import System.Process
+import System.Process.Internals (withForkWait, ignoreSigPipe)
+import System.Process.CommunicationHandle
 import Control.Concurrent
+import Control.DeepSeq
 import Data.Char (isDigit)
 import Data.IORef
 import Data.List (isInfixOf)
 import Data.Maybe (isNothing)
-import System.IO (hClose, openBinaryTempFile, hGetContents)
-import qualified Data.ByteString as S
+import System.IO (hClose, hFlush, openBinaryTempFile, hGetContents, hPutStr)
+import qualified Data.ByteString as SBS
+import qualified Data.ByteString.Lazy as LBS
 import qualified Data.ByteString.Char8 as S8
-import System.Directory (getTemporaryDirectory, removeFile)
+import System.Directory (getTemporaryDirectory, removeFile, exeExtension)
+import System.FilePath ((<.>))
 import GHC.Conc.Sync (getUncaughtExceptionHandler, setUncaughtExceptionHandler)
+
+#if defined(__IO_MANAGER_WINIO__)
+import GHC.IO.SubSystem ((<!>))
+#endif
+
+import Test.Paths ( processInternalExes )
 
 ifWindows :: IO () -> IO ()
 ifWindows action
@@ -42,6 +55,11 @@ main = do
     testDoubleWait
     testKillDoubleWait
     testCreateProcess
+    testCommunicationHandle False
+#if defined(__IO_MANAGER_WINIO__)
+    -- With WinIO, also run the test with the child process using WinIO
+    testCommunicationHandle True
+#endif
     putStrLn ">>> Tests passed successfully"
 
 run :: String -> IO () -> IO ()
@@ -96,13 +114,13 @@ testBinaryHandles = run "binary handles" $ do
       (\(fp, h) -> hClose h `finally` removeFile fp)
       $ \(fp, h) -> do
         let bs = S8.pack "hello\nthere\r\nworld\0"
-        S.hPut h bs
+        SBS.hPut h bs
         hClose h
 
         (Nothing, Just out, Nothing, ph) <- createProcess (proc "cat" [fp])
             { std_out = CreatePipe
             }
-        res' <- S.hGetContents out
+        res' <- SBS.hGetContents out
         hClose out
         ec <- waitForProcess ph
         unless (ec == ExitSuccess)
@@ -278,6 +296,41 @@ testCreateProcess = run "createProcess with cwd = Nothing" $ do
         Left e -> error $ "waitForProcess threw: " ++ show (e :: SomeException)
         Right ExitSuccess -> return ()
         Right exitCode -> error $ "unexpected exit code: " ++ show exitCode
+
+testCommunicationHandle :: Bool -> IO ()
+testCommunicationHandle childUsesWinIO = do
+  parentUsesWinIO <-
+    return False
+#if defined(__IO_MANAGER_WINIO__)
+      <!> return True
+#endif
+  putStr $ unlines
+    [ "testCommunicationHandle {"
+    , "parentUsesWinIO: " ++ show parentUsesWinIO
+    ]
+  -- Workaround for Cabal bug #9854 (cli-child executable not in PATH).
+  let cliChild =
+        case lookup "cli-child" processInternalExes of
+          Just cliChildPath -> cliChildPath
+          Nothing -> "cli-child" <.> exeExtension
+  (ex, output) <-
+    readCreateProcessWithExitCodeCommunicationHandle
+      (\(chTheyRead, chTheyWrite) ->
+        let args = [show chTheyRead, show chTheyWrite]
+                    ++ if childUsesWinIO
+                       then ["+RTS", "--io-manager=native", "-RTS"]
+                       else []
+        in proc cliChild args)
+      hGetContents
+      (`hPutStr` "hello")
+  case ex of
+    ExitSuccess ->
+      if output == "olleh123"
+      then return ()
+      else error $ "testCommunicationHandle: unexpected output " ++ show output
+    ExitFailure {} ->
+      error $ "testCommunicationHandle: child exited with exception " ++ show ex
+  putStrLn "testCommunicationHandle }"
 
 withCurrentDirectory :: FilePath -> IO a -> IO a
 withCurrentDirectory new inner = do

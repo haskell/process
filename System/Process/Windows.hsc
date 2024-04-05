@@ -515,14 +515,14 @@ createPipeInternalHANDLE =
   alloca $ \ pfdStdInput  ->
    alloca $ \ pfdStdOutput -> do
      throwErrnoIf_  (==False) "c_mkNamedPipe" $
-       c_mkNamedPipe pfdStdInput True pfdStdOutput True
+       c_mkNamedPipe pfdStdInput True False pfdStdOutput True False
      Just hndStdInput  <- mbPipeHANDLE CreatePipe pfdStdInput ReadMode
      Just hndStdOutput <- mbPipeHANDLE CreatePipe pfdStdOutput WriteMode
      return (hndStdInput, hndStdOutput)
 
 
 foreign import ccall "mkNamedPipe" c_mkNamedPipe ::
-    Ptr HANDLE -> Bool -> Ptr HANDLE -> Bool -> IO Bool
+    Ptr HANDLE -> Bool -> Bool -> Ptr HANDLE -> Bool -> Bool -> IO Bool
 ##endif
 
 close' :: CInt -> IO ()

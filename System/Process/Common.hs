@@ -19,6 +19,7 @@ module System.Process.Common
     , mbFd
     , mbPipe
     , pfdToHandle
+    , rawFdToHandle
 
 -- Avoid a warning on Windows
 #if defined(mingw32_HOST_OS)
@@ -32,14 +33,15 @@ module System.Process.Common
     , HANDLE
     , mbHANDLE
     , mbPipeHANDLE
+    , rawHANDLEToHandle
 #endif
     ) where
 
 import Control.Concurrent
 import Control.Exception
-import Data.String
+import Data.String ( IsString(..) )
 import Foreign.Ptr
-import Foreign.Storable
+import Foreign.Storable ( Storable(peek) )
 
 import System.Posix.Internals
 import GHC.IO.Exception
@@ -270,8 +272,11 @@ mbPipe CreatePipe pfd  mode = fmap Just (pfdToHandle pfd mode)
 mbPipe _std      _pfd _mode = return Nothing
 
 pfdToHandle :: Ptr FD -> IOMode -> IO Handle
-pfdToHandle pfd mode = do
-  fd <- peek pfd
+pfdToHandle pfd mode =
+  rawFdToHandle mode =<< peek pfd
+
+rawFdToHandle :: IOMode -> FD -> IO Handle
+rawFdToHandle mode fd = do
   let filepath = "fd:" ++ show fd
   (fD,fd_type) <- FD.mkFD (fromIntegral fd) mode
                        (Just (Stream,0,0)) -- avoid calling fstat()
@@ -299,11 +304,14 @@ mbHANDLE _std NoStream        = return $ intPtrToPtr (-2)
 mbHANDLE _std (UseHandle hdl) = handleToHANDLE hdl
 
 mbPipeHANDLE :: StdStream -> Ptr HANDLE -> IOMode -> IO (Maybe Handle)
-mbPipeHANDLE CreatePipe pfd  mode =
-  do raw_handle <- peek pfd
-     let hwnd  = fromHANDLE raw_handle :: Io NativeHandle
-         ident = "hwnd:" ++ show raw_handle
-     enc <- fmap Just getLocaleEncoding
-     Just <$> mkHandleFromHANDLE hwnd Stream ident mode enc
+mbPipeHANDLE CreatePipe pfd mode =
+  Just <$> ( rawHANDLEToHandle mode =<< peek pfd )
 mbPipeHANDLE _std      _pfd _mode = return Nothing
+
+rawHANDLEToHandle :: IOMode -> HANDLE -> IO Handle
+rawHANDLEToHandle mode raw_handle = do
+  let hwnd  = fromHANDLE raw_handle :: Io NativeHandle
+      ident = "hwnd:" ++ show raw_handle
+  enc <- getLocaleEncoding
+  mkHandleFromHANDLE hwnd Stream ident mode (Just enc)
 #endif

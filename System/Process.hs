@@ -89,11 +89,11 @@ import System.Process.Internals
 
 import Control.Concurrent
 import Control.DeepSeq (rnf)
-import Control.Exception (SomeException, mask
+import Control.Exception (
 #if !defined(javascript_HOST_ARCH)
-                         , allowInterrupt
+                           allowInterrupt,
 #endif
-                         , bracket, try, throwIO)
+                           bracket)
 import qualified Control.Exception as C
 import Control.Monad
 import Data.Maybe
@@ -111,7 +111,8 @@ import System.Win32.Process (getProcessId, getCurrentProcessId, ProcessId)
 import System.Posix.Process (getProcessID)
 import System.Posix.Types (CPid (..))
 #endif
-import GHC.IO.Exception ( ioException, IOErrorType(..), IOException(..) )
+
+import GHC.IO.Exception ( ioException, IOErrorType(..) )
 
 #if defined(wasm32_HOST_ARCH)
 import GHC.IO.Exception ( unsupportedOperation )
@@ -614,28 +615,6 @@ readCreateProcessWithExitCode cp input = do
           (Nothing,_,_) -> error "readCreateProcessWithExitCode: Failed to get a stdin handle."
           (_,Nothing,_) -> error "readCreateProcessWithExitCode: Failed to get a stdout handle."
           (_,_,Nothing) -> error "readCreateProcessWithExitCode: Failed to get a stderr handle."
-
--- | Fork a thread while doing something else, but kill it if there's an
--- exception.
---
--- This is important in the cases above because we want to kill the thread
--- that is holding the Handle lock, because when we clean up the process we
--- try to close that handle, which could otherwise deadlock.
---
-withForkWait :: IO () -> (IO () ->  IO a) -> IO a
-withForkWait async body = do
-  waitVar <- newEmptyMVar :: IO (MVar (Either SomeException ()))
-  mask $ \restore -> do
-    tid <- forkIO $ try (restore async) >>= putMVar waitVar
-    let wait = takeMVar waitVar >>= either throwIO return
-    restore (body wait) `C.onException` killThread tid
-
-ignoreSigPipe :: IO () -> IO ()
-ignoreSigPipe = C.handle $ \e -> case e of
-                                   IOError { ioe_type  = ResourceVanished
-                                           , ioe_errno = Just ioe }
-                                     | Errno ioe == ePIPE -> return ()
-                                   _ -> throwIO e
 
 -- ----------------------------------------------------------------------------
 -- showCommandForUser

@@ -1,5 +1,6 @@
 module Main (main) where
 
+-- Cabal
 import Distribution.Simple
   ( defaultMainWithHooks
   , autoconfUserHooks

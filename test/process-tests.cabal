@@ -1,13 +1,13 @@
 cabal-version: 2.4
 name:          process-tests
-version:       1.6.18.0
+version:       1.6.19.0
 license:       BSD-3-Clause
 license-file:  LICENSE
 maintainer:    libraries@haskell.org
 bug-reports:   https://github.com/haskell/process/issues
 synopsis:      Testing package for the process library
 category:      System
-build-type:    Simple
+build-type:    Custom
 description:
     This package contains the testing infrastructure for the process library
 
@@ -16,15 +16,39 @@ source-repository head
   location: https://github.com/haskell/process.git
   subdir:   test
 
+common process-dep
+  build-depends:
+    process == 1.6.19.0
+
+custom-setup
+  setup-depends:
+    base      >= 4.10 && < 4.20,
+    directory >= 1.1  && < 1.4,
+    filepath  >= 1.2  && < 1.6,
+    Cabal     >= 2.4  && < 3.12,
+
+-- Test executable for the CommunicationHandle functionality
+executable cli-child
+  import: process-dep
+  default-language: Haskell2010
+  hs-source-dirs: cli-child
+  main-is: main.hs
+  build-depends: base >= 4 && < 5
+               , deepseq >= 1.1 && < 1.6
+  ghc-options: -threaded -rtsopts
+
 test-suite test
+  import: process-dep
   default-language: Haskell2010
   hs-source-dirs: .
   main-is: main.hs
   type: exitcode-stdio-1.0
   build-depends: base >= 4 && < 5
-               , bytestring
-               , deepseq
-               , directory
-               , filepath
-               , process == 1.6.18.0
+               , bytestring >= 0.11 && < 0.13
+               , deepseq  >= 1.1 && < 1.6
+               , directory >= 1.1 && < 1.4
+               , filepath >= 1.2 && < 1.6
+  build-tool-depends: process-tests:cli-child
   ghc-options: -threaded -rtsopts -with-rtsopts "-N"
+  other-modules: Test.Paths
+  autogen-modules: Test.Paths

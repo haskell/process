@@ -1,5 +1,13 @@
 # Changelog for [`process` package](http://hackage.haskell.org/package/process)
 
+## 1.6.19.0 *April 2024*
+
+* Introduce `System.Process.CommunicationHandle`, allowing for platform-independent
+  inter-process communication using `Handle`s.
+* Expose `withForkWait` and `ignoreSigPipe` from `System.Process.Internals`.
+* Define new internal functions `rawFdToHandle` and (Windows only) `rawHANDLEToHandle`,
+  exported from `System.Process.Common`.
+
 ## 1.6.18.0 *September 2023*
 
 * Fix deadlock when waiting for process completion and process jobs [#273](https://github.com/haskell/process/issues/273)
