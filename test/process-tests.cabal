@@ -21,8 +21,6 @@ test-suite test
   hs-source-dirs: .
   main-is: main.hs
   type: exitcode-stdio-1.0
-  -- Add otherwise redundant bounds on base since GHC's build system runs
-  -- `cabal check`, which mandates bounds on base.
   build-depends: base >= 4 && < 5
                , bytestring
                , deepseq
