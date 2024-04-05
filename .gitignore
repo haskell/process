@@ -1,10 +1,11 @@
-/.cabal-sandbox/
-/cabal.project.local
-/cabal.sandbox.config
-/dist/
-/dist-newstyle/
-/.stack-work/
+**/.cabal-sandbox/
+**/cabal.project.local
+**/cabal.sandbox.config
+**/dist/
+**/dist-newstyle/
+**/.stack-work/
 *.swp
+stack.yaml.lock
 
 # Specific generated files
 GNUmakefile

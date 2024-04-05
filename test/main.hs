@@ -22,7 +22,7 @@ ifWindows action
   | otherwise     = action
 
 isWindows :: Bool
-#if WINDOWS
+#if defined(mingw32_HOST_OS)
 isWindows = True
 #else
 isWindows = False
