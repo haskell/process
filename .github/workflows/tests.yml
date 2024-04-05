@@ -3,47 +3,114 @@ name: Tests
 on:
     pull_request:
     push:
-        branches:
-        - master
+      branches:
+        - '**'
 
 jobs:
   build:
-    name: CI
+    name: GHC ${{ matrix.ghc-version }} on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        args:
-        - "--resolver ghc-9.8.1"
-        - "--resolver ghc-9.6.3"
-        - "--resolver ghc-9.4.7"
-        - "--resolver ghc-9.2.8"
-        - "--resolver ghc-9.0.1"
-        - "--resolver ghc-8.10.4"
-        - "--resolver ghc-8.8.4"
-        - "--resolver ghc-8.6.5"
-        - "--resolver ghc-8.4.4"
-        - "--resolver ghc-8.2.2"
+        ghc-version:
+          - 'latest'
+          - '9.8'
+          - '9.6'
+          - '9.4'
+          - '9.2'
+          - '9.0'
+          - '8.10'
+          - '8.8'
+          - '8.6'
+          - '8.4'
+          - '8.2'
+
+        exclude:
+          # Exclude GHC 8.2 on Windows (GHC bug: undefined reference to `__stdio_common_vswprintf_s')
+          - os: windows-latest
+            ghc-version: '8.2'
 
     steps:
-      - name: Clone project
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Build and run tests
-        shell: bash
+      - name: Set up GHC ${{ matrix.ghc-version }}
+        uses: haskell-actions/setup@v2
+        id: setup
+        with:
+          ghc-version: ${{ matrix.ghc-version }}
+          # Defaults, added for clarity:
+          cabal-version: 'latest'
+          cabal-update: true
+
+      - name: Set up autotools (Windows)
+        if: ${{ runner.os == 'Windows' }}
+        uses: msys2/setup-msys2@v2
+        with:
+          update: true
+          install: >-
+            autotools
+
+      - name: Run autoreconf (Windows)
+        if: ${{ runner.os == 'Windows' }}
+        run: autoreconf -i
+        shell: "msys2 {0}"
+
+      - name: Run autoreconf (Linux & Mac)
+        if: ${{ runner.os != 'Windows' }}
+        run: autoreconf -i
+
+      - name: Configure the build
         run: |
-            set -ex
-            stack upgrade
-            stack --version
-            if [[ "${{ runner.os }}" = 'Windows' ]]
-            then
-              # Looks like a bug in Stack, this shouldn't break things
-              ls C:/ProgramData/Chocolatey/bin/
-              rm -rf C:/ProgramData/Chocolatey/bin/ghc*
-              stack ${{ matrix.args }} exec pacman -- --sync --refresh --noconfirm autoconf
-            fi
-            stack build
-            stack sdist --test-tarball
-            cd test
-            stack test --bench --no-run-benchmarks --haddock --no-terminal ${{ matrix.args }}
+          cabal configure --enable-tests --enable-benchmarks --disable-documentation
+          cabal build all --dry-run
+        # The last step generates dist-newstyle/cache/plan.json for the cache key.
+
+      - name: Restore cached dependencies
+        uses: actions/cache/restore@v3
+        id: cache
+        env:
+          key: ${{ runner.os }}-ghc-${{ steps.setup.outputs.ghc-version }}-cabal-${{ steps.setup.outputs.cabal-version }}
+        with:
+          path: ${{ steps.setup.outputs.cabal-store }}
+          key: ${{ env.key }}-plan-${{ hashFiles('**/plan.json') }}
+          restore-keys: ${{ env.key }}-
+
+      - name: Install dependencies
+        # If we had an exact cache hit, the dependencies will be up to date.
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: cabal build process --only-dependencies
+
+      # Cache dependencies already here, so that we do not have to rebuild them should the subsequent steps fail.
+      - name: Save cached dependencies
+        uses: actions/cache/save@v3
+        # If we had an exact cache hit, trying to save the cache would error because of key clash.
+        if: steps.cache.outputs.cache-hit != 'true'
+        with:
+          path: ${{ steps.setup.outputs.cabal-store }}
+          key: ${{ steps.cache.outputs.cache-primary-key }}
+
+      - name: Build
+        run: cabal build process
+
+      - name: Run tests
+        run: cabal run process-tests:test
+
+        # On Windows and with GHC >= 9.0, re-run the test-suite using WinIO.
+      - name: Re-run tests with WinIO (Windows && GHC >= 9.0)
+        if: ${{ runner.os == 'Windows' && matrix.ghc-version >= '9.0' }}
+        run: cabal run process-tests:test -- +RTS --io-manager=native -RTS
+
+      - name: Source dist
+        run: cabal sdist all --ignore-project
+
+      - name: Build documentation
+        run: cabal haddock process
+
+      - name: Check process.cabal
+        run: cabal check
+
+      - name: Check process-tests.cabal
+        working-directory: ./test
+        run: cabal check

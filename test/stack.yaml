@@ -1,9 +1,0 @@
-resolver: ghc-9.2.3
-
-extra-deps:
-  - ..
-  - Cabal-3.10.2.0
-
-allow-newer: True
-allow-newer-deps:
-  - Cabal
