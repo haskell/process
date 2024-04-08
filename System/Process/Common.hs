@@ -160,6 +160,14 @@ data CmdSpec
       --   see the
       --   <http://msdn.microsoft.com/en-us/library/windows/desktop/aa365527%28v=vs.85%29.aspx documentation>
       --   for the Windows @SearchPath@ API.
+      --
+      --   Windows does not have a mechanism for passing multiple arguments.
+      --   When using @RawCommand@ on Windows, the command line is serialised
+      --   into a string, with arguments quoted separately.  Command line
+      --   parsing is up individual programs, so the default behaviour may
+      --   not work for some programs.  If you are not getting the desired
+      --   results, construct the command line yourself and use 'ShellCommand'.
+      --
   deriving (Show, Eq)
 
 
