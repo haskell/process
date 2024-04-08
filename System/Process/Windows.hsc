@@ -425,8 +425,11 @@ commandToProcess (ShellCommand string) = do
         -- which partly works.  There seem to be some quoting issues, but
         -- I don't have the energy to find+fix them right now (ToDo). --SDM
         -- (later) Now I don't know what the above comment means.  sigh.
-commandToProcess (RawCommand cmd args) = do
-  return (cmd, translateInternal cmd ++ concatMap ((' ':) . translateInternal) args)
+commandToProcess (RawCommand cmd args)
+  | map toLower (takeExtension cmd) `elem` [".bat", ".cmd"]
+  = return (cmd, translateInternal cmd ++ concatMap ((' ':) . translateCmdExeArg) args)
+  | otherwise
+  = return (cmd, translateInternal cmd ++ concatMap ((' ':) . translateInternal) args)
 
 -- Find CMD.EXE (or COMMAND.COM on Win98).  We use the same algorithm as
 -- system() in the VC++ CRT (Vc7/crt/src/system.c in a VC++ installation).
@@ -466,6 +469,30 @@ findCommandInterpreter = do
       Nothing -> ioError (mkIOError doesNotExistErrorType
                                 "findCommandInterpreter" Nothing Nothing)
       Just cmd -> return cmd
+
+-- | Alternative regime used to escape arguments destined for scripts
+-- interpreted by @cmd.exe@, (e.g. @.bat@ and @.cmd@ files).
+--
+-- This respects the Windows command interpreter's quoting rules:
+--
+-- * the entire argument should be surrounded in quotes
+-- * the backslash symbol is used to escape quotes and backslashes
+-- * the carat symbol is used to escape other special characters with
+--   significance to the interpreter
+--
+-- It is particularly important that we perform this quoting as
+-- unvalidated unquoted command-line arguments can be used to achieve
+-- arbitrary user code execution in when passed to a vulnerable batch
+-- script.
+--
+translateCmdExeArg :: String -> String
+translateCmdExeArg xs = "^\"" : snd (foldr escape (True,"^\"") xs)
+  where escape '"'  (_,     str) = (True,  '\\' : '"'  : str)
+        escape '\\' (True,  str) = (True,  '\\' : '\\' : str)
+        escape '\\' (False, str) = (False, '\\' : str)
+        escape c    (_,     str)
+          | c `elem` "^<>|&()"   = (False, '^' : c : str)
+          | otherwise            = (False,       c : str)
 
 translateInternal :: String -> String
 translateInternal xs = '"' : snd (foldr escape (True,"\"") xs)

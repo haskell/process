@@ -478,7 +478,8 @@ processFailedException fun cmd args exit_code =
 --
 -- * The command to run, which must be in the $PATH, or an absolute or relative path
 --
--- * A list of separate command line arguments to the program
+-- * A list of separate command line arguments to the program.  See 'RawCommand' for
+--   further discussion of Windows semantics.
 --
 -- * A string to pass on standard input to the forked process.
 --
