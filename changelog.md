@@ -7,6 +7,8 @@
   properly escaped in arguments passed to `.bat` and `.cmd` processes.
   This addresses
   [HSEC-2024-0003](https://github.com/haskell/security-advisories/tree/main/advisories/hackage/process/HSEC-2024-0003.md).
+* Fix double-closing of stdin/stdout/stderr fds with POSIX `fork/exec` backend.
+  [#306](https://github.com/haskell/process/issues/306)
 
 ## 1.6.18.0 *September 2023*
 
