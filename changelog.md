@@ -1,5 +1,13 @@
 # Changelog for [`process` package](http://hackage.haskell.org/package/process)
 
+## 1.6.20.0 *April 2024*
+
+* Introduce `System.Process.CommunicationHandle`, allowing for platform-independent
+  inter-process communication using `Handle`s.
+* Expose `withForkWait` and `ignoreSigPipe` from `System.Process.Internals`.
+* Define new internal functions `rawFdToHandle` and (Windows only) `rawHANDLEToHandle`,
+  exported from `System.Process.Common`.
+
 ## 1.6.19.0 *April 2024*
 
 * Adjust command-line escaping logic on Windows to ensure that occurrences of

@@ -18,6 +18,8 @@ module System.Process.Windows
     , terminateJobUnsafe
     , waitForJobCompletion
     , timeout_Infinite
+    , HANDLE
+    , mkNamedPipe
     ) where
 
 import System.Process.Common
@@ -36,8 +38,8 @@ import System.Posix.Internals
 import GHC.IO.Exception
 ##if defined(__IO_MANAGER_WINIO__)
 import GHC.IO.SubSystem
-import Graphics.Win32.Misc
 import qualified GHC.Event.Windows as Mgr
+import Graphics.Win32.Misc
 ##endif
 import GHC.IO.Handle.FD
 import GHC.IO.Handle.Types hiding (ClosedHandle)
@@ -542,16 +544,16 @@ createPipeInternalHANDLE :: IO (Handle, Handle)
 createPipeInternalHANDLE =
   alloca $ \ pfdStdInput  ->
    alloca $ \ pfdStdOutput -> do
-     throwErrnoIf_  (==False) "c_mkNamedPipe" $
-       c_mkNamedPipe pfdStdInput True pfdStdOutput True
+     throwErrnoIf_  (==False) "mkNamedPipe" $
+       mkNamedPipe pfdStdInput True False pfdStdOutput True False
      Just hndStdInput  <- mbPipeHANDLE CreatePipe pfdStdInput ReadMode
      Just hndStdOutput <- mbPipeHANDLE CreatePipe pfdStdOutput WriteMode
      return (hndStdInput, hndStdOutput)
 
-
-foreign import ccall "mkNamedPipe" c_mkNamedPipe ::
-    Ptr HANDLE -> Bool -> Ptr HANDLE -> Bool -> IO Bool
 ##endif
+
+foreign import ccall "mkNamedPipe" mkNamedPipe ::
+  Ptr HANDLE -> Bool -> Bool -> Ptr HANDLE -> Bool -> Bool -> IO Bool
 
 close' :: CInt -> IO ()
 close' = throwErrnoIfMinus1_ "_close" . c__close
