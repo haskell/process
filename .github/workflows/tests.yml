@@ -65,6 +65,12 @@ jobs:
         if: ${{ runner.os != 'Windows' }}
         run: autoreconf -i
 
+      - name: Set up LLVM (ARM)
+        if: ${{ runner.arch == 'ARM64' && runner.os == 'macOS' }}
+        run: |
+          brew install llvm@13
+          echo "/opt/homebrew/opt/llvm@13/bin:$PATH" >> "$GITHUB_PATH"
+
       - name: Configure the build
         run: |
           cabal configure --enable-tests --enable-benchmarks --disable-documentation
