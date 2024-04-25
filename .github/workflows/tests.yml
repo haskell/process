@@ -52,6 +52,10 @@ jobs:
           install: >-
             autotools
 
+      - name: Set up autoreconf (Darwin)
+        if: ${{ runner.os == 'macOS' }}
+        run: brew install autoconf
+
       - name: Run autoreconf (Windows)
         if: ${{ runner.os == 'Windows' }}
         run: autoreconf -i
