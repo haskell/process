@@ -56,11 +56,17 @@ module System.Process.Internals (
     createPipe,
     createPipeFd,
     interruptProcessGroupOf,
+    withForkWait,
+    ignoreSigPipe,
     ) where
 
+import Control.Concurrent
+import Control.Exception (SomeException, mask, try, throwIO)
+import qualified Control.Exception as C
 import Foreign.C
 import System.IO
 
+import GHC.IO.Exception ( IOErrorType(..), IOException(..) )
 import GHC.IO.Handle.FD (fdToHandle)
 import System.Posix.Internals (FD)
 
@@ -243,3 +249,29 @@ interruptProcessGroupOf
     :: ProcessHandle    -- ^ A process in the process group
     -> IO ()
 interruptProcessGroupOf = interruptProcessGroupOfInternal
+
+-- | Fork a thread while doing something else, but kill it if there's an
+-- exception.
+--
+-- This is important in the cases above because we want to kill the thread
+-- that is holding the Handle lock, because when we clean up the process we
+-- try to close that handle, which could otherwise deadlock.
+--
+-- @since 1.6.20.0
+withForkWait :: IO () -> (IO () ->  IO a) -> IO a
+withForkWait async body = do
+  waitVar <- newEmptyMVar :: IO (MVar (Either SomeException ()))
+  mask $ \restore -> do
+    tid <- forkIO $ try (restore async) >>= putMVar waitVar
+    let wait = takeMVar waitVar >>= either throwIO return
+    restore (body wait) `C.onException` killThread tid
+
+-- | Handle any SIGPIPE errors in the given computation.
+--
+-- @since 1.6.20.0
+ignoreSigPipe :: IO () -> IO ()
+ignoreSigPipe = C.handle $ \e -> case e of
+                                   IOError { ioe_type  = ResourceVanished
+                                           , ioe_errno = Just ioe }
+                                     | Errno ioe == ePIPE -> return ()
+                                   _ -> throwIO e

@@ -88,8 +88,8 @@ mkAnonPipe (HANDLE* pHandleIn, BOOL isInheritableIn,
  *           asynchronously while anonymous pipes require blocking calls.
  */
 BOOL
-mkNamedPipe (HANDLE* pHandleIn, BOOL isInheritableIn,
-             HANDLE* pHandleOut, BOOL isInheritableOut)
+mkNamedPipe (HANDLE* pHandleIn, BOOL isInheritableIn, BOOL isOverlappedIn,
+             HANDLE* pHandleOut, BOOL isInheritableOut, BOOL isOverlappedOut)
 {
     HANDLE hTemporaryIn  = INVALID_HANDLE_VALUE;
     HANDLE hTemporaryOut = INVALID_HANDLE_VALUE;
@@ -142,7 +142,7 @@ mkNamedPipe (HANDLE* pHandleIn, BOOL isInheritableIn,
        bytes and the error ERROR_NO_DATA."[0]
 
        [0] https://devblogs.microsoft.com/oldnewthing/20110114-00/?p=11753  */
-    DWORD inAttr = isInheritableIn ? 0 : FILE_FLAG_OVERLAPPED;
+    DWORD inAttr = isOverlappedIn ? FILE_FLAG_OVERLAPPED : 0;
     hTemporaryIn
       = CreateNamedPipeW (pipeName,
                           PIPE_ACCESS_INBOUND | inAttr | FILE_FLAG_FIRST_PIPE_INSTANCE,
@@ -153,7 +153,7 @@ mkNamedPipe (HANDLE* pHandleIn, BOOL isInheritableIn,
     if (hTemporaryIn == INVALID_HANDLE_VALUE)
       goto fail;
 
-    /* And now create the other end using the inverse access permissions.  This
+    /* And now open the other end, using the inverse access permissions.  This
        will give us the read and write ends of the pipe.  */
     secAttr.bInheritHandle = isInheritableOut;
     hTemporaryOut
@@ -162,9 +162,9 @@ mkNamedPipe (HANDLE* pHandleIn, BOOL isInheritableIn,
                      FILE_SHARE_WRITE,
                      &secAttr,
                      OPEN_EXISTING,
-                     isInheritableOut
-                       ? FILE_ATTRIBUTE_NORMAL
-                       : FILE_FLAG_OVERLAPPED,
+                     isOverlappedOut
+                       ? FILE_FLAG_OVERLAPPED
+                       : FILE_ATTRIBUTE_NORMAL,
                      NULL);
 
     if (hTemporaryOut == INVALID_HANDLE_VALUE)
@@ -244,21 +244,21 @@ createJob ()
 static inline bool
 setStdHandleInfo (LPHANDLE destination, HANDLE _stdhandle,
                   LPHANDLE hStdRead, LPHANDLE hStdWrite, HANDLE defaultStd,
-                  BOOL isInhertibleIn, BOOL isInhertibleOut, BOOL asynchronous)
+                  BOOL isInheritableIn, BOOL isInheritableOut, BOOL asynchronous)
 {
     BOOL status;
     assert (destination);
     assert (hStdRead);
     assert (hStdWrite);
 
-    LPHANDLE tmpHandle = isInhertibleOut ? hStdWrite : hStdRead;
+    LPHANDLE tmpHandle = isInheritableOut ? hStdWrite : hStdRead;
 
     if (_stdhandle == (HANDLE)-1) {
         if (!asynchronous
-            && !mkAnonPipe(hStdRead, isInhertibleIn, hStdWrite, isInhertibleOut))
+            && !mkAnonPipe(hStdRead, isInheritableIn, hStdWrite, isInheritableOut))
             return false;
         if (asynchronous
-            && !mkNamedPipe(hStdRead, isInhertibleIn, hStdWrite, isInhertibleOut))
+            && !mkNamedPipe(hStdRead, isInheritableIn, !isInheritableIn, hStdWrite, isInheritableOut, !isInheritableOut))
             return false;
         *destination = *tmpHandle;
     } else if (_stdhandle == (HANDLE)-2) {
