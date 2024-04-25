@@ -1,1 +1,12 @@
 resolver: ghc-9.2.3
+
+packages:
+  - .
+  - test
+
+extra-deps:
+  - Cabal-3.6.3.0
+
+allow-newer: True
+allow-newer-deps:
+  - Cabal
