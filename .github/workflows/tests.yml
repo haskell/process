@@ -8,12 +8,16 @@ on:
 
 jobs:
   build:
-    name: GHC ${{ matrix.ghc-version }} on ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
+    name: GHC ${{ matrix.ghc-version }} on ${{ matrix.platform.arch }} ${{ matrix.platform.os }}
+    runs-on: ${{ matrix.platform.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        platform:
+          - { os: ubuntu-latest, arch: x64 }
+          - { os: macos-13, arch: x64 }
+          - { os: macos-14, arch: arm }
+          - { os: windows-latest, arch: x64 }
         ghc-version:
           - 'latest'
           - '9.8'
@@ -29,7 +33,29 @@ jobs:
 
         exclude:
           # Exclude GHC 8.2 on Windows (GHC bug: undefined reference to `__stdio_common_vswprintf_s')
-          - os: windows-latest
+          - platform:
+              os: windows-latest
+            ghc-version: '8.2'
+
+          # Only allow ARM jobs with GHC >= 9.2
+          # (It's tedious to not be able to use matrix.ghc-version >= 9.2 as a conditional here.)
+          - platform:
+              arch: arm
+            ghc-version: '9.0'
+          - platform:
+              arch: arm
+            ghc-version: '8.10'
+          - platform:
+              arch: arm
+            ghc-version: '8.8'
+          - platform:
+              arch: arm
+            ghc-version: '8.6'
+          - platform:
+              arch: arm
+            ghc-version: '8.4'
+          - platform:
+              arch: arm
             ghc-version: '8.2'
 
     steps:
@@ -43,6 +69,10 @@ jobs:
           # Defaults, added for clarity:
           cabal-version: 'latest'
           cabal-update: true
+
+      - name: Set up autotools (Darwin)
+        if: ${{ runner.os == 'macOS' }}
+        run: brew install autoconf
 
       - name: Set up autotools (Windows)
         if: ${{ runner.os == 'Windows' }}
