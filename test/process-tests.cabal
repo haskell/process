@@ -22,7 +22,7 @@ common process-dep
 
 custom-setup
   setup-depends:
-    base      >= 4.10 && < 4.20,
+    base      >= 4.10 && < 4.21,
     directory >= 1.1  && < 1.4,
     filepath  >= 1.2  && < 1.6,
     Cabal     >= 2.4  && < 3.12,
