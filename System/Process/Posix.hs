@@ -136,7 +136,9 @@ createProcess_Internal fun
    maybeWith withFilePath mb_cwd $ \pWorkDir ->
    maybeWith with mb_child_group $ \pChildGroup ->
    maybeWith with mb_child_user $ \pChildUser ->
-   withMany withFilePath (cmd:args) $ \cstrs ->
+   withFilePath cmd $ \cmdstr ->
+   withMany withCString args $ \argstrs -> do
+   let cstrs = cmdstr : argstrs
    withArray0 nullPtr cstrs $ \pargs -> do
 
      fdin  <- mbFd fun fd_stdin  mb_stdin
