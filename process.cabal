@@ -82,8 +82,6 @@ library
             build-depends: unix >= 2.5 && < 2.9
 
     include-dirs: include
-    includes:
-        runProcess.h
     install-includes:
         runProcess.h
         processFlags.h
