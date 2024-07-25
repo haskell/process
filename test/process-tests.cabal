@@ -1,6 +1,6 @@
 cabal-version: 2.4
 name:          process-tests
-version:       1.6.20.0
+version:       1.6.21.0
 license:       BSD-3-Clause
 license-file:  LICENSE
 maintainer:    libraries@haskell.org
@@ -18,14 +18,14 @@ source-repository head
 
 common process-dep
   build-depends:
-    process == 1.6.20.0
+    process == 1.6.21.0
 
 custom-setup
   setup-depends:
     base      >= 4.10 && < 4.21,
     directory >= 1.1  && < 1.4,
     filepath  >= 1.2  && < 1.6,
-    Cabal     >= 2.4  && < 3.12,
+    Cabal     >= 2.4  && < 3.14,
 
 -- Test executable for the CommunicationHandle functionality
 executable cli-child

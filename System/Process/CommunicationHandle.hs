@@ -38,12 +38,18 @@ import Control.DeepSeq (NFData, rnf)
 -- | Turn the 'CommunicationHandle' into a 'Handle' that can be read from
 -- in the current process.
 --
+-- The returned 'Handle' does not have any finalizers attached to it;
+-- use 'hClose' to close it.
+--
 -- @since 1.6.20.0
 openCommunicationHandleRead :: CommunicationHandle -> IO Handle
 openCommunicationHandleRead = useCommunicationHandle True
 
 -- | Turn the 'CommunicationHandle' into a 'Handle' that can be written to
 -- in the current process.
+--
+-- The returned 'Handle' does not have any finalizers attached to it;
+-- use 'hClose' to close it.
 --
 -- @since 1.6.20.0
 openCommunicationHandleWrite :: CommunicationHandle -> IO Handle
@@ -54,6 +60,9 @@ openCommunicationHandleWrite = useCommunicationHandle False
 
 -- | Create a pipe @(weRead,theyWrite)@ that the current process can read from,
 -- and whose write end can be passed to a child process in order to receive data from it.
+--
+-- The returned 'Handle' does not have any finalizers attached to it;
+-- use 'hClose' to close it.
 --
 -- See 'CommunicationHandle'.
 --
@@ -70,6 +79,9 @@ createWeReadTheyWritePipe =
 
 -- | Create a pipe @(theyRead,weWrite)@ that the current process can write to,
 -- and whose read end can be passed to a child process in order to send data to it.
+--
+-- The returned 'Handle' does not have any finalizers attached to it;
+-- use 'hClose' to close it.
 --
 -- See 'CommunicationHandle'.
 --
@@ -125,6 +137,7 @@ readCreateProcessWithExitCodeCommunicationHandle mkProg readAction writeAction =
   let cp = mkProg (chTheyRead, chTheyWrite)
   -- The following implementation parallels 'readCreateProcess'
   withCreateProcess cp $ \ _ _ _ ph -> do
+
     -- Close the parent's references to the 'CommunicationHandle's after they
     -- have been inherited by the child (we don't want to keep pipe ends open).
     closeCommunicationHandle chTheyWrite

@@ -1,5 +1,13 @@
 # Changelog for [`process` package](http://hackage.haskell.org/package/process)
 
+## 1.6.21.0 *July 2024*
+
+* No longer attach finalizers to `Handle`s created by the
+  `System.Process.CommunicationHandle` API. Instead, all file descriptors are
+  manually closed by the API.
+
+  This fixes a bug in which a file descriptor could be closed multiple times.
+
 ## 1.6.20.0 *April 2024*
 
 * Introduce `System.Process.CommunicationHandle`, allowing for platform-independent
