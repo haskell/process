@@ -28,6 +28,7 @@ import Control.Exception
 import Control.Monad
 import Data.Bits
 import Data.Char (toLower)
+import Data.List (dropWhileEnd)
 import Foreign.C
 import Foreign.Marshal
 import Foreign.Ptr
@@ -429,10 +430,26 @@ commandToProcess (ShellCommand string) = do
         -- I don't have the energy to find+fix them right now (ToDo). --SDM
         -- (later) Now I don't know what the above comment means.  sigh.
 commandToProcess (RawCommand cmd args)
-  | map toLower (takeExtension cmd) `elem` [".bat", ".cmd"]
+  | map toLower (takeWinExtension cmd) `elem` [".bat", ".cmd"]
   = return (cmd, translateInternal cmd ++ concatMap ((' ':) . translateCmdExeArg) args)
   | otherwise
   = return (cmd, translateInternal cmd ++ concatMap ((' ':) . translateInternal) args)
+
+-- TODO: filepath should also be updated with 'takeWinExtension'. Perhaps
+-- some day we can remove this logic from `process` but there is no hurry.
+
+-- | Get the extension of a Windows file, removing any trailing spaces or dots
+-- since they are ignored.
+--
+-- See: <https://learn.microsoft.com/en-us/troubleshoot/windows-client/shell-experience/file-folder-name-whitespace-characters>
+--
+-- >>> takeWinExtension "test.bat."
+-- ".bat"
+--
+-- >>> takeWinExtension "test.bat ."
+-- ".bat"
+takeWinExtension :: FilePath -> String
+takeWinExtension = takeExtension . dropWhileEnd (`elem` [' ', '.'])
 
 -- Find CMD.EXE (or COMMAND.COM on Win98).  We use the same algorithm as
 -- system() in the VC++ CRT (Vc7/crt/src/system.c in a VC++ installation).

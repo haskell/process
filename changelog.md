@@ -1,5 +1,11 @@
 # Changelog for [`process` package](http://hackage.haskell.org/package/process)
 
+## 1.6.23.0 *September 2024*
+
+* Fix command-line escaping logic on Windows when the command file ends with
+  a space or a dot. This is a follow-up for
+  [HSEC-2024-0003](https://github.com/haskell/security-advisories/tree/main/advisories/hackage/process/HSEC-2024-0003.md).
+
 ## 1.6.22.0 *August 2024*
 
 * Allow NUL to appear in arguments under POSIX. See
