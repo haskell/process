@@ -13,9 +13,9 @@ module System.Process.CommunicationHandle.Internal
  where
 
 import Control.Arrow ( first )
-import Foreign.C (CInt(..), throwErrnoIf_)
-import GHC.IO.Handle (Handle())
+import GHC.IO.Handle (Handle, hClose)
 #if defined(mingw32_HOST_OS)
+import Foreign.C (CInt(..), throwErrnoIf_)
 import Foreign.Marshal (alloca)
 import Foreign.Ptr (ptrToWordPtr, wordPtrToPtr)
 import Foreign.Storable (Storable(peek))
@@ -41,28 +41,37 @@ import System.Process.Common (rawFdToHandle)
 #include <fcntl.h>     /* for _O_BINARY */
 
 #else
+import GHC.IO.FD
+  ( mkFD, setNonBlockingMode )
+import GHC.IO.Handle
+  ( noNewlineTranslation )
+#if MIN_VERSION_base(4,16,0)
+import GHC.IO.Handle.Internals
+  ( mkFileHandleNoFinalizer )
+#else
+import GHC.IO.IOMode
+  ( IOMode(..) )
+import GHC.IO.Handle.Types
+  ( HandleType(..) )
+import GHC.IO.Handle.Internals
+  ( mkHandle )
+#endif
 import System.Posix
-  ( Fd(..), fdToHandle
+  ( Fd(..)
   , FdOption(..), setFdOption
   )
-import GHC.IO.FD (FD(fdFD))
--- NB: we use GHC.IO.Handle.Fd.handleToFd rather than System.Posix.handleToFd,
--- as the latter flushes and closes the `Handle`, which is not the behaviour we want.
-import GHC.IO.Handle.FD (handleToFd)
-#endif
-
-##if !defined(mingw32_HOST_OS)
+import System.Posix.Internals
+  ( fdGetMode )
 import System.Process.Internals
-  ( createPipe )
-##endif
-
-import GHC.IO.Handle (hClose)
+  ( createPipeFd )
+#endif
 
 --------------------------------------------------------------------------------
 -- Communication handles.
 
--- | A 'CommunicationHandle' is an operating-system specific representation
--- of a 'Handle' that can be communicated through a command-line interface.
+-- | A 'CommunicationHandle' is an abstraction over operating-system specific
+-- internal representation of a 'Handle', which can be communicated through a
+-- command-line interface.
 --
 -- In a typical use case, the parent process creates a pipe, using e.g.
 -- 'createWeReadTheyWritePipe' or 'createTheyReadWeWritePipe'.
@@ -120,10 +129,10 @@ instance Read CommunicationHandle where
 -- | Internal function used to define 'openCommunicationHandleRead' and
 -- openCommunicationHandleWrite.
 useCommunicationHandle :: Bool -> CommunicationHandle -> IO Handle
-useCommunicationHandle wantToRead (CommunicationHandle ch) = do
+useCommunicationHandle _wantToRead (CommunicationHandle ch) = do
 ##if defined(__IO_MANAGER_WINIO__)
   return ()
-    <!> associateHandleWithFallback wantToRead ch
+    <!> associateHandleWithFallback _wantToRead ch
 ##endif
   getGhcHandle ch
 
@@ -199,7 +208,26 @@ getGhcHandleNative hwnd =
 ##  endif
 #else
 getGhcHandle :: Fd -> IO Handle
-getGhcHandle fd = fdToHandle fd
+getGhcHandle (Fd fdint) = do
+  iomode <- fdGetMode fdint
+  (fd0, _) <- mkFD fdint iomode Nothing False True
+  -- The following copies over 'mkHandleFromFDNoFinalizer'
+  fd <- setNonBlockingMode fd0 True
+  let fd_str = "<file descriptor: " ++ show fd ++ ">"
+#  if MIN_VERSION_base(4,16,0)
+  mkFileHandleNoFinalizer fd fd_str iomode Nothing noNewlineTranslation
+#  else
+  mkHandle fd fd_str (ioModeToHandleType iomode) True Nothing noNewlineTranslation
+    Nothing Nothing
+
+ioModeToHandleType :: IOMode -> HandleType
+ioModeToHandleType mode =
+  case mode of
+    ReadMode      -> ReadHandle
+    WriteMode     -> WriteHandle
+    ReadWriteMode -> ReadWriteHandle
+    AppendMode    -> AppendHandle
+#  endif
 #endif
 
 --------------------------------------------------------------------------------
@@ -207,21 +235,40 @@ getGhcHandle fd = fdToHandle fd
 
 -- | Internal helper function used to define 'createWeReadTheyWritePipe'
 -- and 'createTheyReadWeWritePipe' while reducing code duplication.
+--
+-- The returned 'Handle' does not have any finalizers attached to it;
+-- use 'hClose' to close it.
 createCommunicationPipe
   :: ( forall a. (a, a) -> (a, a) )
     -- ^ 'id' (we read, they write) or 'swap' (they read, we write)
   -> Bool -- ^ whether to pass a handle supporting asynchronous I/O to the child process
           -- (this flag only has an effect on Windows and when using WinIO)
   -> IO (Handle, CommunicationHandle)
-createCommunicationPipe swapIfTheyReadWeWrite passAsyncHandleToChild = do
+createCommunicationPipe swapIfTheyReadWeWrite _passAsyncHandleToChild = do
 ##if !defined(mingw32_HOST_OS)
-  (ourHandle, theirHandle) <- swapIfTheyReadWeWrite <$> createPipe
+  -- NB: it's important to use 'createPipeFd' here.
+  --
+  -- Were we to instead use 'createPipe', we would create a Handle for both pipe
+  -- ends, including the end we pass to the child.
+  -- Such Handle would have a finalizer which closes the underlying file descriptor.
+  -- However, we will already close the FD after it is inherited by the child.
+  -- This could lead to the following scenario:
+  --
+  --  - the parent creates a new pipe, e.g. pipe2([7,8]),
+  --  - the parent spawns a child process, and lets FD 8 be inherited by the child,
+  --  - the parent closes FD 8,
+  --  - the parent opens FD 8 for some other purpose, e.g. for writing to a file,
+  --  - the finalizer for the Handle wrapping FD 8 runs, closing FD 8, even though
+  --    it is now in use for a completely different purpose.
+  (ourFd, theirFd) <- swapIfTheyReadWeWrite <$> createPipeFd
   -- Don't allow the child process to inherit a parent file descriptor
   -- (such inheritance happens by default on Unix).
-  ourFD   <- Fd . fdFD <$> handleToFd ourHandle
-  setFdOption ourFD CloseOnExec True
-  theirFD <- Fd . fdFD <$> handleToFd theirHandle
-  return (ourHandle, CommunicationHandle theirFD)
+  setFdOption (Fd ourFd) CloseOnExec True
+  -- NB: we will be closing this handle manually, so don't use 'handleFromFd'
+  -- which attaches a finalizer that closes the FD. See the above comment
+  -- about 'createPipeFd'.
+  ourHandle <- getGhcHandle (Fd ourFd)
+  return (ourHandle, CommunicationHandle $ Fd theirFd)
 ##else
   trueForWinIO <-
     return False
@@ -236,8 +283,8 @@ createCommunicationPipe swapIfTheyReadWeWrite passAsyncHandleToChild = do
           --  - make the parent pipe end overlapped,
           --  - make the child end overlapped if requested,
           -- Otherwise: make both pipe ends synchronous.
-          overlappedRead  = trueForWinIO && ( passAsyncHandleToChild || not inheritRead  )
-          overlappedWrite = trueForWinIO && ( passAsyncHandleToChild || not inheritWrite )
+          overlappedRead  = trueForWinIO && ( _passAsyncHandleToChild || not inheritRead  )
+          overlappedWrite = trueForWinIO && ( _passAsyncHandleToChild || not inheritWrite )
       throwErrnoIf_ (==False) "mkNamedPipe" $
         mkNamedPipe
           pfdStdInput  inheritRead  overlappedRead
