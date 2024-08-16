@@ -1,5 +1,10 @@
 # Changelog for [`process` package](http://hackage.haskell.org/package/process)
 
+## 1.6.22.0 *August 2024*
+
+* Allow NUL to appear in arguments under POSIX. See
+  https://github.com/haskell/process/pull/320.  Thanks to @mmhat.
+
 ## 1.6.21.0 *July 2024*
 
 * No longer attach finalizers to `Handle`s created by the
