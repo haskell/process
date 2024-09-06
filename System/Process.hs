@@ -57,6 +57,9 @@ module System.Process (
     getPid,
     getCurrentPid,
 
+    -- ** Secure process creation on Windows
+    -- $windows-mitigations
+
     -- ** Control-C handling on Unix
     -- $ctlc-handling
 
@@ -378,6 +381,39 @@ processFailedException fun cmd args exit_code =
                                      " (exit " ++ show exit_code ++ ")")
                                  Nothing Nothing)
 
+
+-- ----------------------------------------------------------------------------
+-- Secure process creation on Windows
+
+-- $windows-migitations
+--
+-- In general it is strongly advised that any untrusted user input be validated before
+-- being passed to a subprocess. One must be especially careful on Windows due to the
+-- crude nature of the platform's argument passing scheme. Specifically, unlike POSIX
+-- platforms, Windows treats the command-line not as a sequence of arguments but rather
+-- as a single string. It is therefore the responsibility of the called process to tokenize
+-- this string into distinct arguments.
+--
+-- While various programs on Windows tend to differ in their precise argument splitting
+-- behavior, the scheme used by @process@'s 'RawCommand' 'CmdSpec' should work for
+-- most reasonable programs. If you find that 'RawCommand' doesn't provide
+-- the behavior you need, it is recommended to instead compose your command-line
+-- manually and rather using the 'shell' 'CmdSpec'.
+--
+-- Additionally, the idiosyncratic escaping and string interpolation behavior of
+-- the Windows @cmd.exe@ command interpreter is known to introduce considerable
+-- complication to secure process creation. For this reason, @process@ implements
+-- specific argument escaping logic when the executable's file extension suggests
+-- that it is a batch file (e.g. @.bat@ or @.cmd@). However, this is not a
+-- completely reliable mitigation as Windows will also silently execute batch files
+-- when starting executables lacking a file extension (e.g. @callProcess "hello" []@
+-- when a @hello.bat@ is present in @PATH@). For this reason, users are encouraged to
+-- specify the file extension of invoked executables where possible, especially
+-- when untrusted input is involved.
+--
+-- Users passed untrusted input to subprocesses on Windows are encouraged to review
+-- <https://flatt.tech/research/posts/batbadbut-you-cant-securely-execute-commands-on-windows/>
+-- for guidance on how to safely navigate these waters.
 
 -- ----------------------------------------------------------------------------
 -- Control-C handling on Unix
