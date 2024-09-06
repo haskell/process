@@ -5,6 +5,10 @@
 * Fix command-line escaping logic on Windows when the command file ends with
   a space or a dot. This is a follow-up for
   [HSEC-2024-0003](https://github.com/haskell/security-advisories/tree/main/advisories/hackage/process/HSEC-2024-0003.md).
+* Migitate another manifestation of the BatBadBut vulnerability via
+  unescaped `%` expansions. This is another follow-up for 
+  [HSEC-2024-0003](https://github.com/haskell/security-advisories/tree/main/advisories/hackage/process/HSEC-2024-0003.md).
+  ([#313](https://github.com/haskell/process/issues/313))
 
 ## 1.6.22.0 *August 2024*
 
