@@ -1,5 +1,9 @@
 # Changelog for [`process` package](http://hackage.haskell.org/package/process)
 
+## 1.6.24.0 *September 2024*
+
+* Fix detection of `posix_spawn_file_actions_addchdir[_np]` ([#303](https://github.com/haskell/process/issues/303))
+
 ## 1.6.23.0 *September 2024*
 
 * Fix command-line escaping logic on Windows when the command file ends with
