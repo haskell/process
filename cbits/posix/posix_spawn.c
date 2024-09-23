@@ -1,3 +1,7 @@
+// Necessary for POSIX_SPAWN_SETSID and posix_spawn_file_actions_addchdir_np under glibc.
+// Moreover this needs to appear before any glibc headers.
+#define _GNU_SOURCE
+
 #include "runProcess.h"
 #include "common.h"
 
@@ -25,8 +29,6 @@ do_spawn_posix (char *const args[],
 
 #else
 
-// Necessary for POSIX_SPAWN_SETSID under glibc.
-#define _GNU_SOURCE
 #include <spawn.h>
 
 extern char **environ;
@@ -135,13 +137,13 @@ do_spawn_posix (char *const args[],
     }
 
     if (workingDirectory) {
-#if defined(HAVE_posix_spawn_file_actions_addchdir)
+#if defined(HAVE_POSIX_SPAWN_FILE_ACTIONS_ADDCHDIR)
         r = posix_spawn_file_actions_addchdir(&fa, workingDirectory);
         if (r != 0) {
             *failed_doing = "posix_spawn_file_actions_addchdir";
             goto fail;
         }
-#elif defined(HAVE_posix_spawn_file_actions_addchdir_np)
+#elif defined(HAVE_POSIX_SPAWN_FILE_ACTIONS_ADDCHDIR_NP)
         // N.B. this function is broken on macOS.
         // See https://github.com/rust-lang/rust/pull/80537.
         r = posix_spawn_file_actions_addchdir_np(&fa, workingDirectory);
