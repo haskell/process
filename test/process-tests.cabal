@@ -18,7 +18,7 @@ source-repository head
 
 common process-dep
   build-depends:
-    process == 1.6.24.0
+    process == 1.6.25.0
 
 custom-setup
   setup-depends:
