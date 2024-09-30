@@ -1,5 +1,9 @@
 # Changelog for [`process` package](http://hackage.haskell.org/package/process)
 
+## 1.6.25.0 *September 2024*
+
+* Fix build with Javascript backend ([#327](https://github.com/haskell/process/issues/327))
+
 ## 1.6.24.0 *September 2024*
 
 * Fix detection of `posix_spawn_file_actions_addchdir[_np]` ([#303](https://github.com/haskell/process/issues/303))
