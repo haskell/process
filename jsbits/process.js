@@ -86,7 +86,9 @@ function h$process_pipeFd(pipe, write) {
             TRACE_PROCESS("pipe ", fd, " write:", n);
             if(fdo.err) {
                 TRACE_PROCESS("pipe error", fdo.err);
+#ifndef GHCJS_BROWSER
                 h$setErrno(fdo.err);
+#endif
                 c(-1);
                 return;
             }
@@ -159,7 +161,9 @@ function h$process_process_pipe(fd, pipe) {
     if(!q || !q.length() || c.processing) return;
     c.processing = true;
     while(fd.err && q.length()) {
+#ifndef GHCJS_BROWSER
         h$setErrno(fd.err);
+#endif
         q.dequeue().c(-1);
     }
     if(!c.buf) {
@@ -222,7 +226,7 @@ function h$process_runInteractiveProcess(
     TRACE_PROCESS("cmd: ", cmd, " args: ", args);
     TRACE_PROCESS("workingDir: ", workingDir, " env: ", env);
     TRACE_PROCESS("stdin", stdin_fd, "stdout", stdout_fd, "stderr", stderr_fd);
-
+#ifndef GHCJS_BROWSER
     if(h$isNode()) {
         try {
             var stdin_p, stdout_p, stderr_p;
@@ -390,9 +394,9 @@ function h$process_runInteractiveProcess(
             h$setErrno(e);
             c(null);
         }
-    } else { // h$isNode
+    } else // h$isNode
+#endif
         h$unsupported(null, c);
-    }
 }
 
 /*
@@ -404,6 +408,7 @@ function h$process_runInteractiveProcess(
               in an interpreter.
  */
 function h$process_commandToProcess(cmd, args) {
+#ifndef GHCJS_BROWSER
     if(h$isNode()) {
         TRACE_PROCESS("commandToProcess: ", cmd, args);
         if(process.platform === 'win32') {
@@ -436,21 +441,22 @@ function h$process_commandToProcess(cmd, args) {
                 return r;
             }
         }
-    } else {
+    } else
+#endif
         return h$unsupported(null);
-    }
 }
 /*
   Send the SIGTERM signal to the child process
  */
 function h$process_terminateProcess(ph) {
     TRACE_PROCESS("terminateProcess", ph);
+#ifndef GHCJS_BROWSER
     if(h$isNode()) {
         ph.child.kill();
         return 0;
-    } else {
+    } else
+#endif
         return h$unsupported(1);
-    }
 }
 
 /*
@@ -471,6 +477,7 @@ function h$process_getProcessExitCode(ph, code_d, code_o) {
  */
 function h$process_waitForProcess(ph, code_d, code_o, c) {
     TRACE_PROCESS("waitForProcess", ph);
+#ifndef GHCJS_BROWSER
     if(h$isNode()) {
         if(ph.exit !== null) {
             h$process_getProcessExitCode(ph, code_d, code_o);
@@ -481,21 +488,22 @@ function h$process_waitForProcess(ph, code_d, code_o, c) {
 		        c(0);
 	        });
         }
-    } else {
+    } else
+#endif
         h$unsupported(-1, c);
-    }
 }
 
 function h$process_interruptProcessGroupOf(ph) {
     TRACE_PROCESS("interruptProcessGroupOf", ph);
+#ifndef GHCJS_BROWSER
     if(h$isNode()) {
         // there doesn't appear to be a way to find the process
         // group id from a process id (ph.child.pid) on nodejs,
         // so this operation is unsupported.
         return h$unsupported(-1);
-    } else {
+    } else
+#endif
         return h$unsupported(-1);
-    }
 }
 
 var h$process_delegateControlCCount = 0;
@@ -518,6 +526,7 @@ function h$process_ignoreSIG() {
  */
 function h$process_startDelegateControlC() {
     TRACE_PROCESS("startDelegateControlC", h$process_delegateControlCCount);
+#ifndef GHCJS_BROWSER
     if(h$isNode()) {
         if(h$process_delegateControlCCount === 0) {
             TRACE_PROCESS("startDelegateControlC: installing handler")
@@ -527,9 +536,9 @@ function h$process_startDelegateControlC() {
         }
         h$process_delegateControlCCount++;
         return 0;
-    } else {
+    } else
+#endif
         return h$unsupported(-1);
-    }
 }
 
 /*
@@ -538,6 +547,7 @@ function h$process_startDelegateControlC() {
  */
 function h$process_stopDelegateControlC() {
     TRACE_PROCESS("stopDelegateControlC", h$process_delegateControlCCount);
+#ifndef GHCJS_BROWSER
     if(h$isNode()) {
         if(h$process_delegateControlCCount > 0) {
             h$process_delegateControlCCount--;
@@ -548,9 +558,9 @@ function h$process_stopDelegateControlC() {
             }
         }
         return 0;
-    } else {
+    } else
+#endif
         return h$unsupported(-1);
-    }
 }
 
 /*
@@ -558,11 +568,12 @@ function h$process_stopDelegateControlC() {
  */
 function h$process_getCurrentProcessId() {
     TRACE_PROCESS("getCurrentProcessId");
+#ifndef GHCJS_BROWSER
     if(h$isNode()) {
         return process.pid;
-    } else {
+    } else
+#endif
         return h$unsupported(-1);
-    }
 }
 
 /*
@@ -575,7 +586,9 @@ function h$process_getProcessId(ph) {
        typeof ph.child.pid == 'number') {
         return ph.child.pid;
     } else {
+#ifndef GHCJS_BROWSER
         h$setErrno('EBADF');
+#endif
         return -1;
     }
 }
