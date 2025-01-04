@@ -21,3 +21,6 @@ tests/exitminus1
 tests/exitminus1.o
 tests/foo1.txt
 tests/foo2.txt
+
+# IDEs
+.vscode
