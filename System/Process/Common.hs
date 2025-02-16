@@ -97,7 +97,8 @@ data CreateProcess = CreateProcess{
   std_in       :: StdStream,               -- ^ How to determine stdin
   std_out      :: StdStream,               -- ^ How to determine stdout
   std_err      :: StdStream,               -- ^ How to determine stderr
-  close_fds    :: Bool,                    -- ^ Close all file descriptors except stdin, stdout and stderr in the new process (on Windows, only works if std_in, std_out, and std_err are all Inherit). This implementation will call close on every fd from 3 to the maximum of open files, which can be slow for high maximum of open files. XXX verify what happens with fds in nodejs child processes
+  -- XXX verify what happens with fds in nodejs child processes
+  close_fds    :: Bool,                    -- ^ Close all file descriptors except stdin, stdout and stderr in the new process (on Windows, only works if std_in, std_out, and std_err are all Inherit). This implementation will call close on every fd from 3 to the maximum of open files, which can be slow for high maximum of open files.
   create_group :: Bool,                    -- ^ Create a new process group. On JavaScript this also creates a new session.
   delegate_ctlc:: Bool,                    -- ^ Delegate control-C handling. Use this for interactive console processes to let them handle control-C themselves (see below for details).
                                            --
