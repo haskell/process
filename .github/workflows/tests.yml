@@ -29,15 +29,8 @@ jobs:
           - '8.10'
           - '8.8'
           - '8.6'
-          - '8.4'
-          - '8.2'
 
         exclude:
-          # Exclude GHC 8.2 on Windows (GHC bug: undefined reference to `__stdio_common_vswprintf_s')
-          - platform:
-              os: windows-latest
-            ghc-version: '8.2'
-
           # Only allow ARM jobs with GHC >= 9.2
           # (It's tedious to not be able to use matrix.ghc-version >= 9.2 as a conditional here.)
           - platform:
@@ -52,12 +45,6 @@ jobs:
           - platform:
               arch: arm
             ghc-version: '8.6'
-          - platform:
-              arch: arm
-            ghc-version: '8.4'
-          - platform:
-              arch: arm
-            ghc-version: '8.2'
 
     steps:
       - uses: actions/checkout@v4

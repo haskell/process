@@ -41,6 +41,11 @@ source-repository head
     type:     git
     location: https://github.com/haskell/process.git
 
+flag os-string
+    description: Use the new os-string package
+    default: False
+    manual: False
+
 library
     default-language: Haskell2010
     other-extensions:
@@ -56,19 +61,20 @@ library
         System.Process
         System.Process.CommunicationHandle
         System.Process.CommunicationHandle.Internal
+        System.Process.Environment.OsString
         System.Process.Internals
     other-modules: System.Process.Common
     if os(windows)
         c-sources:
             cbits/win32/runProcess.c
         other-modules: System.Process.Windows
-        build-depends: Win32 >=2.4 && < 2.15
+        build-depends: Win32 >= 2.14.1.0 && < 2.15
         -- ole32 and rpcrt4 are needed to create GUIDs for unique named pipes
         -- for process.
         extra-libraries: kernel32, ole32, rpcrt4
         cpp-options: -DWINDOWS
     else
-        build-depends: unix >= 2.5 && < 2.9
+        build-depends: unix >= 2.8.0.0 && < 2.9
         if arch(javascript)
             js-sources:
                 jsbits/process.js
@@ -88,7 +94,12 @@ library
 
     ghc-options: -Wall
 
-    build-depends: base      >= 4.10 && < 4.22,
+    build-depends: base      >= 4.12.0.0 && < 4.22,
                    directory >= 1.1 && < 1.4,
-                   filepath  >= 1.2 && < 1.6,
                    deepseq   >= 1.1 && < 1.6
+
+    if flag(os-string)
+        build-depends: filepath >= 1.5.0.0 && < 1.6,
+                       os-string >= 2.0.0 && < 2.1
+    else
+        build-depends: filepath >= 1.4.100.0 && < 1.5.0.0

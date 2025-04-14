@@ -1,5 +1,12 @@
 # Changelog for [`process` package](http://hackage.haskell.org/package/process)
 
+## X.Y.Z
+
+* Add `System.Process.Environment.OsString`.
+* Bumps `base >= 4.12.0.0` (GHC 8.6+), `filepath >= 1.4.100.0`,
+  `unix >= 2.8.0.0`, and `Win32 >= 2.14.1.0`.
+* Drops support for GHC < 8.6.
+
 ## 1.6.25.0 *September 2024*
 
 * Fix build with Javascript backend ([#327](https://github.com/haskell/process/issues/327))
