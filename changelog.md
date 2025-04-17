@@ -1,6 +1,6 @@
 # Changelog for [`process` package](http://hackage.haskell.org/package/process)
 
-## X.Y.Z
+## 1.6.26.0 *April 2025*
 
 * Add `System.Process.Environment.OsString`.
 * Bumps `base >= 4.12.0.0` (GHC 8.6+), `filepath >= 1.4.100.0`,
