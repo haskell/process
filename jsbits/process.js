@@ -90,7 +90,7 @@ function h$process_pipeFd(pipe, write) {
                 c(-1);
                 return;
             }
-            var nbuf = buf.u8.slice(buf_offset, buf_offset+n);
+            var nbuf = new Uint8Array(buf.u8.buffer, buf_offset, n);
             var r = pipe.write(nbuf, function() {
                 TRACE_PROCESS("pipe", fd, "flushed");
                 c(n);
