@@ -1,5 +1,9 @@
 # Changelog for [`process` package](http://hackage.haskell.org/package/process)
 
+## 1.6.26.1 *May 2025*
+
+* Regenerate `configure` script (#343)
+
 ## 1.6.26.0 *April 2025*
 
 * Add `System.Process.Environment.OsString`.
