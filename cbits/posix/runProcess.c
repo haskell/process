@@ -7,8 +7,6 @@
 #include "runProcess.h"
 #include "common.h"
 
-#if defined(HAVE_FORK)
-
 #include <unistd.h>
 #include <errno.h>
 #include <sys/wait.h>
@@ -70,6 +68,7 @@ do_spawn (char *const args[],
         return r;
     }
 
+#if defined(HAVE_FORK)
     r = do_spawn_fork(args,
                       workingDirectory, environment,
                       stdInHdl, stdOutHdl, stdErrHdl,
@@ -77,6 +76,11 @@ do_spawn (char *const args[],
                       flags,
                       failed_doing);
     return r;
+#else
+    *failed_doing = "fork";
+    return -1;
+#endif
+
 }
 
 enum pipe_direction {
@@ -267,5 +271,3 @@ waitForProcess (ProcHandle handle, int *pret)
 
     return -1;
 }
-
-#endif // HAVE_FORK
