@@ -30,6 +30,7 @@ char *find_executable(char *workingDirectory, char *filename);
 #endif
 
 // defined in fork_exec.c
+#if defined(HAVE_FORK)
 ProcHandle
 do_spawn_fork (char *const args[],
                char *workingDirectory, char **environment,
@@ -39,6 +40,7 @@ do_spawn_fork (char *const args[],
                gid_t *childGroup, uid_t *childUser,
                int flags,
                char **failed_doing);
+#endif
 
 // defined in posix_spawn.c
 ProcHandle
