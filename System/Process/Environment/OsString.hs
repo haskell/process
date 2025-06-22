@@ -3,7 +3,7 @@
 
 -- | Miscellaneous information about the system environment, for 'OsString'.
 --
--- @since X.Y.Z
+-- @since 1.6.26.0
 module System.Process.Environment.OsString (
     getArgs,
     getEnv,
@@ -24,18 +24,18 @@ import qualified System.Posix.Env.PosixString as Platform
 
 -- | 'System.Environment.getArgs' for 'OsString'.
 --
--- @since X.Y.Z
+-- @since 1.6.26.0
 getArgs :: IO [OsString]
 getArgs = coerce Platform.getArgs
 
 -- | 'System.Environment.getEnv' for 'OsString'.
 --
--- @since X.Y.Z
+-- @since 1.6.26.0
 getEnv :: OsString -> IO (Maybe OsString)
 getEnv = coerce Platform.getEnv
 
 -- | 'System.Environment.getEnvironment' for 'OsString'.
 --
--- @since X.Y.Z
+-- @since 1.6.26.0
 getEnvironment :: IO [(OsString, OsString)]
 getEnvironment = coerce Platform.getEnvironment
