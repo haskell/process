@@ -94,7 +94,7 @@ library
 
     ghc-options: -Wall
 
-    build-depends: base      >= 4.12.0.0 && < 4.22,
+    build-depends: base      >= 4.12.0.0 && < 4.23,
                    directory >= 1.1 && < 1.4,
                    deepseq   >= 1.1 && < 1.6
 
