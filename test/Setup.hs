@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# OPTIONS_GHC -Wall #-}
 
 module Main (main) where
@@ -31,6 +32,10 @@ import Distribution.Types.TargetInfo
   ( targetComponent )
 import Distribution.Types.UnqualComponentName
   ( unUnqualComponentName )
+#if MIN_VERSION_Cabal(3,16,0)
+import Distribution.Utils.Path
+  ( SymbolicPathX, interpretSymbolicPathCWD)
+#endif
 
 -- directory
 import System.Directory
@@ -45,6 +50,15 @@ import System.FilePath
 main :: IO ()
 main = defaultMainWithHooks testProcessHooks
 
+#if MIN_VERSION_Cabal(3,16,0)
+pathToString ::
+  SymbolicPathX allowAbsolute from to -> String
+pathToString = interpretSymbolicPathCWD
+#else
+pathToString :: String -> String
+pathToString = id
+#endif
+
 -- The following code works around Cabal bug #9854.
 --
 -- The process-tests package has an executable component named "cli-child",
@@ -57,7 +71,7 @@ testProcessHooks =
   simpleUserHooks
     { buildHook = \ pd lbi userHooks buildFlags ->
         withTestLBI pd lbi $ \ _testSuite clbi -> do
-          let pathsFile = autogenComponentModulesDir lbi clbi </> "Test" </> "Paths" <.> "hs"
+          let pathsFile = pathToString (autogenComponentModulesDir lbi clbi) </> "Test" </> "Paths" <.> "hs"
           createDirectoryIfMissing True (takeDirectory pathsFile)
           writeFile pathsFile $ unlines
             [ "module Test.Paths where"
@@ -74,6 +88,6 @@ processInternalExes pd lbi =
   , CExe exe <- [targetComponent tgt]
   , let toolName = unUnqualComponentName $ exeName exe
         toolLocation =
-          buildDir lbi
+          pathToString (buildDir lbi)
             </> (toolName </> toolName <.> exeExtension (hostPlatform lbi))
   ]
