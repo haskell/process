@@ -1,7 +1,8 @@
 # Changelog for [`process` package](http://hackage.haskell.org/package/process)
 
-## 1.6.26.2 *March 2026*
+## 1.6.27.0 *March 2026*
 
+* Support being configured without fork
 * Fix `@since` annotations
 
 ## 1.6.26.1 *May 2025*
