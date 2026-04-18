@@ -375,7 +375,7 @@ callCommand cmd = do
                    waitForProcess p
     case exit_code of
       ExitSuccess   -> return ()
-      ExitFailure r -> processFailedException "callCommand" cmd [] r
+      ExitFailure r -> processFailed "callCommand" (cmdspec command) r
 
 processFailed :: String -> CmdSpec -> Int -> IO a
 processFailed fun = \ case
