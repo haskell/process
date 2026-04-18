@@ -574,12 +574,14 @@ readCreateProcess cp input = do
 
     case ex of
      ExitSuccess   -> return output
-     ExitFailure r -> processFailedException fun cmd args r
+     ExitFailure r -> processFailed r
   where
     fun = "readCreateProcess"
-    (cmd, args) = case cp of
-            CreateProcess { cmdspec = ShellCommand sc } -> (sc, [])
-            CreateProcess { cmdspec = RawCommand fp args' } -> (fp, args')
+    processFailed = case cp of
+            CreateProcess { cmdspec = ShellCommand sc } ->
+              processFailedException fun sc []
+            CreateProcess { cmdspec = RawCommand fp args' } ->
+              processFailedException fun fp args'
 
 
 -- | @readProcessWithExitCode@ is like 'readProcess' but with two differences:
