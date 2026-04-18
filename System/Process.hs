@@ -349,7 +349,7 @@ spawnCommand cmd = do
 --
 -- @since 1.2.0.0
 callProcess :: FilePath -> [String] -> IO ()
-callProcess cmd args = callCreateProcess_ "callProcess" (proc cmd args)
+callProcess cmd = callCreateProcess_ "callProcess" . proc cmd
 
 -- | Creates a new process to run the specified shell command.  If the
 -- command returns a non-zero exit code, an exception is raised.
