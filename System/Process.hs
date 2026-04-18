@@ -356,7 +356,7 @@ callProcess cmd args = do
                    waitForProcess p
     case exit_code of
       ExitSuccess   -> return ()
-      ExitFailure r -> processFailedException "callProcess" cmd args r
+      ExitFailure r -> processFailed "callProcess" (cmdspec command) r
 
 -- | Creates a new process to run the specified shell command.  If the
 -- command returns a non-zero exit code, an exception is raised.
