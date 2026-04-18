@@ -363,8 +363,7 @@ callProcess cmd args = do
 -- @since 1.2.0.0
 callCommand :: String -> IO ()
 callCommand cmd = do
-    let command = shell cmd
-    callCreateProcess_ "callCommand" command
+    callCreateProcess_ "callCommand" (shell cmd)
 
 callCreateProcess_ :: String -> CreateProcess -> IO ()
 callCreateProcess_ fun command = do
