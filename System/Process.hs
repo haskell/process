@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP, ForeignFunctionInterface #-}
+{-# LANGUAGE LambdaCase #-}
 #if __GLASGOW_HASKELL__ >= 709
 {-# LANGUAGE Safe #-}
 #else
@@ -374,6 +375,11 @@ callCommand cmd = do
       ExitSuccess   -> return ()
       ExitFailure r -> processFailedException "callCommand" cmd [] r
 
+processFailed :: String -> CmdSpec -> Int -> IO a
+processFailed fun = \ case
+    ShellCommand cmd -> processFailedException fun cmd []
+    RawCommand cmd args -> processFailedException fun cmd args
+
 processFailedException :: String -> String -> [String] -> Int -> IO a
 processFailedException fun cmd args exit_code =
       ioError (mkIOError OtherError (fun ++ ": " ++ cmd ++
@@ -574,14 +580,9 @@ readCreateProcess cp input = do
 
     case ex of
      ExitSuccess   -> return output
-     ExitFailure r -> processFailed r
+     ExitFailure r -> processFailed fun (cmdspec cp) r
   where
     fun = "readCreateProcess"
-    processFailed = case cp of
-            CreateProcess { cmdspec = ShellCommand sc } ->
-              processFailedException fun sc []
-            CreateProcess { cmdspec = RawCommand fp args' } ->
-              processFailedException fun fp args'
 
 
 -- | @readProcessWithExitCode@ is like 'readProcess' but with two differences:
