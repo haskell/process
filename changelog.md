@@ -1,5 +1,8 @@
 # Changelog for [`process` package](http://hackage.haskell.org/package/process)
 
+## next
+* Add `callCreateProcess`
+
 ## 1.6.27.0 *March 2026*
 
 * Support being configured without fork

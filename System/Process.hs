@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP, ForeignFunctionInterface #-}
+{-# LANGUAGE LambdaCase #-}
 #if __GLASGOW_HASKELL__ >= 709
 {-# LANGUAGE Safe #-}
 #else
@@ -40,6 +41,7 @@ module System.Process (
     ProcessHandle,
 
     -- ** Simpler functions for common tasks
+    callCreateProcess,
     callProcess,
     callCommand,
     spawnProcess,
@@ -337,42 +339,46 @@ spawnCommand cmd = do
 -- ----------------------------------------------------------------------------
 -- callProcess/callCommand
 
--- | Creates a new process to run the specified command with the given
--- arguments, and wait for it to finish.  If the command returns a non-zero
--- exit code, an exception is raised.
+-- | Creates a new process from the provided `CreateProcess`, and wait for it
+-- to finish.  If the process returns a non-zero exit code, an exception is
+-- raised.
 --
 -- If an asynchronous exception is thrown to the thread executing
--- @callProcess@, the forked process will be terminated and
--- @callProcess@ will wait (block) until the process has been
+-- @callCreateProcess@, the forked process will be terminated and
+-- @callCreateProcess@ will wait (block) until the process has been
 -- terminated.
+--
+-- @since TODO
+callCreateProcess :: CreateProcess -> IO ()
+callCreateProcess = callCreateProcess_ "callCreateProcess"
+
+-- | \"@callProcess cmd args@\" is a shorthand for
+-- \"@'callCreateProcess' ('proc' cmd args)@\".
 --
 -- @since 1.2.0.0
 callProcess :: FilePath -> [String] -> IO ()
-callProcess cmd args = do
-    exit_code <- withCreateProcess_ "callProcess"
-                   (proc cmd args) { delegate_ctlc = True } $ \_ _ _ p ->
-                   waitForProcess p
-    case exit_code of
-      ExitSuccess   -> return ()
-      ExitFailure r -> processFailedException "callProcess" cmd args r
+callProcess cmd = callCreateProcess_ "callProcess" . proc cmd
 
--- | Creates a new process to run the specified shell command.  If the
--- command returns a non-zero exit code, an exception is raised.
---
--- If an asynchronous exception is thrown to the thread executing
--- @callCommand@, the forked process will be terminated and
--- @callCommand@ will wait (block) until the process has been
--- terminated.
+-- | \"@callCommand cmd@\" is a shorthand for \"@'callCreateProcess'
+-- ('shell' cmd)@\".
 --
 -- @since 1.2.0.0
 callCommand :: String -> IO ()
-callCommand cmd = do
-    exit_code <- withCreateProcess_ "callCommand"
-                   (shell cmd) { delegate_ctlc = True } $ \_ _ _ p ->
+callCommand = callCreateProcess_ "callCommand" . shell
+
+callCreateProcess_ :: String -> CreateProcess -> IO ()
+callCreateProcess_ fun command = do
+    exit_code <- withCreateProcess_ fun
+                   command { delegate_ctlc = True } $ \_ _ _ p ->
                    waitForProcess p
     case exit_code of
       ExitSuccess   -> return ()
-      ExitFailure r -> processFailedException "callCommand" cmd [] r
+      ExitFailure r -> processFailed fun (cmdspec command) r
+
+processFailed :: String -> CmdSpec -> Int -> IO a
+processFailed fun = \ case
+    ShellCommand cmd -> processFailedException fun cmd []
+    RawCommand cmd args -> processFailedException fun cmd args
 
 processFailedException :: String -> String -> [String] -> Int -> IO a
 processFailedException fun cmd args exit_code =
@@ -574,14 +580,7 @@ readCreateProcess cp input = do
 
     case ex of
      ExitSuccess   -> return output
-     ExitFailure r -> processFailedException "readCreateProcess" cmd args r
-  where
-    cmd = case cp of
-            CreateProcess { cmdspec = ShellCommand sc } -> sc
-            CreateProcess { cmdspec = RawCommand fp _ } -> fp
-    args = case cp of
-             CreateProcess { cmdspec = ShellCommand _ } -> []
-             CreateProcess { cmdspec = RawCommand _ args' } -> args'
+     ExitFailure r -> processFailed "readCreateProcess" (cmdspec cp) r
 
 
 -- | @readProcessWithExitCode@ is like 'readProcess' but with two differences:
