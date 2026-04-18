@@ -368,8 +368,9 @@ callProcess cmd args = do
 -- @since 1.2.0.0
 callCommand :: String -> IO ()
 callCommand cmd = do
+    let command = shell cmd
     exit_code <- withCreateProcess_ "callCommand"
-                   (shell cmd) { delegate_ctlc = True } $ \_ _ _ p ->
+                   command { delegate_ctlc = True } $ \_ _ _ p ->
                    waitForProcess p
     case exit_code of
       ExitSuccess   -> return ()
