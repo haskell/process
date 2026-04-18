@@ -362,8 +362,7 @@ callProcess cmd args = do
 --
 -- @since 1.2.0.0
 callCommand :: String -> IO ()
-callCommand cmd = do
-    callCreateProcess_ "callCommand" (shell cmd)
+callCommand cmd = callCreateProcess_ "callCommand" (shell cmd)
 
 callCreateProcess_ :: String -> CreateProcess -> IO ()
 callCreateProcess_ fun command = do
