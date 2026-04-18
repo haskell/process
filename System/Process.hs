@@ -32,24 +32,57 @@
 
 module System.Process (
     -- * Running sub-processes
+
+    -- ** General interface to process creation
+
+    -- | @createProcess@ and @createProcess_@ are general interfaces
+    -- to process creation. To start with might instead want to use
+    -- one of the [simpler process creation functions](#g:simpler)
+    -- below.
+
     createProcess,
     createProcess_,
+
+    -- ** Creating a @CreateProcess@
+
+    -- | Once you have a @CreateProcess@ you can launch it with
+    -- 'createProcess' or one of the [simpler process creation
+    -- functions](#g:simpler).
+
     shell, proc,
+
+    -- ** @CreateProcess@ and associated types
+
     CreateProcess(..),
     CmdSpec(..),
     StdStream(..),
     ProcessHandle,
 
-    -- ** Simpler functions for common tasks
+    -- * Simpler functions for common tasks #simpler#
+
+    -- ** Call, the simplest way of launching a process
+
     callCreateProcess,
     callProcess,
     callCommand,
+
+    -- ** Spawn, obtaining a @ProcessHandle@
+
     spawnProcess,
     spawnCommand,
+
+    -- ** Read, passing @stdin@ and obtaining @stdout@
+
     readCreateProcess,
     readProcess,
+
+    -- ** Read with exit code, passing @stdin@, obtaining exit code, @stdout@ and @stderr@
+
     readCreateProcessWithExitCode,
     readProcessWithExitCode,
+
+    -- ** Other
+
     withCreateProcess,
     cleanupProcess,
 
