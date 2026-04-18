@@ -574,8 +574,9 @@ readCreateProcess cp input = do
 
     case ex of
      ExitSuccess   -> return output
-     ExitFailure r -> processFailedException "readCreateProcess" cmd args r
+     ExitFailure r -> processFailedException fun cmd args r
   where
+    fun = "readCreateProcess"
     (cmd, args) = case cp of
             CreateProcess { cmdspec = ShellCommand sc } -> (sc, [])
             CreateProcess { cmdspec = RawCommand fp args' } -> (fp, args')
