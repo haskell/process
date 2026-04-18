@@ -1,6 +1,7 @@
 # Changelog for [`process` package](http://hackage.haskell.org/package/process)
 
-## next
+## 1.6.28.0 *April 2026*
+
 * Add `callCreateProcess`
 * Improve Haddock
 
