@@ -352,26 +352,15 @@ spawnCommand cmd = do
 callCreateProcess :: CreateProcess -> IO ()
 callCreateProcess = callCreateProcess_ "callCreateProcess"
 
--- | Creates a new process to run the specified command with the given
--- arguments, and wait for it to finish.  If the command returns a non-zero
--- exit code, an exception is raised.
---
--- If an asynchronous exception is thrown to the thread executing
--- @callProcess@, the forked process will be terminated and
--- @callProcess@ will wait (block) until the process has been
--- terminated.
+-- | \"@callProcess cmd args@\" is a shorthand for
+-- \"@'callCreateProcess' ('proc' cmd args)@\".
 --
 -- @since 1.2.0.0
 callProcess :: FilePath -> [String] -> IO ()
 callProcess cmd = callCreateProcess_ "callProcess" . proc cmd
 
--- | Creates a new process to run the specified shell command.  If the
--- command returns a non-zero exit code, an exception is raised.
---
--- If an asynchronous exception is thrown to the thread executing
--- @callCommand@, the forked process will be terminated and
--- @callCommand@ will wait (block) until the process has been
--- terminated.
+-- | \"@callCommand cmd@\" is a shorthand for \"@'callCreateProcess'
+-- ('shell' cmd)@\".
 --
 -- @since 1.2.0.0
 callCommand :: String -> IO ()
