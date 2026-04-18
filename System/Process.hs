@@ -350,8 +350,9 @@ spawnCommand cmd = do
 -- @since 1.2.0.0
 callProcess :: FilePath -> [String] -> IO ()
 callProcess cmd args = do
+    let command = proc cmd args
     exit_code <- withCreateProcess_ "callProcess"
-                   (proc cmd args) { delegate_ctlc = True } $ \_ _ _ p ->
+                   command { delegate_ctlc = True } $ \_ _ _ p ->
                    waitForProcess p
     case exit_code of
       ExitSuccess   -> return ()
