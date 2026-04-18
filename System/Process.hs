@@ -36,7 +36,7 @@ module System.Process (
     -- ** General interface to process creation
 
     -- | @createProcess@ and @createProcess_@ are general interfaces
-    -- to process creation. To start with might instead want to use
+    -- to process creation. To start with you might instead want to use
     -- one of the [simpler process creation functions](#g:simpler)
     -- below.
 
