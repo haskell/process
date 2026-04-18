@@ -351,12 +351,7 @@ spawnCommand cmd = do
 callProcess :: FilePath -> [String] -> IO ()
 callProcess cmd args = do
     let command = proc cmd args
-    exit_code <- withCreateProcess_ "callProcess"
-                   command { delegate_ctlc = True } $ \_ _ _ p ->
-                   waitForProcess p
-    case exit_code of
-      ExitSuccess   -> return ()
-      ExitFailure r -> processFailed "callProcess" (cmdspec command) r
+    callCreateProcess_ "callProcess" command
 
 -- | Creates a new process to run the specified shell command.  If the
 -- command returns a non-zero exit code, an exception is raised.
@@ -370,12 +365,16 @@ callProcess cmd args = do
 callCommand :: String -> IO ()
 callCommand cmd = do
     let command = shell cmd
-    exit_code <- withCreateProcess_ "callCommand"
+    callCreateProcess_ "callCommand" command
+
+callCreateProcess_ :: String -> CreateProcess -> IO ()
+callCreateProcess_ fun command = do
+    exit_code <- withCreateProcess_ fun
                    command { delegate_ctlc = True } $ \_ _ _ p ->
                    waitForProcess p
     case exit_code of
       ExitSuccess   -> return ()
-      ExitFailure r -> processFailed "callCommand" (cmdspec command) r
+      ExitFailure r -> processFailed fun (cmdspec command) r
 
 processFailed :: String -> CmdSpec -> Int -> IO a
 processFailed fun = \ case
