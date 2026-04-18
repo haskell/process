@@ -2,6 +2,7 @@
 
 ## next
 * Add `callCreateProcess`
+* Improve Haddock
 
 ## 1.6.27.0 *March 2026*
 
