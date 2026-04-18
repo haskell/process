@@ -580,9 +580,7 @@ readCreateProcess cp input = do
 
     case ex of
      ExitSuccess   -> return output
-     ExitFailure r -> processFailed fun (cmdspec cp) r
-  where
-    fun = "readCreateProcess"
+     ExitFailure r -> processFailed "readCreateProcess" (cmdspec cp) r
 
 
 -- | @readProcessWithExitCode@ is like 'readProcess' but with two differences:
