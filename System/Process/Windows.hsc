@@ -422,18 +422,21 @@ commandToProcess
   -> IO (FilePath, String)
 commandToProcess (ShellCommand string) = do
   cmd <- findCommandInterpreter
-  return (cmd, translateInternal cmd ++ " /c " ++ string)
-        -- We don't want to put the cmd into a single
-        -- argument, because cmd.exe will not try to split it up.  Instead,
-        -- we just tack the command on the end of the cmd.exe command line,
-        -- which partly works.  There seem to be some quoting issues, but
-        -- I don't have the energy to find+fix them right now (ToDo). --SDM
-        -- (later) Now I don't know what the above comment means.  sigh.
+  -- Note: this is a way to pass a command directly to cmd.exe. Callers are
+  -- responsible for properly quoting and sanitizing this string.
+  return (cmd, translateInternal0 cmd ++ " /c " ++ string)
 commandToProcess (RawCommand cmd args)
   | map toLower (takeWinExtension cmd) `elem` [".bat", ".cmd"]
-  = return (cmd, translateInternal cmd ++ concatMap ((' ':) . translateCmdExeArg) args)
+  = return (cmd, translateInternal0 cmd ++ concatMap ((' ':) . translateCmdExeArg) args)
   | otherwise
-  = return (cmd, translateInternal cmd ++ concatMap ((' ':) . translateInternal) args)
+  -- Note: on Windows, commands are passed as a single string of space-delimited
+  -- pieces, *not* as an executable name + list of args as on POSIX. Windows
+  -- programs can inspect this command string and parse it however they want.
+  --
+  -- However, most programs use the CommandLineToArgvW function from the Win32
+  -- API to parse their arguments. Here we escape the argument in such a way
+  -- that they'll always come through correctly with this function.
+  = return (cmd, translateInternal0 cmd ++ concatMap ((' ':) . translateInternal) args)
 
 -- TODO: filepath should also be updated with 'takeWinExtension'. Perhaps
 -- some day we can remove this logic from `process` but there is no hurry.
@@ -490,6 +493,60 @@ findCommandInterpreter = do
                                 "findCommandInterpreter" Nothing Nothing)
       Just cmd -> return cmd
 
+-- | Escape the *first* argument for Windows CreateProcess.
+-- For subsequent arguments, see 'translateInternal'.
+--
+-- The first argument is parsed differently than subsequent arguments. It must be a valid
+-- Windows path. To ensure it's escaped properly, we do two things:
+-- a) Strip out quotes from the path, since quotes are forbidden in Windows paths
+--    (see https://stackoverflow.com/a/31976060)
+-- b) If the resulting string contains any whitespace, wrap it in double quotes. Otherwise,
+--    leave it as-is.
+translateInternal0 :: String -> String
+translateInternal0 exe
+  | not (hasWhitespace exe) = exeWithoutForbiddenChars
+  | otherwise = "\"" ++ exeWithoutForbiddenChars ++ "\""
+  where
+    exeWithoutForbiddenChars = filter (not . (== '"')) exe
+
+    hasWhitespace = any (`elem` " \t")
+
+-- | Escape a single argument for Windows CreateProcess.
+-- (Not the first argument! For argv[0], see 'translateInternal0'.)
+--
+-- This follows the escaping rules described in Microsoft's documentation:
+-- https://docs.microsoft.com/en-us/windows/win32/api/shellapi/nf-shellapi-commandlinetoargvw
+translateInternal :: String -> String
+translateInternal arg
+  | not (needsQuoting arg) = arg
+  | otherwise = "\"" ++ escape arg True ++ "\""
+  where
+    -- Check if an argument needs quoting
+    needsQuoting :: String -> Bool
+    needsQuoting s = null s || any (`elem` specialChars) s
+
+    specialChars :: [Char]
+    specialChars = [' ', '\t', '"', '\'', '(', ')', '<', '>', '&', '|', '^', '%']
+
+    -- Escape the string, with a flag indicating if we're at the end
+    -- (meaning the next character would be the closing quote)
+    escape :: String -> Bool -> String
+    escape [] _ = []
+    escape ('"':xs) endsWithQuote = "\\\"" ++ escape xs endsWithQuote
+    escape xs endsWithQuote =
+      let (backslashes, rest) = span (== '\\') xs
+          bsCount = length backslashes
+      in case rest of
+          -- If backslashes are followed by a quote, they need to be doubled plus one
+          '"':rest' -> replicate (2 * bsCount + 1) '\\' ++ "\"" ++ escape rest' endsWithQuote
+
+          -- If we're at the end of the string, backslashes need to be doubled
+          [] | endsWithQuote -> replicate (2 * bsCount) '\\'
+
+          -- Otherwise, backslashes remain as is
+          [] -> replicate bsCount '\\'
+          (c:cs) -> replicate bsCount '\\' ++ c : escape cs endsWithQuote
+
 -- | Alternative regime used to escape arguments destined for scripts
 -- interpreted by @cmd.exe@, (e.g. @.bat@ and @.cmd@ files).
 --
@@ -514,18 +571,6 @@ translateCmdExeArg xs = "^\"" ++ snd (foldr escape (True,"^\"") xs)
         escape c    (_,     str)
           | c `elem` "^<>|&()"   = (False, '^' : c : str)
           | otherwise            = (False,       c : str)
-
-translateInternal :: String -> String
-translateInternal xs = '"' : snd (foldr escape (True,"\"") xs)
-  where escape '"'  (_,     str) = (True,  '\\' : '"'  : str)
-        escape '\\' (True,  str) = (True,  '\\' : '\\' : str)
-        escape '\\' (False, str) = (False, '\\' : str)
-        escape c    (_,     str) = (False, c : str)
-        -- See long comment above for what this function is trying to do.
-        --
-        -- The Bool passed back along the string is True iff the
-        -- rest of the string is a sequence of backslashes followed by
-        -- a double quote.
 
 withCEnvironment :: [(String,String)] -> (Ptr CWString -> IO a) -> IO a
 withCEnvironment envir act =
