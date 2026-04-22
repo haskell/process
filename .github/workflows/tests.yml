@@ -48,6 +48,19 @@ jobs:
           - platform:
               arch: arm
             ghc-version: '8.6'
+          # macos >= 14 ships with a libtinfo version that is too recent; arm is excluded anyway
+          - platform:
+              os: macos-15
+            ghc-version: '9.0'
+          - platform:
+              os: macos-15
+            ghc-version: '8.10'
+          - platform:
+              os: macos-15
+            ghc-version: '8.8'
+          - platform:
+              os: macos-15
+            ghc-version: '8.6'
 
     steps:
       - uses: actions/checkout@v4
