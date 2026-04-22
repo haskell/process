@@ -32,7 +32,7 @@ import Distribution.Types.TargetInfo
   ( targetComponent )
 import Distribution.Types.UnqualComponentName
   ( unUnqualComponentName )
-#if MIN_VERSION_Cabal(3,16,0)
+#if MIN_VERSION_Cabal(3,14,0)
 import Distribution.Utils.Path
   ( SymbolicPathX, interpretSymbolicPathCWD)
 #endif
@@ -50,7 +50,7 @@ import System.FilePath
 main :: IO ()
 main = defaultMainWithHooks testProcessHooks
 
-#if MIN_VERSION_Cabal(3,16,0)
+#if MIN_VERSION_Cabal(3,14,0)
 pathToString ::
   SymbolicPathX allowAbsolute from to -> String
 pathToString = interpretSymbolicPathCWD
