@@ -55,6 +55,8 @@ main = do
     testDoubleWait
     testKillDoubleWait
     testCreateProcess
+    testAddChdir
+    testAddChdir2
     testCommunicationHandle False
 #if defined(__IO_MANAGER_WINIO__)
     -- With WinIO, also run the test with the child process using WinIO
@@ -331,6 +333,22 @@ testCommunicationHandle childUsesWinIO = do
     ExitFailure {} ->
       error $ "testCommunicationHandle: child exited with exception " ++ show ex
   putStrLn "testCommunicationHandle }"
+
+testAddChdir :: IO ()
+testAddChdir = run "testAddChdir" $ handleIOErr $ do
+  (_, _, _, commhand) <-
+      runInteractiveProcess "true" [] (Just "/no/such/dir") Nothing
+  exitCode <- waitForProcess commhand
+  print exitCode
+  where handleIOErr a = a `catchIOError` \e -> putStrLn ("Exc: " ++ show (ioeGetErrorType e))
+
+testAddChdir2 :: IO ()
+testAddChdir2 = run "testAddChdir2" $ handleIOErr $ do
+  commhand <- runProcess "true" [] (Just "/no/such/dir") Nothing
+                Nothing Nothing Nothing
+  exitCode <- waitForProcess commhand
+  print exitCode
+  where handleIOErr a = a `catchIOError` \e -> putStrLn ("Exc: " ++ show (ioeGetErrorType e))
 
 withCurrentDirectory :: FilePath -> IO a -> IO a
 withCurrentDirectory new inner = do
