@@ -15,11 +15,14 @@ jobs:
       matrix:
         platform:
           - { os: ubuntu-latest, arch: x64 }
-          - { os: macos-14, arch: x64 }
-          - { os: macos-14, arch: arm }
+          - { os: macos-15, arch: x64 }
+          - { os: macos-15, arch: arm }
+          - { os: macos-26, arch: arm }
           - { os: windows-latest, arch: x64 }
         ghc-version:
           - 'latest'
+          - '9.14'
+          - '9.12'
           - '9.10'
           - '9.8'
           - '9.6'
@@ -44,6 +47,19 @@ jobs:
             ghc-version: '8.8'
           - platform:
               arch: arm
+            ghc-version: '8.6'
+          # macos >= 14 ships with a libtinfo version that is too recent; arm is excluded anyway
+          - platform:
+              os: macos-15
+            ghc-version: '9.0'
+          - platform:
+              os: macos-15
+            ghc-version: '8.10'
+          - platform:
+              os: macos-15
+            ghc-version: '8.8'
+          - platform:
+              os: macos-15
             ghc-version: '8.6'
 
     steps:

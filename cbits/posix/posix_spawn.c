@@ -138,7 +138,22 @@ do_spawn_posix (char *const args[],
 
     if (workingDirectory) {
 #if defined(HAVE_POSIX_SPAWN_FILE_ACTIONS_ADDCHDIR)
+#if defined(HAVE_POSIX_SPAWN_FILE_ACTIONS_ADDCHDIR_NP)
+        // N.B. in certain toolchain versions, apple will act as if symbols exist
+        // because the toolchain can be *used* for targets that have them.
+        // At runtime, however, they will be NULL. So, if both symbols are
+        // available, first check if the _np version *should* be available,
+        // if it is, add a runtime check whether the non-_np version is NULL
+        // and fallback to the _np version if it is
+        // See also: https://github.com/haskell/process/issues/356
+        if (posix_spawn_file_actions_addchdir == NULL) {
+          r = posix_spawn_file_actions_addchdir_np(&fa, workingDirectory);
+        } else {
+          r = posix_spawn_file_actions_addchdir(&fa, workingDirectory);
+        }
+#else
         r = posix_spawn_file_actions_addchdir(&fa, workingDirectory);
+#endif
         if (r != 0) {
             *failed_doing = "posix_spawn_file_actions_addchdir";
             goto fail;
