@@ -17,6 +17,7 @@ jobs:
       - run: cabal sdist
 
       - name: upload sdist
+        id: upload-sdist
         uses: actions/upload-artifact@v7
         with:
           name: sdist
@@ -36,7 +37,7 @@ jobs:
       - name: download sdist
         uses: actions/download-artifact@v8
         with:
-          name: sdist
+          artifact-ids: ${{ steps.upload-sdist.outputs.artifact-id }}
 
       - name: extract sdist
         shell: bash
