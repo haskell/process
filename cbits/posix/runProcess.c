@@ -5,6 +5,9 @@
    ------------------------------------------------------------------------- */
 
 #include "runProcess.h"
+
+#if !defined(wasm32_HOST_ARCH)
+
 #include "common.h"
 
 #include <unistd.h>
@@ -271,3 +274,5 @@ waitForProcess (ProcHandle handle, int *pret)
 
     return -1;
 }
+
+#endif // !wasm32_HOST_ARCH
