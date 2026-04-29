@@ -29,3 +29,19 @@ autoconf -i
 
 (WARNING: `git clean -fxd` will delete all untracked files in the
 repo)
+
+To make the release process more observable and less dependent on the system
+of the maintainer, there's a workflow creating an sdist.
+
+This sdist ought to be generated as follows:
+- navigate to the workflow run created for the commit you want to generate an
+  sdist for. Or, if none was created automatically then create one by navigating
+  to the Actions tab, selecting the "prepare release artifacts" workflow, and launching
+  a run using the "`workflow_dispatch` event trigger" that you will find there.
+- navigate to the "prepare release artifacts" job group in the github UI
+- carefully sanity check the output of the "smoketest" in github UI.
+  These can also be downloaded as an artifact for local inspection. A sanity check
+  would e.g. entail look at whether `posix_spawn.*` symbols are recognised and
+  configured correctly.
+- afterwards, download the sdist from the release page by scrolling all the way down,
+  then downloading the `sdist`. Upload it as a candidate and proceed as usual.
