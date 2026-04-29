@@ -42,6 +42,7 @@ jobs:
       - name: extract sdist
         shell: bash
         run: |
+          ls -la
           tar -xzf *.tar.gz --strip-components=1
           chmod +x ./configure
 
