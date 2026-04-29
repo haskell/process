@@ -1,0 +1,68 @@
+name: prepare release artifacts
+
+on: [push, pull_request, workflow_dispatch]
+
+jobs:
+  sdist:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: haskell/ghcup-setup@v1
+      - run: ghcup install ghc --set latest
+
+      - uses: actions/checkout@v6
+
+      - run: autoreconf -Wall
+      - run: cabal check
+      - run: cabal sdist
+
+      - name: upload sdist
+        id: upload-sdist
+        uses: actions/upload-artifact@v7
+        with:
+          name: sdist
+          path: dist-newstyle/sdist/*.tar.gz
+          archive: false
+          if-no-files-found: error
+          retention-days: 90
+
+  smoketest:
+    needs: sdist
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - name: download sdist
+        uses: actions/download-artifact@v7
+        with:
+          artifact-ids: ${{ steps.upload-sdist.outputs.artifact-id }}
+
+      - name: extract sdist
+        shell: bash
+        run: |
+          ls -la
+          tar -xzf *.tar.gz --strip-components=1
+          chmod +x ./configure
+
+      - name: configure smoketest
+        shell: bash
+        run: ./configure
+
+      - name: upload config.log
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.os }}.config.log
+          path: ./config.log
+          archive: false
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: job summary
+        shell: bash
+        run: |
+          echo '### config.log (`${{ matrix.os }}`)' >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          cat config.log >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
