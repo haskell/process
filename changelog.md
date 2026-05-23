@@ -1,5 +1,10 @@
 # Changelog for [`process` package](http://hackage.haskell.org/package/process)
 
+## 1.6.29.0 *May 2026*
+
+* Stub out `runProcess.c` on wasm32 ([#366](https://github.com/haskell/process/pull/366))
+* Fix segmentation faults on MacOS 15 caused by NULL symbols created by toolchains that can compile for MacOS 26 ([#363](https://github.com/haskell/process/pull/363))
+
 ## 1.6.28.0 *April 2026*
 
 * Add `callCreateProcess`
@@ -35,7 +40,7 @@
   a space or a dot. This is a follow-up for
   [HSEC-2024-0003](https://github.com/haskell/security-advisories/tree/main/advisories/hackage/process/HSEC-2024-0003.md).
 * Migitate another manifestation of the BatBadBut vulnerability via
-  unescaped `%` expansions. This is another follow-up for 
+  unescaped `%` expansions. This is another follow-up for
   [HSEC-2024-0003](https://github.com/haskell/security-advisories/tree/main/advisories/hackage/process/HSEC-2024-0003.md).
   ([#313](https://github.com/haskell/process/issues/313))
 
