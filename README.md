@@ -34,14 +34,14 @@ To make the release process more observable and less dependent on the system
 of the maintainer, there's a workflow creating an sdist.
 
 This sdist ought to be generated as follows:
-- navigate to the workflow run created for the commit you want to generate an
-  sdist for. Or, if none was created automatically then create one by navigating
-  to the Actions tab, selecting the "prepare release artifacts" workflow, and launching
+- navigate to [the "prepare release artifacts"
+  workflow](https://github.com/haskell/process/actions/workflows/prepare-release-artifacts.yml)
+- click through to the workflow run you want to create an
+  sdist for. Or, if none was created automatically then launch
   a run using the "`workflow_dispatch` event trigger" that you will find there.
-- navigate to the "prepare release artifacts" job group in the github UI
-- carefully sanity check the output of the "smoketest" in github UI.
+- carefully sanity check the output of the "smoketest" jobs in github UI.
   These can also be downloaded as an artifact for local inspection. A sanity check
-  would e.g. entail look at whether `posix_spawn.*` symbols are recognised and
-  configured correctly.
-- afterwards, download the sdist from the release page by scrolling all the way down,
+  would e.g. entail look at whether `posix_spawn_file_actions_addchdir_np` is present
+- afterwards, download the sdist from the release page by clicking on "Summary",
+  scrolling to the bottom of the page,
   then downloading the `sdist`. Upload it as a candidate and proceed as usual.
