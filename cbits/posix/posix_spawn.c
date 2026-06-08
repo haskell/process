@@ -93,6 +93,43 @@ setup_std_handle_spawn (int fd,
     }
 }
 
+
+int __attribute__((weak)) posix_spawn_file_actions_addchdir
+  (posix_spawn_file_actions_t *restrict file_actions, const char *restrict path);
+int __attribute__((weak)) posix_spawn_file_actions_addchdir_np
+  (posix_spawn_file_actions_t *restrict file_actions, const char *restrict path);
+
+/* NOTE: handling posix_spawn_file_actions_addchdir{,_np}
+ * 1. create a weak symbol for both
+ *    posix_spawn_file_actions_addchdir
+ *    posix_spawn_file_actions_addchdir_np
+ * 2. have a function that does a runtime check for
+ *    whether or not the respective symbol is available
+ *    preferring the addchir version
+ *
+ *  N.B. in certain toolchain versions, apple will act as if symbols exist
+ *  because the toolchain can be *used* for targets that have them.
+ *  At runtime, however, they will be NULL. So, if both symbols are
+ *  available, first check if the _np version *should* be available,
+ *  if it is, add a runtime check whether the non-_np version is NULL
+ *  and fallback to the _np version if it is
+ *  See also: https://github.com/haskell/process/issues/356
+ *
+ *  Returns posix_spawn_file_actions_addchdir if available,
+ *  otherwise returns posix_spawn_file_actions_addchdir_npa if available
+ *  otherwise returns NULL
+ * */
+int (*get_spawn_file_actions_addchdir())(posix_spawn_file_actions_t *restrict, const char *restrict)
+ {
+  if (posix_spawn_file_actions_addchdir != NULL) {
+    return &posix_spawn_file_actions_addchdir;
+  } else if (posix_spawn_file_actions_addchdir_np != NULL) {
+    return &posix_spawn_file_actions_addchdir_np;
+  } else {
+    return NULL;
+  }
+}
+
 /* Try spawning with posix_spawn. Returns -1 if posix_spawn (or the particular
  * requested configuration) is not supported.
  */
@@ -137,38 +174,18 @@ do_spawn_posix (char *const args[],
     }
 
     if (workingDirectory) {
-#if defined(HAVE_POSIX_SPAWN_FILE_ACTIONS_ADDCHDIR)
-#if defined(HAVE_POSIX_SPAWN_FILE_ACTIONS_ADDCHDIR_NP)
-        // N.B. in certain toolchain versions, apple will act as if symbols exist
-        // because the toolchain can be *used* for targets that have them.
-        // At runtime, however, they will be NULL. So, if both symbols are
-        // available, first check if the _np version *should* be available,
-        // if it is, add a runtime check whether the non-_np version is NULL
-        // and fallback to the _np version if it is
-        // See also: https://github.com/haskell/process/issues/356
-        if (posix_spawn_file_actions_addchdir == NULL) {
-          r = posix_spawn_file_actions_addchdir_np(&fa, workingDirectory);
+        int (* do_spawn_file_actions_addchdir)
+            (posix_spawn_file_actions_t *restrict, const char *restrict)
+            = get_spawn_file_actions_addchdir();
+        if (do_spawn_file_actions_addchdir == NULL) {
+          goto not_supported;
         } else {
-          r = posix_spawn_file_actions_addchdir(&fa, workingDirectory);
+          r = do_spawn_file_actions_addchdir(&fa, workingDirectory);
+          if (r != 0) {
+              *failed_doing = "posix_spawn_file_actions_addchdir";
+              goto fail;
+          }
         }
-#else
-        r = posix_spawn_file_actions_addchdir(&fa, workingDirectory);
-#endif
-        if (r != 0) {
-            *failed_doing = "posix_spawn_file_actions_addchdir";
-            goto fail;
-        }
-#elif defined(HAVE_POSIX_SPAWN_FILE_ACTIONS_ADDCHDIR_NP)
-        // N.B. this function is broken on macOS.
-        // See https://github.com/rust-lang/rust/pull/80537.
-        r = posix_spawn_file_actions_addchdir_np(&fa, workingDirectory);
-        if (r != 0) {
-            *failed_doing = "posix_spawn_file_actions_addchdir_np";
-            goto fail;
-        }
-#else
-        goto not_supported;
-#endif
     }
 
     if ((flags & RUN_PROCESS_NEW_SESSION) != 0) {
