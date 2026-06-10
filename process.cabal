@@ -87,6 +87,19 @@ library
                 cbits/posix/find_executable.c
             other-modules: System.Process.Posix
 
+    -- On macOS, posix_spawn_file_actions_addchdir is available from macOS >= 26.
+    -- We weakly reference this symbol when we are build on such a platform.
+    -- However, weak references on MachO are hints to the dynamic loader, not the
+    -- static linker, which will still expect the symbol to be defined somewhere.
+    -- This means linking fails when we try to link an executable depending on
+    -- process on a toolchain which doesn't have this symbol against a process
+    -- library build on a toolchain with the symbol.
+    -- See https://github.com/haskell/process/issues/376
+    -- Hence: instruct the linker to explicilty allow undefined references to
+    -- the symbol when linking against process on darwin
+    if os(darwin)
+        ld-options: -Wl,-U,_posix_spawn_file_actions_addchdir
+
     include-dirs: include
     install-includes:
         runProcess.h
