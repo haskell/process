@@ -45,13 +45,16 @@ import Data.String ( IsString(..) )
 import Foreign.Ptr
 import Foreign.Storable ( Storable(peek) )
 
+import System.IO.OS (withFileDescriptorReadingBiasedRaw)
+#if defined(__IO_MANAGER_WINIO__)
+import System.IO.OS (withWindowsHandleReadingBiasedRaw)
+#endif
 import System.Posix.Internals
 import GHC.IO.Exception
 import GHC.IO.Encoding
 import qualified GHC.IO.FD as FD
 import GHC.IO.Device
 #if defined(__IO_MANAGER_WINIO__)
-import GHC.IO.Handle.Windows
 import GHC.IO.Windows.Handle (fromHANDLE, Io(), NativeHandle())
 #endif
 import GHC.IO.Handle.FD
@@ -260,23 +263,29 @@ mbFd :: String -> FD -> StdStream -> IO FD
 mbFd _   _std CreatePipe      = return (-1)
 mbFd _fun std Inherit         = return std
 mbFd _fn _std NoStream        = return (-2)
-mbFd fun _std (UseHandle hdl) =
-  withHandle fun hdl $ \Handle__{haDevice=dev,..} -> do
-    case cast dev of
-      Just fd -> do
+mbFd fun _std (UseHandle hdl) = do
+    setToBlockingIfPossible
+    withFileDescriptorReadingBiasedRaw hdl $ return
+  where
+    setToBlockingIfPossible =
 #if !defined(javascript_HOST_ARCH)
-         -- clear the O_NONBLOCK flag on this FD, if it is set, since
-         -- we're exposing it externally (see #3316)
-         fd' <- FD.setNonBlockingMode fd False
+      -- clear the O_NONBLOCK flag on this FD, if it is set, since we're
+      -- exposing it externally (see GHC issue #3316)
+      withAllHandles__ fun hdl $ \Handle__{haDevice=dev,..} -> do
+        case cast dev of
+          Just fd -> do
+            fd' <- FD.setNonBlockingMode fd False
+            return (Handle__{haDevice=fd',..})
+          Nothing ->
+            ioError (mkIOError illegalOperationErrorType
+                               "createProcess"
+                               (Just hdl)
+                               Nothing
+                     `ioeSetErrorString` "handle is not a file descriptor")
 #else
-         -- on the JavaScript platform we cannot change the FD flags
-         fd' <- pure fd
+      -- on the JavaScript platform we cannot change the FD flags
+      return ()
 #endif
-         return (Handle__{haDevice=fd',..}, FD.fdFD fd')
-      Nothing ->
-          ioError (mkIOError illegalOperationErrorType
-                      "createProcess" (Just hdl) Nothing
-                   `ioeSetErrorString` "handle is not a file descriptor")
 
 mbPipe :: StdStream -> Ptr FD -> IOMode -> IO (Maybe Handle)
 mbPipe CreatePipe pfd  mode = fmap Just (pfdToHandle pfd mode)
@@ -317,7 +326,7 @@ mbHANDLE :: HANDLE -> StdStream -> IO HANDLE
 mbHANDLE _std CreatePipe      = return $ intPtrToPtr (-1)
 mbHANDLE  std Inherit         = return std
 mbHANDLE _std NoStream        = return $ intPtrToPtr (-2)
-mbHANDLE _std (UseHandle hdl) = handleToHANDLE hdl
+mbHANDLE _std (UseHandle hdl) = withWindowsHandleReadingBiasedRaw hdl $ return
 
 mbPipeHANDLE :: StdStream -> Ptr HANDLE -> IOMode -> IO (Maybe Handle)
 mbPipeHANDLE CreatePipe pfd mode =
