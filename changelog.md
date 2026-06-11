@@ -1,5 +1,10 @@
 # Changelog for [`process` package](http://hackage.haskell.org/package/process)
 
+## 1.6.30.0 *June 2026*
+
+* darwin: Allow posix_spawn_file_actions_addchdir to be missing when
+  linking against process ([#377](https://github.com/haskell/process/pull/377))
+
 ## 1.6.29.0 *May 2026*
 
 * Stub out `runProcess.c` on wasm32 ([#366](https://github.com/haskell/process/pull/366))
