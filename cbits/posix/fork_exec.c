@@ -197,10 +197,14 @@ do_spawn_fork (char *const args[],
         fcntl(forkCommunicationFds[1], F_SETFD, FD_CLOEXEC);
 
         if ((flags & RUN_PROCESS_NEW_SESSION) != 0) {
-            setsid();
+            if (setsid() == -1) {
+                child_failed(forkCommunicationFds[1], "setsid");
+            }
         }
         if ((flags & RUN_PROCESS_IN_NEW_GROUP) != 0) {
-            setpgid(0, 0);
+            if (setpgid(0, 0) != 0) {
+                child_failed(forkCommunicationFds[1], "setpgid");
+            }
         }
 
         if (childGroup) {
