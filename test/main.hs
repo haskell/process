@@ -2,7 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 import Control.Exception
-import Control.Monad (guard, unless, void, when)
+import Control.Monad (forM_, guard, unless, void, when)
 import System.Exit
 import System.IO.Error
 import System.Directory (getCurrentDirectory, setCurrentDirectory)
@@ -57,6 +57,8 @@ main = do
     testCreateProcess
     testAddChdir
     testAddChdir2
+    testCloseFdsStdStreams
+    testCloseFdsHandleInheritance
     testCommunicationHandle False
 #if defined(__IO_MANAGER_WINIO__)
     -- With WinIO, also run the test with the child process using WinIO
@@ -298,6 +300,43 @@ testCreateProcess = run "createProcess with cwd = Nothing" $ do
         Left e -> error $ "waitForProcess threw: " ++ show (e :: SomeException)
         Right ExitSuccess -> return ()
         Right exitCode -> error $ "unexpected exit code: " ++ show exitCode
+
+-- Check all combinations of 'close_fds' with the set of streams to inherit.
+testCloseFdsStdStreams :: IO ()
+testCloseFdsStdStreams = run "close_fds with all std stream combinations" $
+    forM_ [ (cf, si, so, se)
+          | cf <- [False, True], si <- streams, so <- streams, se <- streams ] $
+      \combination@(cf, si, so, se) ->
+        handle (\e -> error (show combination ++ ": " ++ show (e :: IOException))) $ do
+          (hi, ho, he, ph) <- createProcess (proc "echo" ["hello"])
+            { std_in = si, std_out = so, std_err = se, close_fds = cf }
+          mapM_ hClose hi
+          mapM_ hClose ho
+          mapM_ hClose he
+          void $ waitForProcess ph
+  where
+    streams = [Inherit, CreatePipe, NoStream]
+
+-- Check that a child spawned with @close_fds@ doesn't inherit handles that
+-- it shouldn't.
+testCloseFdsHandleInheritance :: IO ()
+testCloseFdsHandleInheritance = run "close_fds does not leak unrelated handles" $ do
+    -- An inheritable pipe that the child has no business holding on to.
+    (weRead, theyWrite) <- createWeReadTheyWritePipe
+    -- Create a process that blocks reading stdin (cat).
+    (Just toChild, _, _, ph) <- createProcess (proc "cat" [])
+      { std_in = CreatePipe, close_fds = True }
+    closeCommunicationHandle theyWrite
+    -- We closed the write end so we should see EOF... unless the child inherited
+    -- it and keeps it open.
+    eof <- newEmptyMVar
+    _ <- forkIO $ (hGetContents weRead >>= evaluate . length) >>= void . tryPutMVar eof . Just
+    _ <- forkIO $ threadDelay 5000000 >> void (tryPutMVar eof Nothing)
+    sawEof <- takeMVar eof
+    hClose toChild
+    _ <- waitForProcess ph
+    unless (sawEof == Just 0) $
+      error "close_fds child inherited a handle it should not have"
 
 testCommunicationHandle :: Bool -> IO ()
 testCommunicationHandle childUsesWinIO = do
