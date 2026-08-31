@@ -130,17 +130,7 @@ createProcess_Internal_mio fun def@CreateProcess{
        fdout <- mbFd fun fd_stdout mb_stdout
        fderr <- mbFd fun fd_stderr mb_stderr
 
-       -- #2650: we must ensure mutual exclusion of c_runInteractiveProcess,
-       -- because otherwise there is a race condition whereby one thread
-       -- has created some pipes, and another thread spawns a process which
-       -- accidentally inherits some of the pipe handles that the first
-       -- thread has created.
-       --
-       -- An MVar in Haskell is the best way to do this, because there
-       -- is no way to do one-time thread-safe initialisation of a mutex
-       -- the C code.  Also the MVar will be cheaper when not running
-       -- the threaded RTS.
-       proc_handle <- withMVar runInteractiveProcess_lock $ \_ ->
+       proc_handle <- withSpawnLock mb_close_fds $
                       throwErrnoIfBadPHandle fun $
                            c_runInteractiveProcess pcmdline pWorkDir pEnv
                                   fdin fdout fderr
@@ -229,17 +219,7 @@ createProcess_Internal_winio fun def@CreateProcess{
      hwnd_out <- mbHANDLE _stdout mb_stdout
      hwnd_err <- mbHANDLE _stderr mb_stderr
 
-     -- #2650: we must ensure mutual exclusion of c_runInteractiveProcess,
-     -- because otherwise there is a race condition whereby one thread
-     -- has created some pipes, and another thread spawns a process which
-     -- accidentally inherits some of the pipe handles that the first
-     -- thread has created.
-     --
-     -- An MVar in Haskell is the best way to do this, because there
-     -- is no way to do one-time thread-safe initialisation of a mutex
-     -- the C code.  Also the MVar will be cheaper when not running
-     -- the threaded RTS.
-     proc_handle <- withMVar runInteractiveProcess_lock $ \_ ->
+     proc_handle <- withSpawnLock mb_close_fds $
                     throwErrnoIfBadPHandle fun $
                          c_runInteractiveProcessHANDLE pcmdline pWorkDir pEnv
                                 hwnd_in hwnd_out hwnd_err
@@ -267,9 +247,94 @@ createProcess_Internal_winio fun def@CreateProcess{
 
 ##endif
 
-{-# NOINLINE runInteractiveProcess_lock #-}
-runInteractiveProcess_lock :: MVar ()
-runInteractiveProcess_lock = unsafePerformIO $ newMVar ()
+{- Note [Concurrent process spawning]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+GHC bug #2650 showed that we need to be careful to avoid child processes
+inheriting unwanted handles on Windows.
+
+The 'close_fds' field of 'CreateProcess' specifies the expected behaviour:
+
+  - 'close_fds = False': the child process will inherit all inheritable
+    handles from the parent.
+  - 'close_fds = True': the child process is handed an explicit list of handles
+    it may inherit.
+
+In a concurrent setting, the first behaviour is problematic: spawning happens
+in two steps (first creating handles and then calling CreateProcess), but we
+don't want a child process to inherit handles created for other (concurrently
+spawned) children, which can cause write-ends to be left permanently open.
+That was the bug in #2650.
+
+The initial fix for this bug, in commit 5deecb284ed7b49402805ef64011b5c8a075a09c,
+solved this by serialising all process creation, using a single MVar. However,
+this is too strong: we only need to ensure that no process creation that uses
+'close_fds = False' is concurrent with any process creation (of any kind).
+Re-phrasing: 'close_fds = False' spawns must be exclusive.
+
+To allow concurrent spawns of 'close_fds = True' processes, we weaken the MVar
+lock: it is held **either** by a single 'close_fds = False' spawn, or jointly
+by a collection of 'close_fds = True' spawns. We differentiate the two by a
+second 'MVar', 'shared_spawns_count', which counts how many joint
+'close_fds = True' spawns are currently underway.
+Fairness is implemented using a third 'MVar', the turnstile. A waiting exclusive
+spawn holds the turnstile 'MVar', so that further non-exclusive spawns are put
+on wait rather than accumulating with existing in-flight shared spawns, which
+could end up starving exclusive spawns.
+
+The solution is implemented on the Haskell side using 'MVar's, because there is
+no way to do one-time thread-safe initialisation of a mutex in the C code.
+-}
+
+-- | A lock used to implement the locking mechanism of
+-- Note [Concurrent process spawning].
+data SpawnLock =
+  SpawnLock
+    { spawn_lock :: !(MVar ())
+      -- ^ lock to hold for concurrent process creation
+    , shared_spawns_count :: !(MVar Int)
+      -- ^ how many @close_fds = True@ spawns are in flight
+    , spawn_turnstile :: !(MVar ())
+      -- ^ turnstile used to implement the fairness guarantee
+      -- in Note [Concurrent process spawning]
+    }
+
+{-# NOINLINE spawnLock #-}
+spawnLock :: SpawnLock
+spawnLock = unsafePerformIO $
+  SpawnLock <$> newMVar () <*> newMVar 0 <*> newMVar ()
+
+-- | Spawn a process, using the locking mechanism detailed in
+-- Note [Concurrent process spawning].
+withSpawnLock
+  :: Bool  -- ^ @close_fds@
+  -> IO a
+  -> IO a
+withSpawnLock closeFds act
+  | closeFds  = bracket_ acquireShared releaseShared act
+  | otherwise = withMVar (spawn_turnstile spawnLock) $ \_ ->
+                withMVar (spawn_lock spawnLock) $ \_ -> act
+  where
+    acquireShared =
+      -- Wait our turn (wait on the turnstile).
+      mask_ $ withMVar (spawn_turnstile spawnLock) $ \_ -> do
+        -- The first shared spawn takes the lock.
+        n <- takeMVar (shared_spawns_count spawnLock)
+        (do when (n == 0) $ takeMVar (spawn_lock spawnLock)
+            putMVar (shared_spawns_count spawnLock) (n + 1)
+          ) `onException` putMVar (shared_spawns_count spawnLock) n
+
+    releaseShared =
+      mask_ $ do
+        -- Don't wait on the turnstile: this is exactly what a pending exclusive
+        -- spawn is waiting on, so waiting here would deadlock.
+
+        -- The last shared spawn finishing releases the lock.
+        n <- takeMVar (shared_spawns_count spawnLock)
+        (do when (n == 1) $ putMVar (spawn_lock spawnLock) ()
+            -- Release before updating the count to ensure the count is always
+            -- conservative.
+            putMVar (shared_spawns_count spawnLock) (n - 1)
+          ) `onException` putMVar (shared_spawns_count spawnLock) n
 
 -- ----------------------------------------------------------------------------
 -- Delegated control-C handling on Windows
