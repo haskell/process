@@ -1,7 +1,22 @@
-{-# LANGUAGE CPP, ForeignFunctionInterface #-}
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE CApiFFI #-}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE InterruptibleFFI #-}
-module System.Process.Windows
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE QuasiQuotes #-}
+
+#if defined(OS_STRING)
+#define PATH_TYPE OsPath
+#define STRING_TYPE OsString
+#define CHAR_TYPE OsChar
+#else
+#define PATH_TYPE FilePath
+#define STRING_TYPE String
+#define CHAR_TYPE Char
+#endif
+
+module System.Process.Windows.STRING_TYPE
     ( mkProcessHandle
     , translateInternal
     , createProcess_Internal
@@ -20,51 +35,101 @@ module System.Process.Windows
     , timeout_Infinite
     , HANDLE
     , mkNamedPipe
+#if defined(__IO_MANAGER_WINIO__)
+    , rawHANDLEToHandle
+#endif
     ) where
 
-import System.Process.Common
-import Control.Concurrent
-import Control.Exception
-import Control.Monad
-import Data.Bits
+import Control.Concurrent (MVar, mkWeakMVar, modifyMVar_, newMVar, withMVar)
+import Control.Exception (onException)
+import Control.Monad (when)
+import Data.Bits ((.|.))
 import Data.Char (toLower)
-import Data.List (dropWhileEnd)
+import Foreign
+  ( Ptr
+  , Storable
+  , WordPtr
+  , alloca
+  , allocaArray
+  , allocaBytes
+  , castPtr
+  , maybeWith
+  , nullPtr
+  , peek
+  , peekElemOff
+  , sizeOf
+  )
 import Foreign.C
-import Foreign.Marshal
-import Foreign.Ptr
-import Foreign.Storable
-import System.IO.Unsafe
+  ( CInt(CInt)
+  , CUInt(CUInt)
+  , CLong
+  , CWString
+  , throwErrnoIf_
+  , throwErrnoIfMinus1_
+  , throwErrnoIfNull
+  )
+import System.IO.Unsafe (unsafePerformIO)
 
-import System.Posix.Internals
-import GHC.IO.Exception
-##if defined(__IO_MANAGER_WINIO__)
-import GHC.IO.SubSystem
-import qualified GHC.Event.Windows as Mgr
-import Graphics.Win32.Misc
-##endif
-import GHC.IO.Handle.FD
-import GHC.IO.Handle.Types hiding (ClosedHandle)
-import System.IO.Error
-import System.IO (IOMode(..))
+import System.Posix.Internals (FD)
+import GHC.IO.Handle.FD (fdToHandle)
+import System.Exit (ExitCode)
+import System.IO (Handle, IOMode(ReadMode, WriteMode))
+import System.IO.Error (doesNotExistErrorType, mkIOError)
 
-import System.Directory         ( doesFileExist )
-import System.Environment       ( getEnv )
-import System.FilePath
 import System.Win32.Console (generateConsoleCtrlEvent, cTRL_BREAK_EVENT)
 import System.Win32.Process (getProcessId)
 
--- The double hash is used so that hsc does not process this include file
-##include "processFlags.h"
+import System.Process.Common.STRING_TYPE
 
-#include <fcntl.h>     /* for _O_BINARY */
+-- WinIO imports
+#if defined(__IO_MANAGER_WINIO__)
+import Foreign (intPtrToPtr)
+import GHC.IO.Device (IODeviceType(Stream))
+import GHC.IO.Encoding (getLocaleEncoding)
+import GHC.IO.Handle.Windows (handleToHANDLE, mkHandleFromHANDLE)
+import GHC.IO.SubSystem ((<!>))
+import qualified GHC.Event.Windows as Manager
+import GHC.IO.Windows.Handle (Io(), NativeHandle(), fromHANDLE)
+import Graphics.Win32.Misc
+  ( getStdHandle
+  , sTD_ERROR_HANDLE
+  , sTD_INPUT_HANDLE
+  , sTD_OUTPUT_HANDLE
+  )
+import System.Win32.Types (HANDLE)
+#endif
 
-##if defined(i386_HOST_ARCH)
-## define WINDOWS_CCONV stdcall
-##elif defined(x86_64_HOST_ARCH) || defined(aarch64_HOST_ARCH)
-## define WINDOWS_CCONV ccall
-##else
-## error Unknown mingw32 arch
-##endif
+-- OsString imports
+#if defined(OS_STRING)
+import System.Directory.OsPath (doesFileExist)
+import System.OsPath ((</>), splitSearchPath, takeExtension)
+import System.Process.Environment.OsString (getEnv)
+import System.Process.Windows.OsString.Compat
+  ( dropWhileEnd
+  , intercalate
+  )
+import qualified System.Process.Windows.OsString.Compat as OsString
+
+-- String imports
+#else
+import Data.List (dropWhileEnd, intercalate)
+import System.Directory (doesFileExist)
+import System.FilePath ((</>), splitSearchPath, takeExtension)
+import System.Environment.Blank (getEnv)
+#endif
+
+-- Architecture-dependent imports
+#if defined(i386_HOST_ARCH)
+#define WINDOWS_CCONV stdcall
+#elif defined(x86_64_HOST_ARCH) || defined(aarch64_HOST_ARCH)
+#define WINDOWS_CCONV ccall
+#else
+#error Unknown mingw32 arch
+#endif
+
+foreign import capi "fcntl.h value _O_BINARY" c_o_binary :: CInt
+
+#include "processFlags.h"
 
 throwErrnoIfBadPHandle :: String -> IO PHANDLE -> IO PHANDLE
 throwErrnoIfBadPHandle = throwErrnoIfNull
@@ -103,11 +168,11 @@ createProcess_Internal
   -> CreateProcess
   -> IO ProcRetHandles
 
-##if defined(__IO_MANAGER_WINIO__)
+#if defined(__IO_MANAGER_WINIO__)
 createProcess_Internal = createProcess_Internal_mio <!> createProcess_Internal_winio
-##else
+#else
 createProcess_Internal = createProcess_Internal_mio
-##endif
+#endif
 
 createProcess_Internal_mio
   :: String                     -- ^ function name (for error messages)
@@ -182,8 +247,8 @@ createProcess_Internal_wrapper _fun CreateProcess{
    alloca $ \ pfdStdError           ->
    allocaBytes lenPtr $ \ hJob      ->
    maybeWith withCEnvironment mb_env $ \pEnv ->
-   maybeWith withCWString mb_cwd $ \pWorkDir -> do
-   withCWString cmdline $ \pcmdline -> do
+   maybeWith useAsForeignString mb_cwd $ \pWorkDir -> do
+   useAsForeignString cmdline $ \pcmdline -> do
 
      (proc_handle, hndStdInput, hndStdOutput, hndStdError)
        <- action pfdStdInput pfdStdOutput pfdStdError hJob pEnv pWorkDir pcmdline
@@ -203,7 +268,7 @@ createProcess_Internal_wrapper _fun CreateProcess{
                            , procHandle = ph
                            }
 
-##if defined(__IO_MANAGER_WINIO__)
+#if defined(__IO_MANAGER_WINIO__)
 createProcess_Internal_winio
   :: String                     -- ^ function name (for error messages)
   -> CreateProcess
@@ -254,9 +319,9 @@ createProcess_Internal_winio fun def@CreateProcess{
 
      -- Attach the handle to the I/O manager's CompletionPort.  This allows the
      -- I/O manager to service requests for this Handle.
-     Mgr.associateHandle' =<< peek pfdStdInput
-     Mgr.associateHandle' =<< peek pfdStdOutput
-     Mgr.associateHandle' =<< peek pfdStdError
+     Manager.associateHandle' =<< peek pfdStdInput
+     Manager.associateHandle' =<< peek pfdStdOutput
+     Manager.associateHandle' =<< peek pfdStdError
 
      -- Create the haskell mode handles as files.
      hndStdInput  <- mbPipeHANDLE mb_stdin  pfdStdInput  WriteMode
@@ -265,7 +330,7 @@ createProcess_Internal_winio fun def@CreateProcess{
 
      return (proc_handle, hndStdInput, hndStdOutput, hndStdError)
 
-##endif
+#endif
 
 {-# NOINLINE runInteractiveProcess_lock #-}
 runInteractiveProcess_lock :: MVar ()
@@ -399,7 +464,7 @@ foreign import ccall unsafe "runInteractiveProcess"
         -> Ptr PHANDLE       -- Handle to Job
         -> IO PHANDLE
 
-##if defined(__IO_MANAGER_WINIO__)
+#if defined(__IO_MANAGER_WINIO__)
 foreign import ccall unsafe "runInteractiveProcessHANDLE"
   c_runInteractiveProcessHANDLE
         :: CWString
@@ -415,25 +480,44 @@ foreign import ccall unsafe "runInteractiveProcessHANDLE"
         -> Bool          -- useJobObject
         -> Ptr PHANDLE       -- Handle to Job
         -> IO PHANDLE
-##endif
+#endif
 
-commandToProcess
-  :: CmdSpec
-  -> IO (FilePath, String)
+commandToProcess :: CmdSpec -> IO (PATH_TYPE, STRING_TYPE)
 commandToProcess (ShellCommand string) = do
   cmd <- findCommandInterpreter
-  return (cmd, translateInternal cmd ++ " /c " ++ string)
+  return (cmd, translateInternal cmd <> slashC <> string)
         -- We don't want to put the cmd into a single
         -- argument, because cmd.exe will not try to split it up.  Instead,
         -- we just tack the command on the end of the cmd.exe command line,
         -- which partly works.  There seem to be some quoting issues, but
         -- I don't have the energy to find+fix them right now (ToDo). --SDM
         -- (later) Now I don't know what the above comment means.  sigh.
-commandToProcess (RawCommand cmd args)
-  | map toLower (takeWinExtension cmd) `elem` [".bat", ".cmd"]
-  = return (cmd, translateInternal cmd ++ concatMap ((' ':) . translateCmdExeArg) args)
-  | otherwise
-  = return (cmd, translateInternal cmd ++ concatMap ((' ':) . translateInternal) args)
+  where
+    slashC :: STRING_TYPE
+#if defined(OS_STRING)
+    slashC = [osstr| /c |]
+#else
+    slashC = " /c "
+#endif
+commandToProcess (RawCommand cmd args) = do
+  let
+    cmdTranslated = translateInternal cmd
+    argsTranslated = map translateArg args
+    translated = cmdTranslated : argsTranslated
+  return (cmd, intercalate separator translated)
+  where
+    translateArg :: STRING_TYPE -> STRING_TYPE
+    translateArg
+      | map toLower (unsafeDecodeFS (takeWinExtension cmd)) `elem` [".bat", ".cmd"] =
+        translateCmdExeArg
+      | otherwise = translateInternal
+
+    separator :: STRING_TYPE
+#if defined(OS_STRING)
+    separator = [osstr| |]
+#else
+    separator = " "
+#endif
 
 -- TODO: filepath should also be updated with 'takeWinExtension'. Perhaps
 -- some day we can remove this logic from `process` but there is no hurry.
@@ -448,47 +532,71 @@ commandToProcess (RawCommand cmd args)
 --
 -- >>> takeWinExtension "test.bat ."
 -- ".bat"
-takeWinExtension :: FilePath -> String
-takeWinExtension = takeExtension . dropWhileEnd (`elem` [' ', '.'])
+takeWinExtension :: PATH_TYPE -> STRING_TYPE
+takeWinExtension =
+  takeExtension . dropWhileEnd (\c -> c == dot || c == whitespace)
+  where
+    dot :: CHAR_TYPE
+#if defined(OS_STRING)
+    dot = OsString.fromWord 46
+#else
+    dot = '.'
+#endif
+
+    whitespace :: CHAR_TYPE
+#if defined(OS_STRING)
+    whitespace = OsString.fromWord 32
+#else
+    whitespace = ' '
+#endif
 
 -- Find CMD.EXE (or COMMAND.COM on Win98).  We use the same algorithm as
 -- system() in the VC++ CRT (Vc7/crt/src/system.c in a VC++ installation).
-findCommandInterpreter :: IO FilePath
+findCommandInterpreter :: IO PATH_TYPE
 findCommandInterpreter = do
   -- try COMSPEC first
-  catchJust (\e -> if isDoesNotExistError e then Just e else Nothing)
-            (getEnv "COMSPEC") $ \_ -> do
+  keyCOMSPEC <- encodeFS "COMSPEC"
+  getEnv keyCOMSPEC >>= \case
+    Nothing -> do
+      -- try to find CMD.EXE or COMMAND.COM
+      {-
+      XXX We used to look at _osver (using cbits) and pick which shell to
+      use with
+      let filename | osver .&. 0x8000 /= 0 = "command.com"
+                   | otherwise             = "cmd.exe"
+      We ought to use GetVersionEx instead, but for now we just look for
+      either filename
+      -}
+      cmdExe <- encodeFS "cmd.exe"
+      commandCom <- encodeFS "command.com"
 
-    -- try to find CMD.EXE or COMMAND.COM
-    {-
-    XXX We used to look at _osver (using cbits) and pick which shell to
-    use with
-    let filename | osver .&. 0x8000 /= 0 = "command.com"
-                 | otherwise             = "cmd.exe"
-    We ought to use GetVersionEx instead, but for now we just look for
-    either filename
-    -}
-    path <- getEnv "PATH"
-    let
-        -- use our own version of System.Directory.findExecutable, because
-        -- that assumes the .exe suffix.
-        search :: [FilePath] -> IO (Maybe FilePath)
-        search [] = return Nothing
-        search (d:ds) = do
-                let path1 = d </> "cmd.exe"
-                    path2 = d </> "command.com"
-                b1 <- doesFileExist path1
-                b2 <- doesFileExist path2
-                if b1 then return (Just path1)
-                      else if b2 then return (Just path2)
-                                 else search ds
-    --
-    mb_path <- search (splitSearchPath path)
+      let
+          -- use our own version of System.Directory.findExecutable, because
+          -- that assumes the .exe suffix.
+          search :: [PATH_TYPE] -> IO (Maybe PATH_TYPE)
+          search [] = return Nothing
+          search (d:ds) = do
+                  let path1 = d </> cmdExe
+                      path2 = d </> commandCom
+                  b1 <- doesFileExist path1
+                  b2 <- doesFileExist path2
+                  if b1 then return (Just path1)
+                        else if b2 then return (Just path2)
+                                   else search ds
 
-    case mb_path of
-      Nothing -> ioError (mkIOError doesNotExistErrorType
-                                "findCommandInterpreter" Nothing Nothing)
-      Just cmd -> return cmd
+      keyPATH <- encodeFS "PATH"
+      getEnv keyPATH >>= \case
+        Nothing -> notFound
+        Just path -> do
+          mb_path <- search (splitSearchPath path)
+          case mb_path of
+            Nothing -> notFound
+            Just cmd -> return cmd
+    Just cmd -> return cmd
+  where
+    notFound :: IO a
+    notFound = ioError
+      (mkIOError doesNotExistErrorType "findCommandInterpreter" Nothing Nothing)
 
 -- | Alternative regime used to escape arguments destined for scripts
 -- interpreted by @cmd.exe@, (e.g. @.bat@ and @.cmd@ files).
@@ -505,42 +613,125 @@ findCommandInterpreter = do
 -- arbitrary user code execution in when passed to a vulnerable batch
 -- script.
 --
-translateCmdExeArg :: String -> String
+translateCmdExeArg :: STRING_TYPE -> STRING_TYPE
+#if defined(OS_STRING)
+translateCmdExeArg xs =
+  [osstr|^"|] <> snd (OsString.foldr escape (True, [osstr|^"|]) xs)
+  where
+    -- See long comment above for what this function is trying to do.
+    --
+    -- The Bool passed back along the string is True iff the
+    -- rest of the string is a sequence of backslashes followed by
+    -- a double quote.
+    escape :: OsChar -> (Bool, OsString) -> (Bool, OsString)
+    escape c = \case
+      (_, string) | c == dquote -> (True, [osstr|\"|] <> string)
+      (True, string) | c == backslash -> (True, [osstr|\\|] <> string)
+      (False, string) | c == backslash -> (False, [osstr|\|] <> string)
+      (_, string) | c == percent -> (False, [osstr|%%cd:~,%|] <> string)
+      (_, string) | c `OsString.elem` [osstr|^<>|&()|] ->
+        (False, OsString.cons caret (OsString.cons c string))
+      (_, string) -> (False, OsString.cons c string)
+
+    backslash :: OsChar
+    backslash = OsString.fromWord 92
+
+    caret :: OsChar
+    caret = OsString.fromWord 94
+
+    dquote :: OsChar
+    dquote = OsString.fromWord 34
+
+    percent :: OsChar
+    percent = OsString.fromWord 37
+#else
 translateCmdExeArg xs = "^\"" ++ snd (foldr escape (True,"^\"") xs)
-  where escape '"'  (_,     str) = (True,  '\\' : '"'  : str)
-        escape '\\' (True,  str) = (True,  '\\' : '\\' : str)
-        escape '\\' (False, str) = (False, '\\' : str)
-        escape '%'  (_,     str) = (False, "%%cd:~,%" ++ str)
-        escape c    (_,     str)
-          | c `elem` "^<>|&()"   = (False, '^' : c : str)
-          | otherwise            = (False,       c : str)
+  where
+    -- See long comment above for what this function is trying to do.
+    --
+    -- The Bool passed back along the string is True iff the
+    -- rest of the string is a sequence of backslashes followed by
+    -- a double quote.
+    escape :: Char -> (Bool, String) -> (Bool, String)
+    escape '"'  (_,     str) = (True,  '\\' : '"'  : str)
+    escape '\\' (True,  str) = (True,  '\\' : '\\' : str)
+    escape '\\' (False, str) = (False, '\\' : str)
+    escape '%'  (_,     str) = (False, "%%cd:~,%" ++ str)
+    escape c    (_,     str)
+      | c `elem` "^<>|&()"   = (False, '^' : c : str)
+      | otherwise            = (False,       c : str)
+#endif
 
-translateInternal :: String -> String
+translateInternal :: STRING_TYPE -> STRING_TYPE
+#if defined(OS_STRING)
+translateInternal xs =
+  [osstr|"|] <> snd (OsString.foldr escape (True, [osstr|"|]) xs)
+  where
+    -- See long comment above for what this function is trying to do.
+    --
+    -- The Bool passed back along the string is True iff the
+    -- rest of the string is a sequence of backslashes followed by
+    -- a double quote.
+    escape :: OsChar -> (Bool, OsString) -> (Bool, OsString)
+    escape c = \case
+      (_, string) | c == dquote -> (True, [osstr|\"|] <> string)
+      (True, string) | c == backslash -> (True, [osstr|\\|] <> string)
+      (False, string) | c == backslash -> (False, [osstr|\|] <> string)
+      (_, string) -> (False, OsString.cons c string)
+
+    backslash :: OsChar
+    backslash = OsString.fromWord 92
+
+    dquote :: OsChar
+    dquote = OsString.fromWord 34
+#else
 translateInternal xs = '"' : snd (foldr escape (True,"\"") xs)
-  where escape '"'  (_,     str) = (True,  '\\' : '"'  : str)
-        escape '\\' (True,  str) = (True,  '\\' : '\\' : str)
-        escape '\\' (False, str) = (False, '\\' : str)
-        escape c    (_,     str) = (False, c : str)
-        -- See long comment above for what this function is trying to do.
-        --
-        -- The Bool passed back along the string is True iff the
-        -- rest of the string is a sequence of backslashes followed by
-        -- a double quote.
+  where
+    -- See long comment above for what this function is trying to do.
+    --
+    -- The Bool passed back along the string is True iff the
+    -- rest of the string is a sequence of backslashes followed by
+    -- a double quote.
+    escape :: Char -> (Bool, String) -> (Bool, String)
+    escape '"'  (_,     str) = (True,  '\\' : '"'  : str)
+    escape '\\' (True,  str) = (True,  '\\' : '\\' : str)
+    escape '\\' (False, str) = (False, '\\' : str)
+    escape c    (_,     str) = (False, c : str)
+#endif
 
-withCEnvironment :: [(String,String)] -> (Ptr CWString -> IO a) -> IO a
-withCEnvironment envir act =
-  let env' = foldr (\(name, val) env0 -> name ++ ('=':val)++'\0':env0) "\0" envir
-  in withCWString env' (act . castPtr)
+withCEnvironment
+    :: [(STRING_TYPE, STRING_TYPE)] -> (Ptr CWString -> IO a) -> IO a
+withCEnvironment environ action =
+  let environ' =
+        foldr
+          (\(name, val) env0 -> name <> equalSign <> val <> nul <> env0)
+          nul
+          environ
+  in useAsForeignString environ' (action . castPtr)
+  where
+    equalSign :: STRING_TYPE
+#if defined(OS_STRING)
+    equalSign = [osstr|=|]
+#else
+    equalSign = "="
+#endif
+
+    nul :: STRING_TYPE
+#if defined(OS_STRING)
+    nul = [osstr|\0|]
+#else
+    nul = "\0"
+#endif
 
 isDefaultSignal :: CLong -> Bool
 isDefaultSignal = const False
 
 createPipeInternal :: IO (Handle, Handle)
-##if defined(__IO_MANAGER_WINIO__)
+#if defined(__IO_MANAGER_WINIO__)
 createPipeInternal = createPipeInternalPosix <!> createPipeInternalHANDLE
-##else
+#else
 createPipeInternal = createPipeInternalPosix
-##endif
+#endif
 
 createPipeInternalPosix :: IO (Handle, Handle)
 createPipeInternalPosix = do
@@ -552,12 +743,12 @@ createPipeInternalPosix = do
 createPipeInternalFd :: IO (FD, FD)
 createPipeInternalFd = do
     allocaArray 2 $ \ pfds -> do
-        throwErrnoIfMinus1_ "_pipe" $ c__pipe pfds 8192 (#const _O_BINARY)
+        throwErrnoIfMinus1_ "_pipe" $ c__pipe pfds 8192 c_o_binary
         readfd <- peek pfds
         writefd <- peekElemOff pfds 1
         return (readfd, writefd)
 
-##if defined(__IO_MANAGER_WINIO__)
+#if defined(__IO_MANAGER_WINIO__)
 createPipeInternalHANDLE :: IO (Handle, Handle)
 createPipeInternalHANDLE =
   alloca $ \ pfdStdInput  ->
@@ -568,7 +759,7 @@ createPipeInternalHANDLE =
      Just hndStdOutput <- mbPipeHANDLE CreatePipe pfdStdOutput WriteMode
      return (hndStdInput, hndStdOutput)
 
-##endif
+#endif
 
 foreign import ccall "mkNamedPipe" mkNamedPipe ::
   Ptr HANDLE -> Bool -> Bool -> Ptr HANDLE -> Bool -> Bool -> IO Bool
@@ -590,14 +781,38 @@ interruptProcessGroupOfInternal ph = do
         case p_ of
             ClosedHandle _ -> return ()
             _ -> do let h = phdlProcessHandle p_
-#if mingw32_HOST_OS
                     pid <- getProcessId h
                     generateConsoleCtrlEvent cTRL_BREAK_EVENT pid
--- We can't use an #elif here, because MIN_VERSION_unix isn't defined
--- on Windows, so on Windows cpp fails:
--- error: missing binary operator before token "("
-#else
-                    pgid <- getProcessGroupIDOf h
-                    signalProcessGroup sigINT pgid
+                    -- pgid <- getProcessGroupIDOf h
+                    -- signalProcessGroup sigINT pgid
+                    -- return ()
+
+#if !defined(__IO_MANAGER_WINIO__)
+type HANDLE = Ptr ()
 #endif
-                    return ()
+
+#if defined(__IO_MANAGER_WINIO__)
+-- It is not completely safe to pass the values -1 and -2 as HANDLE as it's an
+-- unsigned type. -1 additionally is also the value for INVALID_HANDLE.  However
+-- it should be safe in this case since an invalid handle would be an error here
+-- anyway and the chances of us getting a handle with a value of -2 is
+-- astronomical. However, sometime in the future process should really use a
+-- proper structure here.
+mbHANDLE :: HANDLE -> StdStream -> IO HANDLE
+mbHANDLE _std CreatePipe      = return $ intPtrToPtr (-1)
+mbHANDLE  std Inherit         = return std
+mbHANDLE _std NoStream        = return $ intPtrToPtr (-2)
+mbHANDLE _std (UseHandle hdl) = handleToHANDLE hdl
+
+mbPipeHANDLE :: StdStream -> Ptr HANDLE -> IOMode -> IO (Maybe Handle)
+mbPipeHANDLE CreatePipe pfd mode =
+  Just <$> ( ( \ hANDLE -> rawHANDLEToHandle hANDLE mode ) =<< peek pfd )
+mbPipeHANDLE _std      _pfd _mode = return Nothing
+
+rawHANDLEToHandle :: HANDLE -> IOMode-> IO Handle
+rawHANDLEToHandle raw_handle mode  = do
+  let hwnd  = fromHANDLE raw_handle :: Io NativeHandle
+      ident = "hwnd:" ++ show raw_handle
+  enc <- getLocaleEncoding
+  mkHandleFromHANDLE hwnd Stream ident mode (Just enc)
+#endif

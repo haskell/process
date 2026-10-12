@@ -1,0 +1,1196 @@
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE ForeignFunctionInterface #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE InterruptibleFFI #-}
+{-# LANGUAGE QuasiQuotes #-}
+
+#include <ghcplatform.h>
+
+#if defined(OS_STRING)
+{-# LANGUAGE Trustworthy #-}
+#else
+{-# LANGUAGE Safe #-}
+#endif
+
+#if defined(javascript_HOST_ARCH)
+{-# LANGUAGE JavaScriptFFI #-}
+#endif
+
+#if defined(OS_STRING)
+#define PATH_TYPE OsPath
+#define STRING_TYPE OsString
+#else
+#define PATH_TYPE FilePath
+#define STRING_TYPE String
+#endif
+
+-----------------------------------------------------------------------------
+-- |
+-- Module      :  System.Process
+-- Copyright   :  (c) The University of Glasgow 2004-2008
+-- License     :  BSD-style (see the file libraries/base/LICENSE)
+--
+-- Maintainer  :  libraries@haskell.org
+-- Stability   :  experimental
+-- Portability :  non-portable (requires concurrency)
+--
+-- Operations for creating and interacting with sub-processes.
+--
+-----------------------------------------------------------------------------
+
+-- TODO:
+--      * Flag to control whether exiting the parent also kills the child.
+
+module System.Process.STRING_TYPE (
+    -- * Running sub-processes
+
+    -- ** General interface to process creation
+
+    -- | @createProcess@ and @createProcess_@ are general interfaces
+    -- to process creation. To start with you might instead want to use
+    -- one of the [simpler process creation functions](#g:simpler)
+    -- below.
+
+    createProcess,
+    createProcess_,
+
+    -- ** Creating a @CreateProcess@
+
+    -- | Once you have a @CreateProcess@ you can launch it with
+    -- 'createProcess' or one of the [simpler process creation
+    -- functions](#g:simpler).
+
+    shell, proc,
+
+    -- ** @CreateProcess@ and associated types
+
+    CreateProcess(..),
+    CmdSpec(..),
+    StdStream(..),
+    ProcessHandle,
+
+    -- * Simpler functions for common tasks #simpler#
+
+    -- ** Call, the simplest way of launching a process
+
+    callCreateProcess,
+    callProcess,
+    callCommand,
+
+    -- ** Spawn, obtaining a @ProcessHandle@
+
+    spawnProcess,
+    spawnCommand,
+
+    -- ** Read, passing @stdin@ and obtaining @stdout@
+
+    readCreateProcess,
+    readProcess,
+
+    -- ** Read with exit code, passing @stdin@, obtaining exit code, @stdout@ and @stderr@
+
+    readCreateProcessWithExitCode,
+    readProcessWithExitCode,
+
+    -- ** Other
+
+    withCreateProcess,
+    cleanupProcess,
+
+    -- ** Related utilities
+    showCommandForUser,
+    Pid,
+    getPid,
+    getCurrentPid,
+
+    -- ** Secure process creation on Windows
+    -- $windows-mitigations
+
+    -- ** Control-C handling on Unix
+    -- $ctlc-handling
+
+    -- * Process completion
+    -- ** Notes about @exec@ on Windows
+    -- $exec-on-windows
+    waitForProcess,
+    getProcessExitCode,
+    terminateProcess,
+    interruptProcessGroupOf,
+
+    -- * Interprocess communication
+    createPipe,
+    createPipeFd,
+
+    -- * Old deprecated functions
+    -- | These functions pre-date 'createProcess' which is much more
+    -- flexible.
+    runProcess,
+    runCommand,
+    runInteractiveProcess,
+    runInteractiveCommand,
+    system,
+    rawSystem,
+    ) where
+
+import qualified System.Process.Common.STRING_TYPE as Common
+import System.Process.Internals.STRING_TYPE
+
+import Control.Concurrent (forkIO, putMVar, readMVar, tryTakeMVar, withMVar)
+import Control.DeepSeq (rnf)
+import Control.Exception
+  ( bracket
+  , bracketOnError
+  , evaluate
+#if !defined(javascript_HOST_ARCH)
+  , allowInterrupt
+#endif
+  )
+import Control.Monad (unless, when)
+import Data.Maybe (fromJust)
+import Foreign
+import Foreign.C
+import GHC.IO.Exception (IOErrorType(InvalidArgument, OtherError))
+import System.Exit (ExitCode(..))
+import System.IO
+import System.IO.Error (mkIOError, ioeSetErrorString)
+
+-- OsString imports
+#if defined(OS_STRING)
+import System.OsPath (OsPath)
+import System.Process.Common.OsString (OsString, osstr)
+#endif
+
+#if defined(javascript_HOST_ARCH)
+import System.Process.JavaScript (getProcessId, getCurrentProcessId)
+#elif defined(mingw32_HOST_OS)
+import System.Win32.Process (getProcessId, getCurrentProcessId, ProcessId)
+#else
+import System.Posix.Process (getProcessID)
+import System.Posix.Types (CPid (..))
+#endif
+
+#if defined(wasm32_HOST_ARCH)
+import GHC.IO.Exception (unsupportedOperation)
+import System.IO.Error (ioError, ioeSetLocation)
+#endif
+
+-- | The platform specific type for a process identifier.
+--
+-- This is always an integral type. Width and signedness are platform specific.
+--
+-- @since 1.6.3.0
+#if defined(javascript_HOST_ARCH)
+type Pid = Int
+#elif defined(mingw32_HOST_OS)
+type Pid = ProcessId
+#else
+type Pid = CPid
+#endif
+
+-- ----------------------------------------------------------------------------
+-- createProcess
+
+-- | Construct a 'CreateProcess' record for passing to 'createProcess',
+-- representing a raw command with arguments.
+--
+-- See 'RawCommand' for precise semantics of the specified @FilePath@.
+proc :: PATH_TYPE -> [STRING_TYPE] -> CreateProcess
+proc cmd args = CreateProcess { cmdspec = RawCommand cmd args,
+                                cwd = Nothing,
+                                env = Nothing,
+                                std_in = Inherit,
+                                std_out = Inherit,
+                                std_err = Inherit,
+                                close_fds = False,
+                                create_group = False,
+                                delegate_ctlc = False,
+                                detach_console = False,
+                                create_new_console = False,
+                                new_session = False,
+                                child_group = Nothing,
+                                child_user = Nothing,
+                                use_process_jobs = False }
+
+-- | Construct a 'CreateProcess' record for passing to 'createProcess',
+-- representing a command to be passed to the shell.
+shell :: STRING_TYPE -> CreateProcess
+shell str = CreateProcess { cmdspec = ShellCommand str,
+                            cwd = Nothing,
+                            env = Nothing,
+                            std_in = Inherit,
+                            std_out = Inherit,
+                            std_err = Inherit,
+                            close_fds = False,
+                            create_group = False,
+                            delegate_ctlc = False,
+                            detach_console = False,
+                            create_new_console = False,
+                            new_session = False,
+                            child_group = Nothing,
+                            child_user = Nothing,
+                            use_process_jobs = False }
+
+{- |
+This is the most general way to spawn an external process.  The
+process can be a command line to be executed by a shell or a raw command
+with a list of arguments.  The stdin, stdout, and stderr streams of
+the new process may individually be attached to new pipes, to existing
+'Handle's, or just inherited from the parent (the default.)
+
+The details of how to create the process are passed in the
+'CreateProcess' record.  To make it easier to construct a
+'CreateProcess', the functions 'proc' and 'shell' are supplied that
+fill in the fields with default values which can be overriden as
+needed.
+
+'createProcess' returns @(/mb_stdin_hdl/, /mb_stdout_hdl/, /mb_stderr_hdl/, /ph/)@,
+where
+
+ * if @'std_in' == 'CreatePipe'@, then @/mb_stdin_hdl/@ will be @Just /h/@,
+   where @/h/@ is the write end of the pipe connected to the child
+   process's @stdin@.
+
+ * otherwise, @/mb_stdin_hdl/ == Nothing@
+
+Similarly for @/mb_stdout_hdl/@ and @/mb_stderr_hdl/@.
+
+For example, to execute a simple @ls@ command:
+
+>   r <- createProcess (proc "ls" [])
+
+To create a pipe from which to read the output of @ls@:
+
+>   (_, Just hout, _, _) <-
+>       createProcess (proc "ls" []){ std_out = CreatePipe }
+
+To also set the directory in which to run @ls@:
+
+>   (_, Just hout, _, _) <-
+>       createProcess (proc "ls" []){ cwd = Just "/home/bob",
+>                                     std_out = CreatePipe }
+
+Note that @Handle@s provided for @std_in@, @std_out@, or @std_err@ via the
+@UseHandle@ constructor will be closed by calling this function. This is not
+always the desired behavior. In cases where you would like to leave the
+@Handle@ open after spawning the child process, please use 'createProcess_'
+instead. All created @Handle@s are initially in text mode; if you need them
+to be in binary mode then use 'hSetBinaryMode'.
+
+@/ph/@ contains a handle to the running process.  On Windows
+'use_process_jobs' can be set in CreateProcess in order to create a
+Win32 Job object to monitor a process tree's progress.  If it is set
+then that job is also returned inside @/ph/@.  @/ph/@ can be used to
+kill all running sub-processes.  This feature has been available since
+1.5.0.0.
+
+-}
+createProcess
+  :: CreateProcess
+  -> IO (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)
+createProcess cp = do
+  r <- createProcess_ "createProcess" cp
+  maybeCloseStd (std_in  cp)
+  maybeCloseStd (std_out cp)
+  maybeCloseStd (std_err cp)
+  return r
+ where
+  maybeCloseStd :: StdStream -> IO ()
+  maybeCloseStd (UseHandle hdl)
+    | hdl /= stdin && hdl /= stdout && hdl /= stderr = hClose hdl
+  maybeCloseStd _ = return ()
+
+-- | A 'C.bracket'-style resource handler for 'createProcess'.
+--
+-- Does automatic cleanup when the action finishes. If there is an exception
+-- in the body then it ensures that the process gets terminated and any
+-- 'CreatePipe' 'Handle's are closed. In particular this means that if the
+-- Haskell thread is killed (e.g. 'killThread'), that the external process is
+-- also terminated.
+--
+-- e.g.
+--
+-- > withCreateProcess (proc cmd args) { ... }  $ \stdin stdout stderr ph -> do
+-- >   ...
+--
+-- @since 1.4.3.0
+withCreateProcess
+  :: CreateProcess
+  -> (Maybe Handle -> Maybe Handle -> Maybe Handle -> ProcessHandle -> IO a)
+  -> IO a
+withCreateProcess c action =
+    bracket (createProcess c) cleanupProcess
+            (\(m_in, m_out, m_err, ph) -> action m_in m_out m_err ph)
+
+-- wrapper so we can get exceptions with the appropriate function name.
+withCreateProcess_
+  :: String
+  -> CreateProcess
+  -> (Maybe Handle -> Maybe Handle -> Maybe Handle -> ProcessHandle -> IO a)
+  -> IO a
+withCreateProcess_ fun c action =
+    bracketOnError (createProcess_ fun c) cleanupProcess
+                   (\(m_in, m_out, m_err, ph) -> action m_in m_out m_err ph)
+
+-- | Cleans up the process.
+--
+-- This function is meant to be invoked from any application level cleanup
+-- handler. It terminates the process, and closes any 'CreatePipe' 'handle's.
+--
+-- @since 1.6.4.0
+cleanupProcess :: (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)
+               -> IO ()
+cleanupProcess (mb_stdin, mb_stdout, mb_stderr,
+                ph@(ProcessHandle _ delegating_ctlc _)) = do
+    terminateProcess ph
+    -- Note, it's important that other threads that might be reading/writing
+    -- these handles also get killed off, since otherwise they might be holding
+    -- the handle lock and prevent us from closing, leading to deadlock.
+    maybe (return ()) (ignoreSigPipe . hClose) mb_stdin
+    maybe (return ()) hClose mb_stdout
+    maybe (return ()) hClose mb_stderr
+    -- terminateProcess does not guarantee that it terminates the process.
+    -- Indeed on Unix it's SIGTERM, which asks nicely but does not guarantee
+    -- that it stops. If it doesn't stop, we don't want to hang, so we wait
+    -- asynchronously using forkIO.
+
+    -- However we want to end the Ctl-C handling synchronously, so we'll do
+    -- that synchronously, and set delegating_ctlc as False for the
+    -- waitForProcess (which would otherwise end the Ctl-C delegation itself).
+    when delegating_ctlc
+      stopDelegateControlC
+    _ <- forkIO (waitForProcess (resetCtlcDelegation ph) >> return ())
+    return ()
+  where
+    resetCtlcDelegation (ProcessHandle m _ l) = ProcessHandle m False l
+
+-- ----------------------------------------------------------------------------
+-- spawnProcess/spawnCommand
+
+-- | Creates a new process to run the specified raw command with the given
+-- arguments. It does not wait for the program to finish, but returns the
+-- 'ProcessHandle'.
+--
+-- @since 1.2.0.0
+spawnProcess :: PATH_TYPE -> [STRING_TYPE] -> IO ProcessHandle
+spawnProcess cmd args = do
+    (_,_,_,p) <- createProcess_ "spawnProcess" (proc cmd args)
+    return p
+
+-- | Creates a new process to run the specified shell command.
+-- It does not wait for the program to finish, but returns the 'ProcessHandle'.
+--
+-- @since 1.2.0.0
+spawnCommand :: STRING_TYPE -> IO ProcessHandle
+spawnCommand cmd = do
+    (_,_,_,p) <- createProcess_ "spawnCommand" (shell cmd)
+    return p
+
+
+-- ----------------------------------------------------------------------------
+-- callProcess/callCommand
+
+-- | Creates a new process from the provided `CreateProcess`, and wait for it
+-- to finish.  If the process returns a non-zero exit code, an exception is
+-- raised.
+--
+-- If an asynchronous exception is thrown to the thread executing
+-- @callCreateProcess@, the forked process will be terminated and
+-- @callCreateProcess@ will wait (block) until the process has been
+-- terminated.
+--
+-- @since TODO
+callCreateProcess :: CreateProcess -> IO ()
+callCreateProcess = callCreateProcess_ "callCreateProcess"
+
+-- | \"@callProcess cmd args@\" is a shorthand for
+-- \"@'callCreateProcess' ('proc' cmd args)@\".
+--
+-- @since 1.2.0.0
+callProcess :: PATH_TYPE -> [STRING_TYPE] -> IO ()
+callProcess cmd = callCreateProcess_ "callProcess" . proc cmd
+
+-- | \"@callCommand cmd@\" is a shorthand for \"@'callCreateProcess'
+-- ('shell' cmd)@\".
+--
+-- @since 1.2.0.0
+callCommand :: STRING_TYPE -> IO ()
+callCommand = callCreateProcess_ "callCommand" . shell
+
+callCreateProcess_ :: String -> CreateProcess -> IO ()
+callCreateProcess_ fun command = do
+    exit_code <- withCreateProcess_ fun
+                   command { delegate_ctlc = True } $ \_ _ _ p ->
+                   waitForProcess p
+    case exit_code of
+      ExitSuccess   -> return ()
+      ExitFailure r -> processFailed fun (cmdspec command) r
+
+processFailed :: String -> CmdSpec -> Int -> IO a
+processFailed fun = \ case
+    ShellCommand cmd -> processFailedException fun cmd []
+    RawCommand cmd args -> processFailedException fun cmd args
+
+processFailedException :: String -> PATH_TYPE -> [STRING_TYPE] -> Int -> IO a
+processFailedException fun cmd args exit_code = do
+    cmdDecoded <- Common.decodeFS cmd
+    argsDecoded <- mapM Common.decodeFS args
+    let
+        commandLine = unwords (cmdDecoded : map show argsDecoded)
+        exitCode = "(exit " ++ show exit_code ++ ")"
+    ioError
+        ( mkIOError
+            OtherError
+            (fun ++ ": " ++ commandLine ++ " " ++ exitCode)
+            Nothing
+            Nothing
+        )
+
+
+-- ----------------------------------------------------------------------------
+-- Secure process creation on Windows
+
+-- $windows-migitations
+--
+-- In general it is strongly advised that any untrusted user input be validated before
+-- being passed to a subprocess. One must be especially careful on Windows due to the
+-- crude nature of the platform's argument passing scheme. Specifically, unlike POSIX
+-- platforms, Windows treats the command-line not as a sequence of arguments but rather
+-- as a single string. It is therefore the responsibility of the called process to tokenize
+-- this string into distinct arguments.
+--
+-- While various programs on Windows tend to differ in their precise argument splitting
+-- behavior, the scheme used by @process@'s 'RawCommand' 'CmdSpec' should work for
+-- most reasonable programs. If you find that 'RawCommand' doesn't provide
+-- the behavior you need, it is recommended to instead compose your command-line
+-- manually and rather using the 'shell' 'CmdSpec'.
+--
+-- Additionally, the idiosyncratic escaping and string interpolation behavior of
+-- the Windows @cmd.exe@ command interpreter is known to introduce considerable
+-- complication to secure process creation. For this reason, @process@ implements
+-- specific argument escaping logic when the executable's file extension suggests
+-- that it is a batch file (e.g. @.bat@ or @.cmd@). However, this is not a
+-- completely reliable mitigation as Windows will also silently execute batch files
+-- when starting executables lacking a file extension (e.g. @callProcess "hello" []@
+-- when a @hello.bat@ is present in @PATH@). For this reason, users are encouraged to
+-- specify the file extension of invoked executables where possible, especially
+-- when untrusted input is involved.
+--
+-- Users passed untrusted input to subprocesses on Windows are encouraged to review
+-- <https://flatt.tech/research/posts/batbadbut-you-cant-securely-execute-commands-on-windows/>
+-- for guidance on how to safely navigate these waters.
+
+-- ----------------------------------------------------------------------------
+-- Control-C handling on Unix
+
+-- $ctlc-handling
+--
+-- When running an interactive console process (such as a shell, console-based
+-- text editor or ghci), we typically want that process to be allowed to handle
+-- Ctl-C keyboard interrupts how it sees fit. For example, while most programs
+-- simply quit on a Ctl-C, some handle it specially. To allow this to happen,
+-- use the @'delegate_ctlc' = True@ option in the 'CreateProcess' options.
+--
+-- The gory details:
+--
+-- By default Ctl-C will generate a @SIGINT@ signal, causing a 'UserInterrupt'
+-- exception to be sent to the main Haskell thread of your program, which if
+-- not specially handled will terminate the program. Normally, this is exactly
+-- what is wanted: an orderly shutdown of the program in response to Ctl-C.
+--
+-- Of course when running another interactive program in the console then we
+-- want to let that program handle Ctl-C. Under Unix however, Ctl-C sends
+-- @SIGINT@ to every process using the console. The standard solution is that
+-- while running an interactive program, ignore @SIGINT@ in the parent, and let
+-- it be handled in the child process. If that process then terminates due to
+-- the @SIGINT@ signal, then at that point treat it as if we had received the
+-- @SIGINT@ ourselves and begin an orderly shutdown.
+--
+-- This behaviour is implemented by 'createProcess' (and
+-- 'waitForProcess' \/ 'getProcessExitCode') when the @'delegate_ctlc' = True@
+-- option is set. In particular, the @SIGINT@ signal will be ignored until
+-- 'waitForProcess' returns (or 'getProcessExitCode' returns a non-Nothing
+-- result), so it becomes especially important to use 'waitForProcess' for every
+-- processes created.
+--
+-- In addition, in 'delegate_ctlc' mode, 'waitForProcess' and
+-- 'getProcessExitCode' will throw a 'UserInterrupt' exception if the process
+-- terminated with @'ExitFailure' (-SIGINT)@. Typically you will not want to
+-- catch this exception, but let it propagate, giving a normal orderly shutdown.
+-- One detail to be aware of is that the 'UserInterrupt' exception is thrown
+-- /synchronously/ in the thread that calls 'waitForProcess', whereas normally
+-- @SIGINT@ causes the exception to be thrown /asynchronously/ to the main
+-- thread.
+--
+-- For even more detail on this topic, see
+-- <http://www.cons.org/cracauer/sigint.html "Proper handling of SIGINT/SIGQUIT">.
+
+-- $exec-on-windows
+--
+-- Note that processes which use the POSIX @exec@ system call (e.g. @gcc@)
+-- require special care on Windows. Specifically, the @msvcrt@ C runtime used
+-- frequently on Windows emulates @exec@ in a non-POSIX compliant manner, where
+-- the caller will be terminated (with exit code 0) and execution will continue
+-- in a new process. As a result, on Windows it will appear as though a child
+-- process which has called @exec@ has terminated despite the fact that the
+-- process would still be running on a POSIX-compliant platform.
+--
+-- Since many programs do use @exec@, the @process@ library exposes the
+-- 'use_process_jobs' flag to make it possible to reliably detect when such a
+-- process completes. When this flag is set a 'ProcessHandle' will not be
+-- deemed to be \"finished\" until all processes spawned by it have
+-- terminated (except those spawned by the child with the
+-- @CREATE_BREAKAWAY_FROM_JOB@ @CreateProcess@ flag).
+--
+-- Note, however, that, because of platform limitations, the exit code returned
+-- by @waitForProcess@ and @getProcessExitCode@ cannot not be relied upon when
+-- the child uses @exec@, even when 'use_process_jobs' is used. Specifically,
+-- these functions will return the exit code of the *original child* (which
+-- always exits with code 0, since it called @exec@), not the exit code of the
+-- process which carried on with execution after @exec@. This is different from
+-- the behavior prescribed by POSIX but is the best approximation that can be
+-- realised under the restrictions of the Windows process model.
+
+-- -----------------------------------------------------------------------------
+
+-- | @readProcess@ forks an external process, reads its standard output
+-- strictly, blocking until the process terminates, and returns the output
+-- string. The external process inherits the standard error.
+--
+-- If an asynchronous exception is thrown to the thread executing
+-- @readProcess@, the forked process will be terminated and @readProcess@ will
+-- wait (block) until the process has been terminated.
+--
+-- Output is returned strictly, so this is not suitable for launching processes
+-- that require interaction over the standard file streams.
+--
+-- This function throws an 'IOError' if the process 'ExitCode' is
+-- anything other than 'ExitSuccess'. If instead you want to get the
+-- 'ExitCode' then use 'readProcessWithExitCode'.
+--
+-- Users of this function should compile with @-threaded@ if they
+-- want other Haskell threads to keep running while waiting on
+-- the result of readProcess.
+--
+-- >  > readProcess "date" [] []
+-- >  "Thu Feb  7 10:03:39 PST 2008\n"
+--
+-- The arguments are:
+--
+-- * The command to run, which must be in the $PATH, or an absolute or relative path
+--
+-- * A list of separate command line arguments to the program.  See 'RawCommand' for
+--   further discussion of Windows semantics.
+--
+-- * A string to pass on standard input to the forked process.
+--
+readProcess
+    :: PATH_TYPE                -- ^ Filename of the executable (see 'RawCommand' for details)
+    -> [STRING_TYPE]            -- ^ any arguments
+    -> String                   -- ^ standard input
+    -> IO String                -- ^ stdout
+readProcess cmd args = readCreateProcess $ proc cmd args
+
+-- | @readCreateProcess@ works exactly like 'readProcess' except that it
+-- lets you pass 'CreateProcess' giving better flexibility.
+--
+-- >  > readCreateProcess ((shell "pwd") { cwd = Just "/etc/" }) ""
+-- >  "/etc\n"
+--
+-- Note that @Handle@s provided for @std_in@ or @std_out@ via the CreateProcess
+-- record will be ignored.
+--
+-- @since 1.2.3.0
+
+readCreateProcess
+    :: CreateProcess
+    -> String                   -- ^ standard input
+    -> IO String                -- ^ stdout
+readCreateProcess cp input = do
+    let cp_opts = cp {
+                    std_in  = CreatePipe,
+                    std_out = CreatePipe
+                  }
+    (ex, output) <- withCreateProcess_ "readCreateProcess" cp_opts $
+      \mb_inh mb_outh _ ph ->
+        case (mb_inh, mb_outh) of
+          (Just inh, Just outh) -> do
+
+            -- fork off a thread to start consuming the output
+            output  <- hGetContents outh
+            withForkWait (evaluate $ rnf output) $ \waitOut -> do
+
+              -- now write any input
+              unless (null input) $
+                ignoreSigPipe $ hPutStr inh input
+              -- hClose performs implicit hFlush, and thus may trigger a SIGPIPE
+              ignoreSigPipe $ hClose inh
+
+              -- wait on the output
+              waitOut
+              hClose outh
+
+            -- wait on the process
+            ex <- waitForProcess ph
+            return (ex, output)
+
+          (Nothing,_) -> error "readCreateProcess: Failed to get a stdin handle."
+          (_,Nothing) -> error "readCreateProcess: Failed to get a stdout handle."
+
+    case ex of
+     ExitSuccess   -> return output
+     ExitFailure r -> processFailed "readCreateProcess" (cmdspec cp) r
+
+
+-- | @readProcessWithExitCode@ is like 'readProcess' but with two differences:
+--
+--  * it returns the 'ExitCode' of the process, and does not throw any
+--    exception if the code is not 'ExitSuccess'.
+--
+--  * it reads and returns the output from process' standard error handle,
+--    rather than the process inheriting the standard error handle.
+--
+-- On Unix systems, see 'waitForProcess' for the meaning of exit codes
+-- when the process died as the result of a signal.
+--
+readProcessWithExitCode
+    :: PATH_TYPE                -- ^ Filename of the executable (see 'RawCommand' for details)
+    -> [STRING_TYPE]            -- ^ any arguments
+    -> String                   -- ^ standard input
+    -> IO (ExitCode, String, String) -- ^ exitcode, stdout, stderr
+readProcessWithExitCode cmd args =
+    readCreateProcessWithExitCode $ proc cmd args
+
+-- | @readCreateProcessWithExitCode@ works exactly like 'readProcessWithExitCode' except that it
+-- lets you pass 'CreateProcess' giving better flexibility.
+--
+-- Note that @Handle@s provided for @std_in@, @std_out@, or @std_err@ via the CreateProcess
+-- record will be ignored.
+--
+-- @since 1.2.3.0
+readCreateProcessWithExitCode
+    :: CreateProcess
+    -> String                      -- ^ standard input
+    -> IO (ExitCode, String, String) -- ^ exitcode, stdout, stderr
+readCreateProcessWithExitCode cp input = do
+    let cp_opts = cp {
+                    std_in  = CreatePipe,
+                    std_out = CreatePipe,
+                    std_err = CreatePipe
+                  }
+    withCreateProcess_ "readCreateProcessWithExitCode" cp_opts $
+      \mb_inh mb_outh mb_errh ph ->
+        case (mb_inh, mb_outh, mb_errh) of
+          (Just inh, Just outh, Just errh) -> do
+
+            out <- hGetContents outh
+            err <- hGetContents errh
+
+            -- fork off threads to start consuming stdout & stderr
+            withForkWait  (evaluate $ rnf out) $ \waitOut ->
+             withForkWait (evaluate $ rnf err) $ \waitErr -> do
+
+              -- now write any input
+              unless (null input) $
+                ignoreSigPipe $ hPutStr inh input
+              -- hClose performs implicit hFlush, and thus may trigger a SIGPIPE
+              ignoreSigPipe $ hClose inh
+
+              -- wait on the output
+              waitOut
+              waitErr
+
+              hClose outh
+              hClose errh
+
+            -- wait on the process
+            ex <- waitForProcess ph
+            return (ex, out, err)
+
+          (Nothing,_,_) -> error "readCreateProcessWithExitCode: Failed to get a stdin handle."
+          (_,Nothing,_) -> error "readCreateProcessWithExitCode: Failed to get a stdout handle."
+          (_,_,Nothing) -> error "readCreateProcessWithExitCode: Failed to get a stderr handle."
+
+-- ----------------------------------------------------------------------------
+-- showCommandForUser
+
+-- | Given a program @/p/@ and arguments @/args/@,
+--   @showCommandForUser /p/ /args/@ returns a string suitable for pasting
+--   into @\/bin\/sh@ (on Unix systems) or @CMD.EXE@ (on Windows).
+showCommandForUser :: PATH_TYPE -> [STRING_TYPE] -> String
+showCommandForUser cmd args =
+    unwords (map (Common.unsafeDecodeFS . translate) (cmd : args))
+
+
+-- ----------------------------------------------------------------------------
+-- getPid
+
+-- | Returns the PID (process ID) of a subprocess.
+--
+-- 'Nothing' is returned if the handle was already closed. Otherwise a
+-- PID is returned that remains valid as long as the handle is open.
+-- The operating system may reuse the PID as soon as the last handle to
+-- the process is closed.
+--
+-- @since 1.6.3.0
+getPid :: ProcessHandle -> IO (Maybe Pid)
+getPid (ProcessHandle mh _ _) = do
+  p_ <- readMVar mh
+  case p_ of
+#if defined(javascript_HOST_ARCH)
+    OpenHandle h -> do
+      pid <- getProcessId h
+      return $ Just pid
+#elif defined(mingw32_HOST_OS)
+    OpenHandle h -> do
+      pid <- getProcessId h
+      return $ Just pid
+#else
+    OpenHandle pid -> return $ Just pid
+#endif
+    _ -> return Nothing
+
+
+-- ----------------------------------------------------------------------------
+-- getCurrentPid
+
+-- | Returns the PID (process ID) of the current process. On POSIX systems,
+-- this calls 'getProcessID' from "System.Posix.Process" in the @unix@ package.
+-- On Windows, this calls 'getCurrentProcessId' from "System.Win32.Process" in
+-- the @Win32@ package.
+--
+-- @since 1.6.12.0
+getCurrentPid :: IO Pid
+getCurrentPid =
+#if defined(javascript_HOST_ARCH)
+    getCurrentProcessId
+#elif defined(mingw32_HOST_OS)
+    getCurrentProcessId
+#else
+    getProcessID
+#endif
+
+
+-- ----------------------------------------------------------------------------
+-- waitForProcess
+
+{- | Waits for the specified process to terminate, and returns its exit code.
+On Unix systems, may throw 'UserInterrupt' when using 'delegate_ctlc'.
+
+GHC Note: in order to call @waitForProcess@ without blocking all the
+other threads in the system, you must compile the program with
+@-threaded@.
+
+Note that it is safe to call @waitForProcess@ for the same process in multiple
+threads. When the process ends, threads blocking on this call will wake in
+FIFO order. When using 'delegate_ctlc' and the process is interrupted, only
+the first waiting thread will throw 'UserInterrupt'.
+
+(/Since: 1.2.0.0/) On Unix systems, a negative value @'ExitFailure' -/signum/@
+indicates that the child was terminated by signal @/signum/@.
+The signal numbers are platform-specific, so to test for a specific signal use
+the constants provided by "System.Posix.Signals" in the @unix@ package.
+Note: core dumps are not reported, use "System.Posix.Process" if you need this
+detail.
+
+-}
+waitForProcess
+  :: ProcessHandle
+  -> IO ExitCode
+waitForProcess ph@(ProcessHandle _ delegating_ctlc _) = lockWaitpid $ do
+  p_ <- modifyProcessHandle ph $ \p_ -> return (p_,p_)
+  case p_ of
+    ClosedHandle e -> return e
+    OpenHandle h  -> do
+        -- don't hold the MVar while we call c_waitForProcess...
+        e <- waitForProcess' h
+        (e', was_open) <- modifyProcessHandle ph $ \p_' ->
+          case p_' of
+            ClosedHandle e' -> return (p_', (e', False))
+            OpenExtHandle{} -> fail "waitForProcess(OpenExtHandle): this cannot happen"
+            OpenHandle ph'  -> do
+              closePHANDLE ph'
+              return (ClosedHandle e, (e, True))
+        -- endDelegateControlC after closing the handle, since it
+        -- may throw UserInterrupt
+        when (was_open && delegating_ctlc) $
+          endDelegateControlC e
+        return e'
+#if defined(mingw32_HOST_OS)
+    OpenExtHandle h job -> do
+        -- First wait for completion of the job...
+        waitForJobCompletion job
+        e <- waitForProcess' h
+        e' <- modifyProcessHandle ph $ \p_' ->
+          case p_' of
+            ClosedHandle e' -> return (p_', e')
+            OpenHandle{}    -> fail "waitForProcess(OpenHandle): this cannot happen"
+            OpenExtHandle ph' job' -> do
+              closePHANDLE ph'
+              closePHANDLE job'
+              return (ClosedHandle e, e)
+        -- omit endDelegateControlC since it's a no-op on Windows
+        return e'
+#else
+    OpenExtHandle _ _job ->
+        return $ ExitFailure (-1)
+#endif
+  where
+    -- If more than one thread calls `waitpid` at a time, `waitpid` will
+    -- return the exit code to one of them and (-1) to the rest of them,
+    -- causing an exception to be thrown.
+    -- Cf. https://github.com/haskell/process/issues/46, and
+    -- https://github.com/haskell/process/pull/58 for further discussion
+    lockWaitpid m = withMVar (waitpidLock ph) $ \() -> m
+
+    waitForProcess' :: PHANDLE -> IO ExitCode
+    waitForProcess' h = alloca $ \pret -> do
+#if defined(javascript_HOST_ARCH)
+      throwErrnoIfMinus1Retry_ "waitForProcess" (C.interruptible $ c_waitForProcess h pret)
+#else
+      throwErrnoIfMinus1Retry_ "waitForProcess" (allowInterrupt >> c_waitForProcess h pret)
+#endif
+      mkExitCode <$> peek pret
+
+    mkExitCode :: CInt -> ExitCode
+    mkExitCode code
+      | code == 0 = ExitSuccess
+      | otherwise = ExitFailure (fromIntegral code)
+
+
+-- ----------------------------------------------------------------------------
+-- getProcessExitCode
+
+{- |
+This is a non-blocking version of 'waitForProcess'.  If the process is
+still running, 'Nothing' is returned.  If the process has exited, then
+@'Just' e@ is returned where @e@ is the exit code of the process.
+
+On Unix systems, see 'waitForProcess' for the meaning of exit codes
+when the process died as the result of a signal. May throw
+'UserInterrupt' when using 'delegate_ctlc'.
+-}
+
+getProcessExitCode :: ProcessHandle -> IO (Maybe ExitCode)
+getProcessExitCode ph@(ProcessHandle _ delegating_ctlc _) = tryLockWaitpid $ do
+  (m_e, was_open) <- modifyProcessHandle ph $ \p_ ->
+    case p_ of
+      ClosedHandle e -> return (p_, (Just e, False))
+      open -> do
+        alloca $ \pExitCode -> do
+          case getHandle open of
+            Nothing -> return (p_, (Nothing, False))
+            Just h  -> do
+                res <- throwErrnoIfMinus1Retry "getProcessExitCode" $
+                                        c_getProcessExitCode h pExitCode
+                code <- peek pExitCode
+                if res == 0
+                   then return (p_, (Nothing, False))
+                   else do
+                        closePHANDLE h
+                        let e  | code == 0 = ExitSuccess
+                               | otherwise = ExitFailure (fromIntegral code)
+                        return (ClosedHandle e, (Just e, True))
+  -- endDelegateControlC after closing the handle, since it
+  -- may throw UserInterrupt
+  case m_e of
+    Just e | was_open && delegating_ctlc -> endDelegateControlC e
+    _                                    -> return ()
+  return m_e
+    where getHandle :: ProcessHandle__ -> Maybe PHANDLE
+          getHandle (OpenHandle        h) = Just h
+          getHandle (ClosedHandle      _) = Nothing
+          getHandle (OpenExtHandle   h _) = Just h
+
+          -- If somebody is currently holding the waitpid lock, we don't want to
+          -- accidentally remove the pid from the process table.
+          -- Try acquiring the waitpid lock. If it is held, we are done
+          -- since that means the process is still running and we can return
+          -- `Nothing`. If it is not held, acquire it so we can run the
+          -- (non-blocking) call to `waitpid` without worrying about any
+          -- other threads calling it at the same time.
+          tryLockWaitpid :: IO (Maybe ExitCode) -> IO (Maybe ExitCode)
+          tryLockWaitpid action = bracket acquire release between
+            where
+              acquire   = tryTakeMVar (waitpidLock ph)
+              release m = case m of
+                Nothing -> return ()
+                Just () -> putMVar (waitpidLock ph) ()
+              between m = case m of
+                Nothing -> return Nothing
+                Just () -> action
+
+-- ----------------------------------------------------------------------------
+-- terminateProcess
+
+-- | Attempts to terminate the specified process.  This function should
+-- not be used under normal circumstances - no guarantees are given regarding
+-- how cleanly the process is terminated.  To check whether the process
+-- has indeed terminated, use 'getProcessExitCode'.
+--
+-- On Unix systems, 'terminateProcess' sends the process the SIGTERM signal.
+-- On Windows systems, if `use_process_jobs` is `True` then the Win32 @TerminateJobObject@
+-- function is called to kill all processes associated with the job and passing the
+-- exit code of 1 to each of them. Otherwise if `use_process_jobs` is `False` then the
+-- Win32 @TerminateProcess@ function is called, passing an exit code of 1.
+--
+-- Note: on Windows, if the process was a shell command created by
+-- 'createProcess' with 'shell', or created by 'runCommand' or
+-- 'runInteractiveCommand', then 'terminateProcess' will only
+-- terminate the shell, not the command itself.  On Unix systems, both
+-- processes are in a process group and will be terminated together.
+
+terminateProcess :: ProcessHandle -> IO ()
+terminateProcess ph = do
+  withProcessHandle ph $ \p_ ->
+    case p_ of
+      ClosedHandle  _ -> return ()
+#if defined(mingw32_HOST_OS)
+      OpenExtHandle{} -> terminateJobUnsafe p_ 1 >> return ()
+#else
+      OpenExtHandle{} -> error "terminateProcess with OpenExtHandle should not happen on POSIX."
+#endif
+      OpenHandle    h -> do
+        throwErrnoIfMinus1Retry_ "terminateProcess" $ c_terminateProcess h
+        return ()
+        -- does not close the handle, we might want to try terminating it
+        -- again, or get its exit code.
+
+
+-- ----------------------------------------------------------------------------
+-- Interface to C bits
+
+#if defined(wasm32_HOST_ARCH)
+
+c_terminateProcess :: PHANDLE -> IO CInt
+c_terminateProcess _ = ioError (ioeSetLocation unsupportedOperation "terminateProcess")
+
+c_getProcessExitCode :: PHANDLE -> Ptr CInt -> IO CInt
+c_getProcessExitCode _ _ = ioError (ioeSetLocation unsupportedOperation "getProcessExitCode")
+
+c_waitForProcess :: PHANDLE -> Ptr CInt -> IO CInt
+c_waitForProcess _ _ = ioError (ioeSetLocation unsupportedOperation "waitForProcess")
+
+#elif defined(javascript_HOST_ARCH)
+
+foreign import javascript unsafe "h$process_terminateProcess"
+  c_terminateProcess
+        :: PHANDLE
+        -> IO Int
+
+foreign import javascript unsafe "h$process_getProcessExitCode"
+  c_getProcessExitCode
+        :: PHANDLE
+        -> Ptr Int
+        -> IO Int
+
+foreign import javascript interruptible "h$process_waitForProcess"
+  c_waitForProcess
+        :: PHANDLE
+        -> Ptr CInt
+        -> IO CInt
+
+#else
+
+foreign import ccall unsafe "terminateProcess"
+  c_terminateProcess
+        :: PHANDLE
+        -> IO CInt
+
+foreign import ccall unsafe "getProcessExitCode"
+  c_getProcessExitCode
+        :: PHANDLE
+        -> Ptr CInt
+        -> IO CInt
+
+foreign import ccall interruptible "waitForProcess" -- NB. safe - can block
+  c_waitForProcess
+        :: PHANDLE
+        -> Ptr CInt
+        -> IO CInt
+
+#endif
+
+-- ----------------------------------------------------------------------------
+-- Old deprecated variants
+-- ----------------------------------------------------------------------------
+
+-- TODO: We're not going to mark these functions as DEPRECATED immediately in
+-- process-1.2.0.0. That's because some of their replacements have not been
+-- around for all that long. But they should eventually be marked with a
+-- suitable DEPRECATED pragma after a release or two.
+
+
+-- ----------------------------------------------------------------------------
+-- runCommand
+
+--TODO: in a later release {-# DEPRECATED runCommand "Use 'spawnCommand' instead" #-}
+
+{- | Runs a command using the shell.
+ -}
+runCommand
+  :: STRING_TYPE
+  -> IO ProcessHandle
+
+runCommand string = do
+  (_,_,_,ph) <- createProcess_ "runCommand" (shell string)
+  return ph
+
+
+-- ----------------------------------------------------------------------------
+-- runProcess
+
+--TODO: in a later release {-# DEPRECATED runProcess "Use 'spawnProcess' or 'createProcess' instead" #-}
+
+{- | Runs a raw command, optionally specifying 'Handle's from which to
+     take the @stdin@, @stdout@ and @stderr@ channels for the new
+     process (otherwise these handles are inherited from the current
+     process).
+
+     Any 'Handle's passed to 'runProcess' are placed immediately in the
+     closed state.
+
+     Note: consider using the more general 'createProcess' instead of
+     'runProcess'.
+-}
+runProcess
+  :: PATH_TYPE                           -- ^ Filename of the executable (see 'RawCommand' for details)
+  -> [STRING_TYPE]                       -- ^ Arguments to pass to the executable
+  -> Maybe PATH_TYPE                     -- ^ Optional path to the working directory
+  -> Maybe [(STRING_TYPE, STRING_TYPE)]  -- ^ Optional environment (otherwise inherit)
+  -> Maybe Handle                        -- ^ Handle to use for @stdin@ (Nothing => use existing @stdin@)
+  -> Maybe Handle                        -- ^ Handle to use for @stdout@ (Nothing => use existing @stdout@)
+  -> Maybe Handle                        -- ^ Handle to use for @stderr@ (Nothing => use existing @stderr@)
+  -> IO ProcessHandle
+
+runProcess cmd args mb_cwd mb_env mb_stdin mb_stdout mb_stderr = do
+  (_,_,_,ph) <-
+      createProcess_ "runProcess"
+         (proc cmd args){ cwd = mb_cwd,
+                          env = mb_env,
+                          std_in  = mbToStd mb_stdin,
+                          std_out = mbToStd mb_stdout,
+                          std_err = mbToStd mb_stderr }
+  maybeClose mb_stdin
+  maybeClose mb_stdout
+  maybeClose mb_stderr
+  return ph
+ where
+  maybeClose :: Maybe Handle -> IO ()
+  maybeClose (Just  hdl)
+    | hdl /= stdin && hdl /= stdout && hdl /= stderr = hClose hdl
+  maybeClose _ = return ()
+
+  mbToStd :: Maybe Handle -> StdStream
+  mbToStd Nothing    = Inherit
+  mbToStd (Just hdl) = UseHandle hdl
+
+
+-- ----------------------------------------------------------------------------
+-- runInteractiveCommand
+
+--TODO: in a later release {-# DEPRECATED runInteractiveCommand "Use 'createProcess' instead" #-}
+
+{- | Runs a command using the shell, and returns 'Handle's that may
+     be used to communicate with the process via its @stdin@, @stdout@,
+     and @stderr@ respectively.
+-}
+runInteractiveCommand
+  :: STRING_TYPE
+  -> IO (Handle, Handle, Handle, ProcessHandle)
+
+runInteractiveCommand string =
+  runInteractiveProcess1 "runInteractiveCommand" (shell string)
+
+
+-- ----------------------------------------------------------------------------
+-- runInteractiveProcess
+
+--TODO: in a later release {-# DEPRECATED runInteractiveCommand "Use 'createProcess' instead" #-}
+
+{- | Runs a raw command, and returns 'Handle's that may be used to communicate
+     with the process via its @stdin@, @stdout@ and @stderr@ respectively.
+
+    For example, to start a process and feed a string to its stdin:
+
+>   (inp,out,err,pid) <- runInteractiveProcess "..."
+>   forkIO (hPutStr inp str)
+-}
+runInteractiveProcess
+  :: PATH_TYPE                           -- ^ Filename of the executable (see 'RawCommand' for details)
+  -> [STRING_TYPE]                       -- ^ Arguments to pass to the executable
+  -> Maybe PATH_TYPE                     -- ^ Optional path to the working directory
+  -> Maybe [(STRING_TYPE, STRING_TYPE)]  -- ^ Optional environment (otherwise inherit)
+  -> IO (Handle, Handle, Handle, ProcessHandle)
+
+runInteractiveProcess cmd args mb_cwd mb_env = do
+  runInteractiveProcess1 "runInteractiveProcess"
+        (proc cmd args){ cwd = mb_cwd, env = mb_env }
+
+runInteractiveProcess1
+  :: String
+  -> CreateProcess
+  -> IO (Handle, Handle, Handle, ProcessHandle)
+runInteractiveProcess1 fun cmd = do
+  (mb_in, mb_out, mb_err, p) <-
+      createProcess_ fun
+           cmd{ std_in  = CreatePipe,
+                std_out = CreatePipe,
+                std_err = CreatePipe }
+  return (fromJust mb_in, fromJust mb_out, fromJust mb_err, p)
+
+
+-- ---------------------------------------------------------------------------
+-- system & rawSystem
+
+--TODO: in a later release {-# DEPRECATED system "Use 'callCommand' (or 'spawnCommand' and 'waitForProcess') instead" #-}
+
+{-|
+Computation @system cmd@ returns the exit code produced when the
+operating system runs the shell command @cmd@.
+
+This computation may fail with one of the following
+'System.IO.Error.IOErrorType' exceptions:
+
+[@PermissionDenied@]
+The process has insufficient privileges to perform the operation.
+
+[@ResourceExhausted@]
+Insufficient resources are available to perform the operation.
+
+[@UnsupportedOperation@]
+The implementation does not support system calls.
+
+On Windows, 'system' passes the command to the Windows command
+interpreter (@CMD.EXE@ or @COMMAND.COM@), hence Unixy shell tricks
+will not work.
+
+On Unix systems, see 'waitForProcess' for the meaning of exit codes
+when the process died as the result of a signal.
+-}
+system :: STRING_TYPE -> IO ExitCode
+system str
+#if defined(OS_STRING)
+    | str == [osstr||] =
+#else
+    | str == "" =
+#endif
+        ioError (ioeSetErrorString (mkIOError InvalidArgument "system" Nothing Nothing) "null command")
+    | otherwise = do
+        (_,_,_,p) <- createProcess_ "system" (shell str) { delegate_ctlc = True }
+        waitForProcess p
+
+
+--TODO: in a later release {-# DEPRECATED rawSystem "Use 'callProcess' (or 'spawnProcess' and 'waitForProcess') instead" #-}
+
+{-|
+The computation @'rawSystem' /cmd/ /args/@ runs the operating system command
+@/cmd/@ in such a way that it receives as arguments the @/args/@ strings
+exactly as given, with no funny escaping or shell meta-syntax expansion.
+It will therefore behave more portably between operating systems than 'system'.
+
+The return codes and possible failures are the same as for 'system'.
+-}
+rawSystem :: PATH_TYPE -> [STRING_TYPE] -> IO ExitCode
+rawSystem cmd args = do
+  (_,_,_,p) <- createProcess_ "rawSystem" (proc cmd args) { delegate_ctlc = True }
+  waitForProcess p

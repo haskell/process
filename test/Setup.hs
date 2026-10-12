@@ -71,15 +71,47 @@ testProcessHooks =
   simpleUserHooks
     { buildHook = \ pd lbi userHooks buildFlags ->
         withTestLBI pd lbi $ \ _testSuite clbi -> do
-          let pathsFile = pathToString (autogenComponentModulesDir lbi clbi) </> "Test" </> "Paths" <.> "hs"
-          createDirectoryIfMissing True (takeDirectory pathsFile)
-          writeFile pathsFile $ unlines
-            [ "module Test.Paths where"
-            , "processInternalExes :: [(String, FilePath)]"
-            , "processInternalExes = " ++ show (processInternalExes pd lbi)
-            ]
+          let
+              baseDir = pathToString (autogenComponentModulesDir lbi clbi) </> "Test"
+              exes = processInternalExes pd lbi
+
+          -- Test.Paths.String
+          do
+            let
+                pathsFile = baseDir </> "String" </> "Paths" <.> "hs"
+                wrap string = show string
+            createDirectoryIfMissing True (takeDirectory pathsFile)
+            writeFile pathsFile $ unlines
+              [ "module Test.String.Paths where"
+              , "processInternalExes :: [(String, FilePath)]"
+              , "processInternalExes = " ++ printExes wrap exes
+              ]
+
+          -- Test.Paths.OsString
+          do
+            let
+                pathsFile = baseDir </> "OsString" </> "Paths" <.> "hs"
+                wrap string = "[osp|" ++ string ++ "|]"
+            createDirectoryIfMissing True (takeDirectory pathsFile)
+            writeFile pathsFile $ unlines
+              [ "{-# LANGUAGE QuasiQuotes #-}"
+              , "module Test.OsString.Paths where"
+              , "import System.OsPath (OsPath, osp)"
+              , "processInternalExes :: [(String, OsPath)]"
+              , "processInternalExes = " ++ printExes wrap exes
+              ]
+
           buildHook simpleUserHooks pd lbi userHooks buildFlags
     }
+
+printExes :: (String -> String) -> [(String, FilePath)] -> String
+printExes wrap list = "[" ++ drop 2 (concat list') ++ "]"
+    where
+        list' :: [String]
+        list' =
+            [ ", (" ++ show toolName ++ ", " ++ wrap toolLocation ++ ")"
+            | (toolName, toolLocation) <- list
+            ]
 
 processInternalExes :: PackageDescription -> LocalBuildInfo -> [(String, FilePath)]
 processInternalExes pd lbi =

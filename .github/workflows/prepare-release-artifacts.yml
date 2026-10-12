@@ -2,6 +2,10 @@ name: prepare release artifacts
 
 on: [push, pull_request, workflow_dispatch]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   sdist:
     runs-on: ubuntu-latest
@@ -12,7 +16,7 @@ jobs:
       - uses: haskell/ghcup-setup@v1
       - run: ghcup install ghc --set latest
 
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - run: autoreconf -Wall
       - run: cabal check
@@ -36,7 +40,7 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - name: download sdist
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           artifact-ids: ${{ needs.sdist.outputs.sdist-artifact-id }}
 

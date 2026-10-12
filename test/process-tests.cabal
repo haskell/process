@@ -16,6 +16,11 @@ source-repository head
   location: https://github.com/haskell/process.git
   subdir:   test
 
+flag os-string
+    description: Use the new os-string package
+    default: False
+    manual: False
+
 common process-dep
   build-depends:
     process == 1.6.30.0
@@ -47,8 +52,19 @@ test-suite test
                , bytestring >= 0.11 && < 0.13
                , deepseq  >= 1.1 && < 1.6
                , directory >= 1.1 && < 1.4
-               , filepath >= 1.2 && < 1.6
   build-tool-depends: process-tests:cli-child
   ghc-options: -threaded -rtsopts -with-rtsopts "-N"
-  other-modules: Test.Paths
-  autogen-modules: Test.Paths
+  other-modules:
+    Test.OsString
+    Test.OsString.Paths
+    Test.String
+    Test.String.Paths
+  autogen-modules:
+    Test.OsString.Paths
+    Test.String.Paths
+
+  if flag(os-string)
+    build-depends: filepath >= 1.5.0.0 && < 1.6
+                 , os-string >= 2.0.0 && < 2.1
+  else
+    build-depends: filepath >= 1.4.100.0 && < 1.5.0.0

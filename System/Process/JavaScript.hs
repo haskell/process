@@ -54,7 +54,7 @@ import qualified GHC.IO.FD as FD
 
 import GHC.JS.Prim
 
-import System.Process.Common hiding (mb_delegate_ctlc, mbPipe)
+import System.Process.Common.String hiding (mb_delegate_ctlc, mbPipe)
 
 mkProcessHandle :: JSVal -> Bool -> IO ProcessHandle
 mkProcessHandle p mb_delegate_ctlc = do

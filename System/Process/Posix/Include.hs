@@ -1,9 +1,18 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE QuasiQuotes #-}
+
+#if defined(OS_STRING)
+#define PATH_TYPE OsPath
+#define STRING_TYPE OsString
+#else
+#define PATH_TYPE FilePath
+#define STRING_TYPE String
+#endif
 
 #include <ghcplatform.h>
 
-module System.Process.Posix
+module System.Process.Posix.STRING_TYPE
     ( mkProcessHandle
     , translateInternal
     , createProcess_Internal
@@ -23,31 +32,49 @@ module System.Process.Posix
     , runInteractiveProcess_lock
     ) where
 
-import Control.Concurrent
-import Control.Exception
-import Data.Bits
-import Foreign.C
-import Foreign.Marshal
-import Foreign.Ptr
-import Foreign.Storable
-import System.IO.Unsafe
+import Control.Concurrent (MVar, modifyMVar_, newMVar, withMVar)
+import Control.Exception (AsyncException(UserInterrupt), throwIO)
+import Data.Bits ((.|.))
+import Foreign.C (CInt(CInt), CLong, CString, peekCString, throwErrno)
+import Foreign
+  ( Ptr
+  , alloca
+  , maybeWith
+  , nullPtr
+  , peek
+  , with
+  , withArray0
+  , withMany
+  )
+import System.IO.Unsafe (unsafePerformIO)
 
-import Control.Monad
-import Data.Char
-import System.IO
+import Control.Monad (when)
+import Data.Char (isAlphaNum)
+import System.Exit (ExitCode(ExitFailure))
+import System.IO (Handle, IOMode(ReadMode, WriteMode))
 import System.Posix.Process.Internals ( pPrPr_disableITimers, c_execvpe )
-import System.Posix.Types
+import System.Posix.Types (CPid(CPid), CUid, Fd(Fd))
 
-import System.Posix.Internals
-import GHC.IO.Exception
-import System.Posix.Signals as Sig
+import System.Posix.Internals (FD)
+import System.Posix.Signals
+  ( Handler(Ignore)
+  , installHandler
+  , sigINT
+  , sigQUIT
+  , signalProcessGroup
+  )
 import qualified System.Posix.IO as Posix
 import System.Posix.Process (getProcessGroupIDOf)
 
-import System.Process.Common hiding (mb_delegate_ctlc)
+import System.Process.Common.STRING_TYPE hiding (mb_delegate_ctlc)
+
+#if defined(OS_STRING)
+import System.OsPath (osp)
+import qualified System.Process.Posix.OsString.Compat as OsString
+#endif
 
 #if defined(wasm32_HOST_ARCH)
-import System.IO.Error
+import System.IO.Error (ioError, ioeSetLocation, unsupportedOperation)
 #endif
 
 #include "HsProcessConfig.h"
@@ -79,11 +106,38 @@ closePHANDLE _ = return ()
    Windows isn't required (or desirable) here.
 -}
 
-commandToProcess :: CmdSpec -> (FilePath, [String])
+commandToProcess :: CmdSpec -> (PATH_TYPE, [STRING_TYPE])
+#if defined(OS_STRING)
+commandToProcess (ShellCommand string) = ([osp|/bin/sh|], [[osstr|-c|], string])
+#else
 commandToProcess (ShellCommand string) = ("/bin/sh", ["-c", string])
+#endif
 commandToProcess (RawCommand cmd args) = (cmd, args)
 
-translateInternal :: String -> String
+translateInternal :: STRING_TYPE -> STRING_TYPE
+#if defined(OS_STRING)
+translateInternal str
+  | OsString.null str = [osstr|''|]
+    -- goodChar is a pessimistic predicate, such that if an argument is
+    -- non-empty and only contains goodChars, then there is no need to
+    -- do any quoting or escaping
+  | OsString.all goodChar str = str
+  | otherwise        = [osstr|'|] <> OsString.foldr escape [osstr|'|] str
+  where
+    escape :: OsChar -> OsString -> OsString
+    escape c string
+      | c == quote = [osstr|'\''|] <> string
+      | otherwise = OsString.cons c string
+
+    goodChar :: OsChar -> Bool
+    goodChar c =
+      isAlphaNum (OsString.toChar c)
+        || c `OsString.elem` [osstr|-_.,/|]
+
+    quote :: OsChar
+    quote = OsString.fromWord 39
+
+#else
 translateInternal "" = "''"
 translateInternal str
    -- goodChar is a pessimistic predicate, such that if an argument is
@@ -93,15 +147,28 @@ translateInternal str
  | otherwise        = '\'' : foldr escape "'" str
   where escape '\'' = showString "'\\''"
         escape c    = showChar c
-        goodChar c = isAlphaNum c || c `elem` "-_.,/"
+        goodChar c  = isAlphaNum c || c `elem` "-_.,/"
+#endif
 
 -- ----------------------------------------------------------------------------
 -- Utils
 
-withCEnvironment :: [(String,String)] -> (Ptr CString  -> IO a) -> IO a
-withCEnvironment envir act =
-  let env' = map (\(name, val) -> name ++ ('=':val)) envir
-  in withMany withFilePath env' (\pEnv -> withArray0 nullPtr pEnv act)
+withCEnvironment
+  :: [(STRING_TYPE, STRING_TYPE)] -> (Ptr CString -> IO a) -> IO a
+withCEnvironment environ action =
+  let environ' = map (\(name, val) -> name <> equalSign <> val) environ
+  in
+    withMany
+      useAsForeignStringChecked
+      environ'
+      (\pEnv -> withArray0 nullPtr pEnv action)
+  where
+    equalSign :: STRING_TYPE
+#if defined(OS_STRING)
+    equalSign = [osstr|=|]
+#else
+    equalSign = "="
+#endif
 
 -- -----------------------------------------------------------------------------
 -- POSIX runProcess with signal handling in the child
@@ -133,11 +200,11 @@ createProcess_Internal fun
    alloca $ \ pfdStdError  ->
    alloca $ \ pFailedDoing ->
    maybeWith withCEnvironment mb_env $ \pEnv ->
-   maybeWith withFilePath mb_cwd $ \pWorkDir ->
+   maybeWith useAsForeignStringChecked mb_cwd $ \pWorkDir ->
    maybeWith with mb_child_group $ \pChildGroup ->
    maybeWith with mb_child_user $ \pChildUser ->
-   withFilePath cmd $ \cmdstr ->
-   withMany withCString args $ \argstrs -> do
+   useAsForeignStringChecked cmd $ \cmdstr ->
+   withMany useAsForeignString args $ \argstrs -> do
    let cstrs = cmdstr : argstrs
    withArray0 nullPtr cstrs $ \pargs -> do
 
@@ -213,7 +280,7 @@ runInteractiveProcess_lock = unsafePerformIO $ newMVar ()
 -- restore when the last one has finished.
 
 {-# NOINLINE runInteractiveProcess_delegate_ctlc #-}
-runInteractiveProcess_delegate_ctlc :: MVar (Maybe (Int, Sig.Handler, Sig.Handler))
+runInteractiveProcess_delegate_ctlc :: MVar (Maybe (Int, Handler, Handler))
 runInteractiveProcess_delegate_ctlc = unsafePerformIO $ newMVar Nothing
 
 startDelegateControlC :: IO ()

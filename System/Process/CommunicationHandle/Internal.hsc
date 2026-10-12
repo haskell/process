@@ -21,7 +21,7 @@ import Foreign.Ptr (ptrToWordPtr, wordPtrToPtr)
 import Foreign.Storable (Storable(peek))
 import GHC.IO.Handle.FD (fdToHandle)
 import GHC.IO.IOMode (IOMode(ReadMode, WriteMode))
-import System.Process.Windows (HANDLE, mkNamedPipe)
+import System.Process.Windows.String (HANDLE, mkNamedPipe)
 ##  if defined(__IO_MANAGER_WINIO__)
 import Control.Exception (catch, throwIO)
 import GHC.IO (onException)
@@ -33,9 +33,9 @@ import GHC.IO.Handle.Windows (mkHandleFromHANDLE)
 import GHC.IO.SubSystem ((<!>))
 import GHC.IO.Windows.Handle (Io, NativeHandle, fromHANDLE)
 import GHC.Event.Windows (associateHandle')
-import System.Process.Common (rawHANDLEToHandle)
+import System.Process.Windows.String (rawHANDLEToHandle)
 ##  else
-import System.Process.Common (rawFdToHandle)
+import System.Process.Common.String (rawFdToHandle)
 ##  endif
 
 #include <fcntl.h>     /* for _O_BINARY */
