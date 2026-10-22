@@ -6,6 +6,15 @@
 
 #define UNICODE
 
+/* We need _WIN32_WINNT >= 0x0600 (Windows Vista) for the declarations of
+   STARTUPINFOEX, PROC_THREAD_ATTRIBUTE_HANDLE_LIST and SRW locks.
+   GHC does not set _WIN32_WINNT when compiling C sources, and the mingw-w64
+   headers bundled with GHC < 8.10 (mingw-w64 < v7) default it to 0x502. */
+#if !defined(_WIN32_WINNT) || _WIN32_WINNT < 0x0600
+#undef _WIN32_WINNT
+#define _WIN32_WINNT 0x0600
+#endif
+
 /* XXX This is a nasty hack; should put everything necessary in this package */
 #include "HsBase.h"
 #include "Rts.h"
@@ -282,20 +291,115 @@ setStdHandleInfo (LPHANDLE destination, HANDLE _stdhandle,
     return true;
 }
 
+/* Release an attribute list returned by 'initProcThreadAttributeList'. */
+static void
+freeProcThreadAttributeList (LPPROC_THREAD_ATTRIBUTE_LIST attrList)
+{
+    DWORD err = GetLastError();
+    DeleteProcThreadAttributeList(attrList);
+    HeapFree(GetProcessHeap(), 0, attrList);
+    SetLastError(err);
+}
+
+/* Initialise an attribute list used to restrict inheritance to the given handles. */
+static LPPROC_THREAD_ATTRIBUTE_LIST
+initProcThreadAttributeList (HANDLE *handles, DWORD nHandles)
+{
+    SIZE_T attrSize = 0;
+    // Pass NULL to 'InitializeProcThreadAttributeList' to set 'attrSize',
+    // which (on success) returns FALSE with last error 'ERROR_INSUFFICIENT_BUFFER'.
+    if (!InitializeProcThreadAttributeList(NULL, 1, 0, &attrSize)
+        && GetLastError() != ERROR_INSUFFICIENT_BUFFER)
+        return NULL;
+    assert (attrSize > 0);
+
+    // Now allocate 'attrList' and then initialise it.
+    LPPROC_THREAD_ATTRIBUTE_LIST attrList
+      = (LPPROC_THREAD_ATTRIBUTE_LIST) HeapAlloc(GetProcessHeap(), 0, attrSize);
+    if (attrList == NULL) {
+        SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+        return NULL;
+    }
+    if (!InitializeProcThreadAttributeList(attrList, 1, 0, &attrSize)) {
+        // Allocated but not initialised: free 'attrList'.
+        // Does not call 'DeleteProcThreadAttributeList' as there is nothing to delete.
+        DWORD err = GetLastError();
+        HeapFree(GetProcessHeap(), 0, attrList);
+        SetLastError(err);
+        return NULL;
+    }
+
+    if (!UpdateProcThreadAttribute(attrList, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
+                                   handles, nHandles * sizeof(HANDLE),
+                                   NULL, NULL)) {
+        freeProcThreadAttributeList(attrList);
+        return NULL;
+    }
+    return attrList;
+}
+
+/* Note [Concurrent process spawning]
+   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   GHC bug #2650 showed that we need to be careful to avoid child processes
+   inheriting unwanted handles on Windows.
+
+   The close_fds field of CreateProcess specifies the expected behaviour:
+
+     - close_fds = False: the child process inherits all inheritable handles
+       of the parent.
+     - close_fds = True: the child process is handed an explicit list of
+       handles it may inherit, using PROC_THREAD_ATTRIBUTE_HANDLE_LIST.
+
+   In a concurrent setting, the first behaviour is problematic: spawning
+   happens in two steps (first creating inheritable pipe handles, then calling
+   CreateProcess), but we don't want a child process to inherit handles created
+   for other (concurrently spawned) children, which can cause write-ends to be
+   left permanently open. That was the bug in #2650.
+
+   Serialising all process creation fixes this, but is too strong: we only need
+   to ensure that no 'close_fds = False' spawn is concurrent with any other
+   spawn (of any kind). Instead, runInteractiveProcessWrapper holds spawnLock,
+   a Windows "Slim Reader/Writer Lock" (SRW lock), for the duration of the spawn.
+   The lock is held in exclusive mode for 'close_fds = False', and in shared
+   mode for 'close_fds = True'.
+
+   Remarks:
+
+     - The lock is acquired and released within a single C call, because SRW
+       locks must be released by the OS thread that acquired it (a Haskell
+       thread may migrate between OS threads across FFI calls).
+     - We use 'safe' FFI calls for process spawning: an unsafe call blocked on
+       the lock would keep its capability, stalling every Haskell thread at
+       the next GC sync.
+     - SRW locks are neither fair nor FIFO, so there is no guarantee that a
+       'close_fds = False' spawn will not be starved by concurrent
+       'close_fds = True' spawns continuously arriving.
+       If this becomes a problem in practice, one possible solution would be to
+       add a small FIFO queue based on https://learn.microsoft.com/en-us/windows/win32/api/ntdef/ns-ntdef-list_entry
+*/
+
+static SRWLOCK spawnLock = SRWLOCK_INIT;
+
 /* Common functionality between the Posix FD version and native HANDLE version
    of runInteractiveProcess.  The main difference lies in the use of
    ASYNCHRONOUS which indicates whether the pipes that are created allow for
-   asynchronous access or not.  */
+   asynchronous access or not.
 
+   Must only be called after acquiring the process spawning lock;
+   see Note [Concurrent process spawning]. */
 static ProcHandle
-runInteractiveProcessWrapper (
+runInteractiveProcessWithLock (
     wchar_t *cmd, wchar_t *workingDirectory,
     wchar_t *environment,
     HANDLE _stdin, HANDLE _stdout, HANDLE _stderr,
     HANDLE *pStdInput, HANDLE *pStdOutput, HANDLE *pStdError,
     int flags, bool useJobObject, HANDLE *hJob, bool asynchronous)
 {
-    STARTUPINFO sInfo;
+    STARTUPINFOEX sInfoEx;
+    STARTUPINFO *sInfo = &sInfoEx.StartupInfo;
+    LPPROC_THREAD_ATTRIBUTE_LIST attrList = NULL;
+    HANDLE inheritedHandles[3];
+    DWORD nInheritedHandles = 0;
     PROCESS_INFORMATION pInfo;
     HANDLE hStdInputRead   = INVALID_HANDLE_VALUE;
     HANDLE hStdInputWrite  = INVALID_HANDLE_VALUE;
@@ -303,38 +407,39 @@ runInteractiveProcessWrapper (
     HANDLE hStdOutputWrite = INVALID_HANDLE_VALUE;
     HANDLE hStdErrorRead   = INVALID_HANDLE_VALUE;
     HANDLE hStdErrorWrite  = INVALID_HANDLE_VALUE;
+    HANDLE job             = NULL;
     BOOL close_fds = ((flags & RUN_PROCESS_IN_CLOSE_FDS) != 0);
     // We always pass a wide environment block, so we MUST set this flag
     DWORD dwFlags = CREATE_UNICODE_ENVIRONMENT;
     BOOL inherit;
 
-    ZeroMemory(&sInfo, sizeof(sInfo));
-    sInfo.cb = sizeof(sInfo);
-    sInfo.dwFlags = STARTF_USESTDHANDLES;
+    ZeroMemory(&sInfoEx, sizeof(sInfoEx));
+    sInfo->cb = sizeof(*sInfo);
+    sInfo->dwFlags = STARTF_USESTDHANDLES;
     ZeroMemory(&pInfo, sizeof(pInfo));
 
     HANDLE defaultStdIn     = GetStdHandle(STD_INPUT_HANDLE);
     HANDLE defaultStdOutput = GetStdHandle(STD_OUTPUT_HANDLE);
     HANDLE defaultStdError  = GetStdHandle(STD_ERROR_HANDLE);
 
-    if (!setStdHandleInfo (&sInfo.hStdInput, _stdin, &hStdInputRead,
+    if (!setStdHandleInfo (&sInfo->hStdInput, _stdin, &hStdInputRead,
                            &hStdInputWrite, defaultStdIn, TRUE, FALSE,
                            asynchronous))
       goto cleanup_err;
 
-    if (!setStdHandleInfo (&sInfo.hStdOutput, _stdout, &hStdOutputRead,
+    if (!setStdHandleInfo (&sInfo->hStdOutput, _stdout, &hStdOutputRead,
                            &hStdOutputWrite, defaultStdOutput, FALSE, TRUE,
                            asynchronous))
       goto cleanup_err;
 
-    if (!setStdHandleInfo (&sInfo.hStdError, _stderr, &hStdErrorRead,
+    if (!setStdHandleInfo (&sInfo->hStdError, _stderr, &hStdErrorRead,
                            &hStdErrorWrite, defaultStdError, FALSE, TRUE,
                            asynchronous))
       goto cleanup_err;
 
-    if (sInfo.hStdInput     !=  defaultStdIn
-        && sInfo.hStdOutput !=  defaultStdOutput
-        && sInfo.hStdError  !=  defaultStdError
+    if (sInfo->hStdInput     !=  defaultStdIn
+        && sInfo->hStdOutput !=  defaultStdOutput
+        && sInfo->hStdError  !=  defaultStdError
         && (flags & RUN_PROCESS_IN_NEW_GROUP) == 0)
             dwFlags |= CREATE_NO_WINDOW;   // Run without console window only when both output and error are redirected
 
@@ -346,6 +451,33 @@ runInteractiveProcessWrapper (
         inherit = FALSE;
     } else {
         inherit = TRUE;
+    }
+
+    /* close_fds: inherit the standard handles and nothing else, using
+       PROC_THREAD_ATTRIBUTE_HANDLE_LIST. */
+    if (close_fds && inherit) {
+        HANDLE candidates[3] = { sInfo->hStdInput, sInfo->hStdOutput, sInfo->hStdError };
+        for (int i = 0; i < 3; i++) {
+            HANDLE h = candidates[i];
+            if (h == NULL || h == INVALID_HANDLE_VALUE) continue;
+            bool dup = false;
+            for (DWORD j = 0; j < nInheritedHandles; j++)
+                if (inheritedHandles[j] == h) dup = true;
+            if (!dup) inheritedHandles[nInheritedHandles++] = h;
+        }
+    }
+
+    if (close_fds && inherit && nInheritedHandles == 0) {
+        /* UpdateProcThreadAttribute requires a non-empty list of handles;
+           shortcut if there are no handles to inherit. */
+        inherit = FALSE;
+    } else if (nInheritedHandles > 0) {
+        attrList = initProcThreadAttributeList(inheritedHandles, nInheritedHandles);
+        if (attrList == NULL)
+            goto cleanup_err;
+        sInfoEx.lpAttributeList = attrList;
+        sInfo->cb = sizeof(sInfoEx);
+        dwFlags |= EXTENDED_STARTUPINFO_PRESENT;
     }
 
     if ((flags & RUN_PROCESS_IN_NEW_GROUP) != 0) {
@@ -364,24 +496,27 @@ runInteractiveProcessWrapper (
     if (useJobObject)
     {
         dwFlags |= CREATE_SUSPENDED;
-        *hJob = createJob();
-        if (!*hJob)
+        job = createJob();
+        if (!job)
         {
             goto cleanup_err;
         }
-    } else {
-        *hJob = NULL;
     }
 
-    if (!CreateProcess(NULL, cmd, NULL, NULL, inherit, dwFlags, environment, workingDirectory, &sInfo, &pInfo))
+    if (!CreateProcess(NULL, cmd, NULL, NULL, inherit, dwFlags, environment, workingDirectory, sInfo, &pInfo))
     {
         goto cleanup_err;
     }
 
-    if (useJobObject && hJob && *hJob)
+    if (attrList != NULL) {
+        freeProcThreadAttributeList(attrList);
+        attrList = NULL;
+    }
+
+    if (job)
     {
         // Then associate the process and the job;
-        if (!AssignProcessToJobObject (*hJob, pInfo.hProcess))
+        if (!AssignProcessToJobObject (job, pInfo.hProcess))
         {
             goto cleanup_err;
         }
@@ -400,10 +535,11 @@ runInteractiveProcessWrapper (
     if (hStdOutputWrite != INVALID_HANDLE_VALUE) CloseHandle(hStdOutputWrite);
     if (hStdErrorWrite  != INVALID_HANDLE_VALUE) CloseHandle(hStdErrorWrite);
 
-    // Return the pointers to the handles we need.
+    // SUCCESS: write to all the output parameters.
     *pStdInput  = hStdInputWrite;
     *pStdOutput = hStdOutputRead;
     *pStdError  = hStdErrorRead;
+    *hJob       = job;
 
     return pInfo.hProcess;
 
@@ -414,10 +550,44 @@ cleanup_err:
     if (hStdOutputWrite != INVALID_HANDLE_VALUE) CloseHandle(hStdOutputWrite);
     if (hStdErrorRead   != INVALID_HANDLE_VALUE) CloseHandle(hStdErrorRead);
     if (hStdErrorWrite  != INVALID_HANDLE_VALUE) CloseHandle(hStdErrorWrite);
-    if (useJobObject && hJob      && *hJob     ) CloseHandle(*hJob);
+    if (job             != NULL                ) CloseHandle(job);
+    if (attrList        != NULL                ) freeProcThreadAttributeList(attrList);
 
     maperrno();
     return NULL;
+}
+
+/* Wrapper around 'runInteractiveProcessWithLock' that acquires the concurrent
+   process spawning lock (see Note [Concurrent process spawning]).  */
+static ProcHandle
+runInteractiveProcessWrapper (
+    wchar_t *cmd, wchar_t *workingDirectory,
+    wchar_t *environment,
+    HANDLE _stdin, HANDLE _stdout, HANDLE _stderr,
+    HANDLE *pStdInput, HANDLE *pStdOutput, HANDLE *pStdError,
+    int flags, bool useJobObject, HANDLE *hJob, bool asynchronous)
+{
+    bool close_fds = (flags & RUN_PROCESS_IN_CLOSE_FDS) != 0;
+
+    if (close_fds) {
+        AcquireSRWLockShared(&spawnLock);
+    } else {
+        AcquireSRWLockExclusive(&spawnLock);
+    }
+
+    ProcHandle result
+      = runInteractiveProcessWithLock (cmd, workingDirectory, environment,
+                                     _stdin, _stdout, _stderr,
+                                     pStdInput, pStdOutput, pStdError,
+                                     flags, useJobObject, hJob, asynchronous);
+
+    if (close_fds) {
+        ReleaseSRWLockShared(&spawnLock);
+    } else {
+        ReleaseSRWLockExclusive(&spawnLock);
+    }
+
+    return result;
 }
 
 /* Note [Windows exec interaction]

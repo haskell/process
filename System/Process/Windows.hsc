@@ -130,18 +130,7 @@ createProcess_Internal_mio fun def@CreateProcess{
        fdout <- mbFd fun fd_stdout mb_stdout
        fderr <- mbFd fun fd_stderr mb_stderr
 
-       -- #2650: we must ensure mutual exclusion of c_runInteractiveProcess,
-       -- because otherwise there is a race condition whereby one thread
-       -- has created some pipes, and another thread spawns a process which
-       -- accidentally inherits some of the pipe handles that the first
-       -- thread has created.
-       --
-       -- An MVar in Haskell is the best way to do this, because there
-       -- is no way to do one-time thread-safe initialisation of a mutex
-       -- the C code.  Also the MVar will be cheaper when not running
-       -- the threaded RTS.
-       proc_handle <- withMVar runInteractiveProcess_lock $ \_ ->
-                      throwErrnoIfBadPHandle fun $
+       proc_handle <- throwErrnoIfBadPHandle fun $
                            c_runInteractiveProcess pcmdline pWorkDir pEnv
                                   fdin fdout fderr
                                   pfdStdInput pfdStdOutput pfdStdError
@@ -229,18 +218,7 @@ createProcess_Internal_winio fun def@CreateProcess{
      hwnd_out <- mbHANDLE _stdout mb_stdout
      hwnd_err <- mbHANDLE _stderr mb_stderr
 
-     -- #2650: we must ensure mutual exclusion of c_runInteractiveProcess,
-     -- because otherwise there is a race condition whereby one thread
-     -- has created some pipes, and another thread spawns a process which
-     -- accidentally inherits some of the pipe handles that the first
-     -- thread has created.
-     --
-     -- An MVar in Haskell is the best way to do this, because there
-     -- is no way to do one-time thread-safe initialisation of a mutex
-     -- the C code.  Also the MVar will be cheaper when not running
-     -- the threaded RTS.
-     proc_handle <- withMVar runInteractiveProcess_lock $ \_ ->
-                    throwErrnoIfBadPHandle fun $
+     proc_handle <- throwErrnoIfBadPHandle fun $
                          c_runInteractiveProcessHANDLE pcmdline pWorkDir pEnv
                                 hwnd_in hwnd_out hwnd_err
                                 pfdStdInput pfdStdOutput pfdStdError
@@ -266,10 +244,6 @@ createProcess_Internal_winio fun def@CreateProcess{
      return (proc_handle, hndStdInput, hndStdOutput, hndStdError)
 
 ##endif
-
-{-# NOINLINE runInteractiveProcess_lock #-}
-runInteractiveProcess_lock :: MVar ()
-runInteractiveProcess_lock = unsafePerformIO $ newMVar ()
 
 -- ----------------------------------------------------------------------------
 -- Delegated control-C handling on Windows
@@ -383,7 +357,8 @@ foreign import ccall interruptible "waitForJobCompletion" -- NB. safe - can bloc
         :: PHANDLE
         -> IO Bool
 
-foreign import ccall unsafe "runInteractiveProcess"
+-- safe: can block, see Note [Concurrent process spawning] in cbits/win32/runProcess.c
+foreign import ccall safe "runInteractiveProcess"
   c_runInteractiveProcess
         :: CWString
         -> CWString
@@ -400,7 +375,8 @@ foreign import ccall unsafe "runInteractiveProcess"
         -> IO PHANDLE
 
 ##if defined(__IO_MANAGER_WINIO__)
-foreign import ccall unsafe "runInteractiveProcessHANDLE"
+-- safe: can block, see Note [Concurrent process spawning] in cbits/win32/runProcess.c
+foreign import ccall safe "runInteractiveProcessHANDLE"
   c_runInteractiveProcessHANDLE
         :: CWString
         -> CWString

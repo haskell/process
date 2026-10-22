@@ -1,5 +1,12 @@
 # Changelog for [`process` package](http://hackage.haskell.org/package/process)
 
+## Unreleased
+
+* On Windows, `close_fds` is now respected: child processes no longer inherit
+  all of the inheritable handles of the parent process.
+* On Windows, process spawned with `close_fds = True` can now be spawned
+  concurrently with eachother.
+
 ## 1.6.30.0 *June 2026*
 
 * darwin: Allow posix_spawn_file_actions_addchdir to be missing when
