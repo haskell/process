@@ -1,5 +1,11 @@
 # Changelog for [`process` package](http://hackage.haskell.org/package/process)
 
+## Unreleased changes
+
+* On FreeBSD i386/amd64 releases before 15.2, use `fork` instead of
+  `posix_spawn` to start processes. This works around a FreeBSD bug that
+  corrupts memory of the parent process ([#386](https://github.com/haskell/process/pull/386))
+
 ## 1.6.30.0 *June 2026*
 
 * darwin: Allow posix_spawn_file_actions_addchdir to be missing when

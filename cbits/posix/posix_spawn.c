@@ -33,6 +33,22 @@ do_spawn_posix (char *const args[],
 
 extern char **environ;
 
+/*
+ * FreeBSD <= 15.1 contains a bug that can cause a stack overflow with posix_spawn
+ * corrupting the memory of the parent process.
+ *
+ * This workaround disables posix_spawn on affected FreeBSD versions.
+ *
+ * See #386
+ */
+#if defined(__FreeBSD__) && (defined(__i386__) || defined(__amd64__))
+#include <sys/param.h>
+#if __FreeBSD_version < 1501502 \
+    || (__FreeBSD_version >= 1600000 && __FreeBSD_version < 1600020)
+#define WORKAROUND_FREEBSD_SPAWN_STACK_OVERFLOW
+#endif
+#endif
+
 static int
 setup_std_handle_spawn (int fd,
                         struct std_handle *hdl,
@@ -114,6 +130,9 @@ do_spawn_posix (char *const args[],
         // TODO: can this be efficiently supported?
         return -2;
     }
+#if defined(WORKAROUND_FREEBSD_SPAWN_STACK_OVERFLOW)
+    return -2;
+#endif
 
     // Now the main act...
     pid_t pid;
