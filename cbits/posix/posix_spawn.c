@@ -172,26 +172,19 @@ do_spawn_posix (char *const args[],
     }
 
     if ((flags & RUN_PROCESS_NEW_SESSION) != 0) {
-#if defined(HAVE_POSIX_SPAWN_SETSID)
+#if defined(HAVE_DECL_POSIX_SPAWN_SETSID) && HAVE_DECL_POSIX_SPAWN_SETSID
         // N.B. POSIX_SPAWN_SETSID is only supported on macOS 10.15 and later,
         // but an proper error is not returned in earlier versions.
         // See https://bugs.python.org/issue37586.
-        if (posix_spawnattr_setflags(&sa, POSIX_SPAWN_SETSID) != 0) {
-            *failed_doing = "posix_spawnattr_setflags(POSIX_SPAWN_SETSID)";
-            goto fail;
-        }
-#elif defined(HAVE_POSIX_SPAWN_SETSID_NP)
-        if (posix_spawnattr_setflags(&sa, POSIX_SPAWN_SETSID_NP) != 0) {
-            *failed_doing = "posix_spawnattr_setflags(POSIX_SPAWN_SETSID_NP)";
-            goto fail;
-        }
+        spawn_flags |= POSIX_SPAWN_SETSID;
+#elif defined(HAVE_DECL_POSIX_SPAWN_SETSID_NP) && HAVE_DECL_POSIX_SPAWN_SETSID_NP
+        spawn_flags |= POSIX_SPAWN_SETSID_NP;
 #else
         goto not_supported;
 #endif
-    }
-
-    if ((flags & RUN_PROCESS_IN_NEW_GROUP) != 0) {
-#if defined(HAVE_POSIX_SPAWN_SETPGROUP)
+    } else if ((flags & RUN_PROCESS_IN_NEW_GROUP) != 0) {
+        // setsid() already creates a new pgroup; both flags together fail with EPERM (POSIX setpgid(2)).
+#if defined(HAVE_DECL_POSIX_SPAWN_SETPGROUP) && HAVE_DECL_POSIX_SPAWN_SETPGROUP
         spawn_flags |= POSIX_SPAWN_SETPGROUP;
 #else
         goto not_supported;
