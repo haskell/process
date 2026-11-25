@@ -8,6 +8,9 @@
   already reading from the pipe ([#389](https://github.com/haskell/process/issues/389))
 * POSIX: fix `closeCommunicationHandle` making the child process's end of the
   pipe non-blocking.
+* Windows: fix `createWeReadTheyWritePipe` and `createTheyReadWeWritePipe`
+  returning a `Handle` that blocks all Haskell threads in the non-threaded RTS
+  when not using WinIO ([#390](https://github.com/haskell/process/issues/390))
 
 ## 1.6.30.0 *June 2026*
 

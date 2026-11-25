@@ -35,9 +35,8 @@ import GHC.IO.SubSystem ((<!>))
 import GHC.IO.Windows.Handle (Io, NativeHandle, fromHANDLE)
 import GHC.Event.Windows (associateHandle')
 import System.Process.Common (rawHANDLEToHandle)
-##  else
-import System.Process.Common (rawFdToHandle)
 ##  endif
+import System.Process.Common (rawFdToHandle)
 
 #include <fcntl.h>     /* for _O_BINARY */
 
@@ -313,12 +312,9 @@ createCommunicationPipe swapIfTheyReadWeWrite _passAsyncHandleToChild = do
         <!> associateHandle' ourHANDLE
 ##  endif
       ourHandle <-
-##  if !defined (__IO_MANAGER_WINIO__)
-        ( \ fd -> rawFdToHandle fd ourMode ) =<< openHANDLE ourHANDLE
-##  else
-        -- NB: it's OK to call the following function even when we're not
-        -- using WinIO at runtime, so we don't use <!>.
-        rawHANDLEToHandle ourHANDLE ourMode
+        ( ( \ fd -> rawFdToHandle fd ourMode ) =<< openHANDLE ourHANDLE )
+##  if defined (__IO_MANAGER_WINIO__)
+          <!> rawHANDLEToHandle ourHANDLE ourMode
 ##  endif
       return $ (ourHandle, CommunicationHandle theirHANDLE)
 ##endif
