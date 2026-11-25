@@ -1,5 +1,21 @@
 # Changelog for [`process` package](http://hackage.haskell.org/package/process)
 
+## Unreleased
+
+* `readCreateProcessWithExitCodeCommunicationHandle` no longer closes `Handle`s
+  passed via `UseHandle`, for consistency with `readCreateProcessWithExitCode`.
+* Windows: fix `closeCommunicationHandle` hanging when the child process is
+  already reading from the pipe ([#389](https://github.com/haskell/process/issues/389))
+* POSIX: fix `closeCommunicationHandle` making the child process's end of the
+  pipe non-blocking.
+* Windows: fix `createWeReadTheyWritePipe` and `createTheyReadWeWritePipe`
+  returning a `Handle` that blocks all Haskell threads in the non-threaded RTS
+  when not using WinIO ([#390](https://github.com/haskell/process/issues/390))
+* Fix `readCreateProcessWithExitCodeCommunicationHandle` deadlocking when the
+  read action reads until EOF before returning (e.g. strict `hGetContents`).
+* Fix `readCreateProcessWithExitCodeCommunicationHandle` leaking pipe handles
+  when an exception is thrown.
+
 ## 1.6.30.0 *June 2026*
 
 * darwin: Allow posix_spawn_file_actions_addchdir to be missing when

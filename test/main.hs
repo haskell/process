@@ -15,7 +15,7 @@ import Data.Char (isDigit)
 import Data.IORef
 import Data.List (isInfixOf)
 import Data.Maybe (isNothing)
-import System.IO (hClose, hFlush, openBinaryTempFile, hGetContents, hPutStr)
+import System.IO (hClose, hFlush, hIsOpen, openBinaryTempFile, hGetContents, hPutStr)
 import qualified Data.ByteString as SBS
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.ByteString.Char8 as S8
@@ -315,6 +315,7 @@ testCommunicationHandle childUsesWinIO = do
         case lookup "cli-child" processInternalExes of
           Just cliChildPath -> cliChildPath
           Nothing -> "cli-child" <.> exeExtension
+  (hStdinRead, hStdinWrite) <- createPipe
   (ex, output) <-
     readCreateProcessWithExitCodeCommunicationHandle
       (\(chTheyRead, chTheyWrite) ->
@@ -322,9 +323,14 @@ testCommunicationHandle childUsesWinIO = do
                     ++ if childUsesWinIO
                        then ["+RTS", "--io-manager=native", "-RTS"]
                        else []
-        in proc cliChild args)
-      hGetContents
+        in (proc cliChild args) { std_in = UseHandle hStdinRead })
+      SBS.hGetContents -- strict: reads until EOF before returning
       (`hPutStr` "hello")
+  stdinStillOpen <- hIsOpen hStdinRead
+  unless stdinStillOpen $
+    error "testCommunicationHandle: UseHandle handle was closed"
+  hClose hStdinRead
+  hClose hStdinWrite
   case ex of
     ExitSuccess ->
       if output == "olleh123"

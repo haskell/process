@@ -35,6 +35,8 @@ executable cli-child
   main-is: main.hs
   build-depends: base >= 4 && < 5
                , deepseq >= 1.1 && < 1.6
+  if !os(windows)
+    build-depends: unix >= 2.8.0.0 && < 2.9
   ghc-options: -threaded -rtsopts
 
 test-suite test
