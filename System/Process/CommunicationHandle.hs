@@ -26,12 +26,12 @@ import System.Process.Internals
 import System.Process
   ( cleanupProcess, waitForProcess )
 
-import Control.Exception (bracket)
-import GHC.IO (evaluate)
+import Control.Concurrent.MVar (newEmptyMVar, putMVar, takeMVar)
+import Control.Exception (bracket, finally, onException)
 import GHC.IO.Handle (hClose)
 import System.Exit (ExitCode)
 
-import Control.DeepSeq (NFData, rnf)
+import Control.DeepSeq (NFData, ($!!))
 
 --------------------------------------------------------------------------------
 -- Communication handles.
@@ -132,26 +132,56 @@ readCreateProcessWithExitCodeCommunicationHandle
   -> (Handle -> IO ())
     -- ^ write action
   -> IO (ExitCode, a)
-readCreateProcessWithExitCodeCommunicationHandle mkProg readAction writeAction = do
-  (chTheyRead, hWeWrite   ) <- createTheyReadWeWritePipe
-  (hWeRead   , chTheyWrite) <- createWeReadTheyWritePipe
-  let cp = mkProg (chTheyRead, chTheyWrite)
+readCreateProcessWithExitCodeCommunicationHandle mkProg readAction writeAction =
   -- The following implementation parallels 'readCreateProcess'
-  bracket (createProcess_ "readCreateProcessWithExitCodeCommunicationHandle" cp)
-          cleanupProcess $ \ (_, _, _, ph) -> do
+  bracket spawn release $ \ ((hWeRead, hWeWrite), (_, _, _, ph)) -> do
 
-    -- Close the parent's references to the 'CommunicationHandle's after they
-    -- have been inherited by the child (we don't want to keep pipe ends open).
-    closeCommunicationHandle chTheyWrite
-    closeCommunicationHandle chTheyRead
-
-    -- Fork off a thread that waits on the output.
-    output <- readAction hWeRead
-    withForkWait (evaluate $ rnf output) $ \ waitOut -> do
+    -- Run the read and write actions concurrently, as each may block until
+    -- the child process makes progress on the other.
+    outputVar <- newEmptyMVar
+    let readOutput = do
+          output <- readAction hWeRead
+          putMVar outputVar $!! output
+    withForkWait readOutput $ \ waitOut -> do
       ignoreSigPipe $ writeAction hWeWrite
       ignoreSigPipe $ hClose hWeWrite
       waitOut
       hClose hWeRead
+    output <- takeMVar outputVar
 
     ex <- waitForProcess ph
     return (ex, output)
+  where
+    spawn = do
+      (their_ends, our_ends) <- create_pipes
+      p <- spawnWith their_ends `onException` close_our_ends our_ends
+      return (our_ends, p)
+    release (our_ends, p) = do
+      cleanupProcess p
+      close_our_ends our_ends
+    spawnWith their_ends =
+      createProcess_ "readCreateProcessWithExitCodeCommunicationHandle"
+        (mkProg their_ends)
+          `finally` close_their_ends their_ends
+
+create_pipes :: IO ((CommunicationHandle, CommunicationHandle), (Handle, Handle))
+create_pipes = do
+  (chTheyRead, hWeWrite) <- createTheyReadWeWritePipe
+  (hWeRead, chTheyWrite) <- createWeReadTheyWritePipe
+    `onException` do { closeCommunicationHandle chTheyRead; hClose hWeWrite }
+  return ((chTheyRead, chTheyWrite), (hWeRead, hWeWrite))
+
+-- Close the parent's references to the 'CommunicationHandle's, whether or not
+-- they have been inherited by a child process, to avoid keeping pipe ends open.
+--
+-- This must happen exactly once, as the underlying file descriptors may be
+-- reused afterwards.
+close_their_ends :: (CommunicationHandle, CommunicationHandle) -> IO ()
+close_their_ends (chTheyRead, chTheyWrite) = do
+  closeCommunicationHandle chTheyWrite
+  closeCommunicationHandle chTheyRead
+
+close_our_ends :: (Handle, Handle) -> IO ()
+close_our_ends (hWeRead, hWeWrite) = do
+  hClose hWeRead
+  ignoreSigPipe $ hClose hWeWrite

@@ -324,7 +324,7 @@ testCommunicationHandle childUsesWinIO = do
                        then ["+RTS", "--io-manager=native", "-RTS"]
                        else []
         in (proc cliChild args) { std_in = UseHandle hStdinRead })
-      hGetContents
+      SBS.hGetContents -- strict: reads until EOF before returning
       (`hPutStr` "hello")
   stdinStillOpen <- hIsOpen hStdinRead
   unless stdinStillOpen $

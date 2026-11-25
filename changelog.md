@@ -11,6 +11,10 @@
 * Windows: fix `createWeReadTheyWritePipe` and `createTheyReadWeWritePipe`
   returning a `Handle` that blocks all Haskell threads in the non-threaded RTS
   when not using WinIO ([#390](https://github.com/haskell/process/issues/390))
+* Fix `readCreateProcessWithExitCodeCommunicationHandle` deadlocking when the
+  read action reads until EOF before returning (e.g. strict `hGetContents`).
+* Fix `readCreateProcessWithExitCodeCommunicationHandle` leaking pipe handles
+  when an exception is thrown.
 
 ## 1.6.30.0 *June 2026*
 
