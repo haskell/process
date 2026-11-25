@@ -13,7 +13,7 @@ module System.Process.CommunicationHandle.Internal
  where
 
 import Control.Arrow ( first )
-import GHC.IO.Handle (Handle, hClose)
+import GHC.IO.Handle (Handle)
 #if defined(mingw32_HOST_OS)
 import Foreign.C (CInt(..), throwErrnoIf_)
 import Foreign.Marshal (alloca)
@@ -22,6 +22,7 @@ import Foreign.Storable (Storable(peek))
 import GHC.IO.Handle.FD (fdToHandle)
 import GHC.IO.IOMode (IOMode(ReadMode, WriteMode))
 import System.Process.Windows (HANDLE, mkNamedPipe)
+import System.Win32.File (closeHandle)
 ##  if defined(__IO_MANAGER_WINIO__)
 import Control.Exception (catch, throwIO)
 import GHC.IO (onException)
@@ -59,6 +60,7 @@ import GHC.IO.Handle.Internals
 import System.Posix
   ( Fd(..)
   , FdOption(..), setFdOption
+  , closeFd
   )
 import System.Posix.Internals
   ( fdGetMode )
@@ -144,7 +146,18 @@ useCommunicationHandle _wantToRead (CommunicationHandle ch) = do
 -- @since 1.6.20.0
 closeCommunicationHandle :: CommunicationHandle -> IO ()
 closeCommunicationHandle (CommunicationHandle ch) =
-  hClose =<< getGhcHandle ch
+  -- Close the raw OS handle directly, without wrapping it in a GHC 'Handle',
+  -- as the latter has undesirable consequences:
+##if defined(mingw32_HOST_OS)
+  --  - On Windows, creating the 'Handle' calls '_fstati64', which blocks for as
+  --    long as the child process has a read pending on the pipe.
+  --    See https://github.com/haskell/process/issues/389.
+  closeHandle ch
+##else
+  --  - On POSIX, creating the 'Handle' goes via 'getGhcHandle' which sets
+  --    O_NONBLOCK, which causes the child's pipe end to become non-blocking.
+  closeFd ch
+##endif
 
 ##if defined(__IO_MANAGER_WINIO__)
 -- Internal function used when associating a 'HANDLE' with the current process.

@@ -4,6 +4,10 @@
 
 * `readCreateProcessWithExitCodeCommunicationHandle` no longer closes `Handle`s
   passed via `UseHandle`, for consistency with `readCreateProcessWithExitCode`.
+* Windows: fix `closeCommunicationHandle` hanging when the child process is
+  already reading from the pipe ([#389](https://github.com/haskell/process/issues/389))
+* POSIX: fix `closeCommunicationHandle` making the child process's end of the
+  pipe non-blocking.
 
 ## 1.6.30.0 *June 2026*
 
