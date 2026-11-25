@@ -1,5 +1,10 @@
 # Changelog for [`process` package](http://hackage.haskell.org/package/process)
 
+## Unreleased
+
+* `readCreateProcessWithExitCodeCommunicationHandle` no longer closes `Handle`s
+  passed via `UseHandle`, for consistency with `readCreateProcessWithExitCode`.
+
 ## 1.6.30.0 *June 2026*
 
 * darwin: Allow posix_spawn_file_actions_addchdir to be missing when

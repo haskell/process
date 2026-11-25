@@ -22,10 +22,11 @@ import GHC.IO.Handle (Handle)
 
 import System.Process.CommunicationHandle.Internal
 import System.Process.Internals
-  ( CreateProcess(..), ignoreSigPipe, withForkWait )
+  ( CreateProcess(..), createProcess_, ignoreSigPipe, withForkWait )
 import System.Process
-  ( withCreateProcess, waitForProcess )
+  ( cleanupProcess, waitForProcess )
 
+import Control.Exception (bracket)
 import GHC.IO (evaluate)
 import GHC.IO.Handle (hClose)
 import System.Exit (ExitCode)
@@ -136,7 +137,8 @@ readCreateProcessWithExitCodeCommunicationHandle mkProg readAction writeAction =
   (hWeRead   , chTheyWrite) <- createWeReadTheyWritePipe
   let cp = mkProg (chTheyRead, chTheyWrite)
   -- The following implementation parallels 'readCreateProcess'
-  withCreateProcess cp $ \ _ _ _ ph -> do
+  bracket (createProcess_ "readCreateProcessWithExitCodeCommunicationHandle" cp)
+          cleanupProcess $ \ (_, _, _, ph) -> do
 
     -- Close the parent's references to the 'CommunicationHandle's after they
     -- have been inherited by the child (we don't want to keep pipe ends open).
